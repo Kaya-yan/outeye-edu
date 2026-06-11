@@ -4,7 +4,7 @@
 实现稠密检索、稀疏检索和RRF融合
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 import numpy as np
 import re
@@ -19,7 +19,7 @@ class RetrievalResult:
     content: str
     score: float
     retrieval_method: str  # dense, sparse, hybrid
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -29,7 +29,7 @@ class DocumentChunk:
     doc_id: str
     content: str
     embedding: Optional[List[float]] = None
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 class HybridRetriever:

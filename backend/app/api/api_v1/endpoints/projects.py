@@ -62,8 +62,8 @@ SAMPLE_PROJECTS = [
         "source_text": "Climate change is one of the most pressing issues facing our planet today...",
         "analysis_status": "completed",
         "status": "draft",
-        "created_at": "2026-06-01T10:00:00",
-        "updated_at": "2026-06-01T10:30:00"
+        "created_at": datetime.fromisoformat("2026-06-01T10:00:00"),
+        "updated_at": datetime.fromisoformat("2026-06-01T10:30:00")
     },
     {
         "id": "2",
@@ -75,8 +75,8 @@ SAMPLE_PROJECTS = [
         "source_text": "In today's globalized world, understanding cultural differences is essential...",
         "analysis_status": "pending",
         "status": "draft",
-        "created_at": "2026-06-02T14:00:00",
-        "updated_at": "2026-06-02T14:00:00"
+        "created_at": datetime.fromisoformat("2026-06-02T14:00:00"),
+        "updated_at": datetime.fromisoformat("2026-06-02T14:00:00")
     }
 ]
 
@@ -136,8 +136,8 @@ async def create_project(
         "source_text": project.source_text,
         "analysis_status": "pending",
         "status": "draft",
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
+        "created_at": datetime.now(),
+        "updated_at": datetime.now()
     }
     SAMPLE_PROJECTS.append(new_project)
     return new_project
@@ -152,19 +152,19 @@ async def update_project(
     """更新项目"""
     for project in SAMPLE_PROJECTS:
         if project["id"] == project_id:
-            if project_update.title:
+            if project_update.title is not None:
                 project["title"] = project_update.title
-            if project_update.course_type:
+            if project_update.course_type is not None:
                 project["course_type"] = project_update.course_type
-            if project_update.student_level:
+            if project_update.student_level is not None:
                 project["student_level"] = project_update.student_level
-            if project_update.duration_minutes:
+            if project_update.duration_minutes is not None:
                 project["duration_minutes"] = project_update.duration_minutes
-            if project_update.source_text:
+            if project_update.source_text is not None:
                 project["source_text"] = project_update.source_text
-            if project_update.tags:
+            if project_update.tags is not None:
                 project["tags"] = project_update.tags
-            project["updated_at"] = datetime.now().isoformat()
+            project["updated_at"] = datetime.now()
             return project
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -198,7 +198,7 @@ async def analyze_project(
         if project["id"] == project_id:
             # 更新分析状态
             project["analysis_status"] = "processing"
-            project["updated_at"] = datetime.now().isoformat()
+            project["updated_at"] = datetime.now()
 
             # 示例：返回分析任务ID
             return {

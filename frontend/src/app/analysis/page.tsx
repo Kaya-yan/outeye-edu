@@ -92,7 +92,7 @@ export default function AnalysisPage() {
         const errData = await response.json().catch(() => ({}));
         setError(errData.detail || `分析失败 (${response.status})`);
       }
-    } catch (error) {
+    } catch {
       setError("网络错误，请检查后端服务是否运行");
     } finally {
       setLoading(false);
@@ -124,7 +124,7 @@ export default function AnalysisPage() {
         const errData = await response.json().catch(() => ({}));
         setError(errData.detail || `教案生成失败 (${response.status})`);
       }
-    } catch (error) {
+    } catch {
       setError("网络错误，请检查后端服务是否运行");
     } finally {
       setLoading(false);

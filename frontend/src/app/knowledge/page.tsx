@@ -34,25 +34,19 @@ export default function KnowledgePage() {
 
   const loadTheories = async () => {
     try {
-      const response = await fetch("/api/v1/wiki/statistics");
-      if (response.ok) {
-        const data = await response.json();
-        // page_types is {type: count}, not a name list — theories come from search
-        // Store stats for display, actual theory list loaded via tags
-        const tagsRes = await fetch("/api/v1/wiki/tags");
-        if (tagsRes.ok) {
-          const tags: string[] = await tagsRes.json();
-          const theoryList: Theory[] = tags.map((tag) => ({
-            name: tag,
-            title: tag.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-            domain: "理论",
-            tags: [tag],
-          }));
-          setTheories(theoryList);
-        }
+      const tagsRes = await fetch("/api/v1/wiki/tags");
+      if (tagsRes.ok) {
+        const tags: string[] = await tagsRes.json();
+        const theoryList: Theory[] = tags.map((tag) => ({
+          name: tag,
+          title: tag.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+          domain: "理论",
+          tags: [tag],
+        }));
+        setTheories(theoryList);
       }
     } catch {
-      // 静默失败，理论列表为空时显示空状态
+      // 静默失败
     }
   };
 

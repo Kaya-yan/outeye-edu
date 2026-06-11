@@ -14,7 +14,7 @@ class VectorRecord:
     """向量记录"""
     id: str
     vector: List[float]
-    payload: Dict[str, any] = field(default_factory=dict)
+    payload: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -22,7 +22,7 @@ class SearchResult:
     """搜索结果"""
     id: str
     score: float
-    payload: Dict[str, any]
+    payload: Dict[str, Any]
     vector: Optional[List[float]] = None
 
 
@@ -311,7 +311,7 @@ class VectorStore:
             try:
                 info = self.client.get_collection(self.collection_name)
                 return info.points_count
-            except:
+            except Exception:
                 return 0
         else:
             return len(self._memory_store)

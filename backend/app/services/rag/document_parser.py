@@ -4,7 +4,7 @@
 支持多种文档格式的解析和文本分块
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
@@ -17,7 +17,7 @@ class DocumentChunk:
     id: str
     doc_id: str
     content: str
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
     start_pos: int = 0
     end_pos: int = 0
     chunk_index: int = 0
@@ -30,7 +30,7 @@ class ParsedDocument:
     title: str
     content: str
     chunks: List[DocumentChunk]
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
     file_path: str = ""
     file_type: str = ""
 
@@ -102,7 +102,7 @@ class DocumentParser:
         self,
         text: str,
         title: str = "",
-        metadata: Dict[str, any] = None
+        metadata: Dict[str, Any] = None
     ) -> ParsedDocument:
         """
         解析文本

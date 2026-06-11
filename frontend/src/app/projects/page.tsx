@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface Project {
   id: string;
@@ -73,12 +74,12 @@ export default function ProjectsPage() {
               <h1 className="text-2xl font-bold text-gray-900">项目管理</h1>
               <p className="text-gray-600 mt-1">管理您的课文分析项目</p>
             </div>
-            <a
+            <Link
               href="/analysis"
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
             >
               新建分析
-            </a>
+            </Link>
           </div>
         </div>
       </header>

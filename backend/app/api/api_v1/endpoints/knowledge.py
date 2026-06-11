@@ -60,7 +60,7 @@ SAMPLE_KNOWLEDGE_CHUNKS = [
         "quality_score": 0.95,
         "verified": True,
         "retrieval_count": 45,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "2",
@@ -71,7 +71,7 @@ SAMPLE_KNOWLEDGE_CHUNKS = [
         "quality_score": 0.95,
         "verified": True,
         "retrieval_count": 38,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "3",
@@ -82,7 +82,7 @@ SAMPLE_KNOWLEDGE_CHUNKS = [
         "quality_score": 0.95,
         "verified": True,
         "retrieval_count": 60,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "4",
@@ -93,7 +93,7 @@ SAMPLE_KNOWLEDGE_CHUNKS = [
         "quality_score": 0.92,
         "verified": True,
         "retrieval_count": 32,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "5",
@@ -104,7 +104,7 @@ SAMPLE_KNOWLEDGE_CHUNKS = [
         "quality_score": 0.88,
         "verified": True,
         "retrieval_count": 25,
-        "created_at": "2026-02-15T00:00:00"
+        "created_at": datetime.fromisoformat("2026-02-15T00:00:00")
     }
 ]
 
@@ -181,7 +181,7 @@ async def create_knowledge_chunk(
         "quality_score": 0.0,
         "verified": False,
         "retrieval_count": 0,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now()
     }
     SAMPLE_KNOWLEDGE_CHUNKS.append(new_chunk)
     return new_chunk

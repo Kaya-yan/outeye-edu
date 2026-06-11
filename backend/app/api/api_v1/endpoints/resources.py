@@ -57,7 +57,7 @@ SAMPLE_RESOURCES = [
         "verified": True,
         "view_count": 150,
         "use_count": 45,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "2",
@@ -71,7 +71,7 @@ SAMPLE_RESOURCES = [
         "verified": True,
         "view_count": 120,
         "use_count": 38,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "3",
@@ -85,7 +85,7 @@ SAMPLE_RESOURCES = [
         "verified": True,
         "view_count": 200,
         "use_count": 60,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "4",
@@ -99,7 +99,7 @@ SAMPLE_RESOURCES = [
         "verified": True,
         "view_count": 80,
         "use_count": 25,
-        "created_at": "2026-02-15T00:00:00"
+        "created_at": datetime.fromisoformat("2026-02-15T00:00:00")
     },
     {
         "id": "5",
@@ -113,7 +113,7 @@ SAMPLE_RESOURCES = [
         "verified": True,
         "view_count": 300,
         "use_count": 100,
-        "created_at": "2026-03-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-03-01T00:00:00")
     }
 ]
 
@@ -207,7 +207,7 @@ async def create_resource(
         "verified": False,
         "view_count": 0,
         "use_count": 0,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now()
     }
     SAMPLE_RESOURCES.append(new_resource)
     return new_resource

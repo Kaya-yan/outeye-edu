@@ -28,7 +28,7 @@ class RetrievalResult:
     content: str
     score: float
     retrieval_method: str
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 class RAGGenerator:
@@ -210,10 +210,10 @@ class RAGGenerator:
         """简化生成"""
         # 提取关键信息
         if "没有找到相关文档" in context:
-            return f"抱歉，没有找到与"{query}"相关的文档。请尝试换个方式提问，或者提供更多上下文信息。"
+            return f"抱歉，没有找到与《{query}》相关的文档。请尝试换个方式提问，或者提供更多上下文信息。"
 
         # 简单的模板回答
-        answer = f"根据检索到的文档，关于"{query}"的信息如下：\n\n"
+        answer = f"根据检索到的文档，关于《{query}》的信息如下：\n\n"
 
         # 从上下文中提取关键句子
         sentences = context.split('。')
@@ -346,8 +346,8 @@ class RAGGenerator:
 
         context_parts = []
         for i, result in enumerate(wiki_results, 1):
-            title = result.get('title', f'Wiki条目{i}')
-            content = result.get('content', '')
+            title = result.title if hasattr(result, 'title') else result.get('title', f'Wiki条目{i}')
+            content = result.content if hasattr(result, 'content') else result.get('content', '')
 
             # 截取内容
             if len(content) > 500:

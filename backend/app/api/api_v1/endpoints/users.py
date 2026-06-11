@@ -70,7 +70,7 @@ SAMPLE_USERS = [
         "institution": "山东大学翻译学院",
         "title": "副教授",
         "is_active": True,
-        "created_at": "2026-01-01T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
     },
     {
         "id": "2",
@@ -80,7 +80,7 @@ SAMPLE_USERS = [
         "institution": "山东大学翻译学院",
         "title": "研究生",
         "is_active": True,
-        "created_at": "2026-01-02T00:00:00"
+        "created_at": datetime.fromisoformat("2026-01-02T00:00:00")
     }
 ]
 
@@ -181,7 +181,7 @@ async def create_user(
         "institution": user.institution,
         "title": user.title,
         "is_active": True,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now()
     }
     SAMPLE_USERS.append(new_user)
     return {k: v for k, v in new_user.items() if k != "hashed_password"}

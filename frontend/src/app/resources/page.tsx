@@ -4,15 +4,10 @@ import React, { useState } from "react";
 
 interface RAGResponse {
   answer: string;
-  sources: Array<{
-    index: number;
-    chunk_id: string;
-    doc_id: string;
-    score: number;
-    excerpt: string;
-  }>;
+  sources: Array<Record<string, any>>;
   confidence: number;
   response_time: number;
+  model?: string;
 }
 
 export default function ResourcesPage() {
@@ -78,7 +73,7 @@ export default function ResourcesPage() {
       } else {
         setUploadStatus("上传失败");
       }
-    } catch (error) {
+    } catch {
       setUploadStatus("上传失败");
     }
   };
@@ -167,20 +162,19 @@ export default function ResourcesPage() {
                     </h3>
                     <div className="space-y-3">
                       {response.sources.map((source, idx) => (
-                        <div
-                          key={idx}
-                          className="border rounded-lg p-3 bg-gray-50"
-                        >
+                        <div key={idx} className="border rounded-lg p-3 bg-gray-50">
                           <div className="flex justify-between items-start">
                             <span className="text-sm font-medium text-blue-600">
-                              [{source.index}] {source.doc_id}
+                              [{idx + 1}] {source.doc_id || source.source || source.title || '来源'}
                             </span>
-                            <span className="text-xs text-gray-500">
-                              相关度: {(source.score * 100).toFixed(0)}%
-                            </span>
+                            {source.score !== undefined && (
+                              <span className="text-xs text-gray-500">
+                                相关度: {(source.score * 100).toFixed(0)}%
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
-                            {source.excerpt}
+                            {source.excerpt || source.content || source.text || JSON.stringify(source).substring(0, 200)}
                           </p>
                         </div>
                       ))}

@@ -85,7 +85,7 @@ class ResourceRecommender:
         if title:
             recommendations.append(ResourceRecommendation(
                 resource_type="literature",
-                title=f"与"{title}"相关的研究文献",
+                title=f"与《{title}》相关的研究文献",
                 description="基于课文主题推荐的相关研究文献",
                 relevance_score=0.9,
                 source="学术数据库"
@@ -244,7 +244,7 @@ class ResourceRecommender:
             recommendations.append(ResourceRecommendation(
                 resource_type="viewpoint",
                 title="多元视角分析",
-                description=f"从不同角度分析"{title}"主题",
+                description=f"从不同角度分析《{title}》主题",
                 relevance_score=0.8,
                 source="学术数据库"
             ))

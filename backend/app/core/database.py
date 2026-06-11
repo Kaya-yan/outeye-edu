@@ -2,7 +2,6 @@
 数据库配置
 """
 
-from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 import ssl

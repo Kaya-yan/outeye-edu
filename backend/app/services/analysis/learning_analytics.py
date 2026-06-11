@@ -310,7 +310,7 @@ class LearningAnalytics:
                 record_time = datetime.fromisoformat(record.timestamp)
                 if record_time >= start_time:
                     filtered.append(record)
-            except:
+            except Exception:
                 continue
 
         return filtered
