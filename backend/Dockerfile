@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -18,7 +18,7 @@ RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
     pip install --no-cache-dir -r requirements.txt
 
 # 生产阶段
-FROM python:3.11-slim
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
 
 WORKDIR /app
 
