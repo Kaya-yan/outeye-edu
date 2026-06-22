@@ -2,149 +2,176 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Base ---- */
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-
-    --radius: 0.5rem;
+  html {
+    scroll-behavior: smooth;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
-}
-
-@layer base {
-  * {
-    border-color: hsl(var(--border));
-  }
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    background: linear-gradient(180deg, #f7f9fc 0%, #f0f4f8 50%, #eef2f7 100%);
+    color: #243b53;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: #1e3a5f;
+    color: #ffffff;
+  }
+
+  /* Focus visible ring for accessibility */
+  *:focus-visible {
+    outline: 2px solid #3d5f9a;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Global transition defaults for interactive elements */
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
+  }
+
+  /* Remove default focus outline, rely on focus-visible */
+  *:focus:not(:focus-visible) {
+    outline: none;
   }
 }
 
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bcccdc;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #829ab1;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #bcccdc transparent;
+}
+
+/* ---- Components ---- */
 @layer components {
-  .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none;
+  /* Glass card: translucent white with backdrop blur */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 12px;
   }
 
-  .btn-secondary {
-    @apply bg-secondary-100 text-secondary-800 hover:bg-secondary-200 focus:ring-4 focus:ring-secondary-200 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none;
+  /* Gradient text for headings */
+  .gradient-text {
+    background: linear-gradient(135deg, #1e3a5f 0%, #3d5f9a 50%, #5b7ab3 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+  /* Hover lift effect */
+  .hover-lift {
+    transition: transform 250ms ease-out, box-shadow 250ms ease-out;
   }
 
-  .input-field {
-    @apply bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5;
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px -4px rgba(30, 58, 95, 0.08),
+      0 12px 32px -8px rgba(30, 58, 95, 0.12);
+  }
+
+  /* Stagger children animation */
+  .stagger-children > * {
+    opacity: 0;
+    animation: slideUp 0.4s ease-out forwards;
+  }
+
+  .stagger-children > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  .stagger-children > *:nth-child(2) {
+    animation-delay: 80ms;
+  }
+
+  .stagger-children > *:nth-child(3) {
+    animation-delay: 160ms;
+  }
+
+  .stagger-children > *:nth-child(4) {
+    animation-delay: 240ms;
+  }
+
+  .stagger-children > *:nth-child(5) {
+    animation-delay: 320ms;
+  }
+
+  .stagger-children > *:nth-child(6) {
+    animation-delay: 400ms;
+  }
+
+  .stagger-children > *:nth-child(7) {
+    animation-delay: 480ms;
+  }
+
+  .stagger-children > *:nth-child(8) {
+    animation-delay: 560ms;
+  }
+
+  .stagger-children > *:nth-child(n + 9) {
+    animation-delay: 640ms;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #e2e8f0 25%,
+      #f1f5f9 37%,
+      #e2e8f0 63%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite linear;
   }
 }
 
+/* ---- Utilities ---- */
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
-}
 
-/* 自定义滚动条 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
-}
-
-/* 动画 */
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-in-out;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.3s ease-out;
-}
-
-.animate-slide-down {
-  animation: slideDown 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
+  .text-pretty {
+    text-wrap: pretty;
   }
 }
 
+/* ---- Keyframes (referenced by component classes above) ---- */
 @keyframes slideUp {
   0% {
-    transform: translateY(10px);
+    transform: translateY(20px);
     opacity: 0;
   }
   100% {
@@ -153,13 +180,20 @@
   }
 }
 
-@keyframes slideDown {
+@keyframes shimmer {
   0% {
-    transform: translateY(-10px);
-    opacity: 0;
+    background-position: -200% 0;
   }
   100% {
-    transform: translateY(0);
-    opacity: 1;
+    background-position: 200% 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
   }
 }

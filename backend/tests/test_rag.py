@@ -7,6 +7,7 @@ from app.services.rag.document_parser import DocumentParser
 from app.services.rag.embedding import EmbeddingService
 from app.services.rag.vector_store import VectorStore, VectorRecord
 from app.services.rag.retriever import HybridRetriever, DocumentChunk
+from app.services.rag.generator import RAGGenerator
 
 
 class TestDocumentParser:
@@ -80,6 +81,27 @@ class TestEmbeddingService:
         assert self.service.similarity(embedding1, embedding2) < 0.5
         assert self.service.similarity(embedding1, embedding3) > 0.9
 
+    def test_embed_text_marks_simplified_fallback_as_degraded(self, monkeypatch):
+        """测试 API embedding 回退到简化向量时会显式暴露 degraded 状态"""
+        service = EmbeddingService(model_name="deepseek-embedding", api_key="dummy", api_base="https://example.invalid")
+
+        class FakeEmbeddings:
+            def create(self, **kwargs):
+                raise RuntimeError("embedding upstream unavailable")
+
+        class FakeClient:
+            embeddings = FakeEmbeddings()
+
+        import openai
+        monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: FakeClient())
+
+        result = service.embed_text("hello world")
+
+        assert result.degraded is True
+        assert result.backend == "simplified_fallback"
+        assert "embedding upstream unavailable" in result.degraded_reason
+        assert len(result.embedding) == service.dimension
+
 
 class TestVectorStore:
     """向量存储测试"""
@@ -126,6 +148,63 @@ class TestVectorStore:
         self.store.upsert(records)
         success = self.store.delete(["doc1"])
         assert success
+
+    def test_get_all_records(self):
+        """测试可从持久化存储重新读取全部记录"""
+        records = [
+            VectorRecord(
+                id="doc1",
+                vector=[1.0, 0.0, 0.0],
+                payload={"doc_id": "lesson1", "content": "test document 1", "metadata": {"topic": "reading"}}
+            ),
+            VectorRecord(
+                id="doc2",
+                vector=[0.0, 1.0, 0.0],
+                payload={"doc_id": "lesson2", "content": "test document 2", "metadata": {"topic": "writing"}}
+            )
+        ]
+
+        self.store.upsert(records)
+        restored = self.store.get_all_records()
+
+        assert len(restored) == 2
+        assert {record.id for record in restored} == {"doc1", "doc2"}
+        assert restored[0].payload.get("content")
+
+    def test_collection_info_marks_memory_fallback_as_degraded(self):
+        """测试Qdrant不可用时会显式标记 memory 降级状态"""
+        info = self.store.get_collection_info()
+
+        assert info["backend"] == "memory"
+        assert info["degraded"] is True
+        assert info["degraded_reason"]
+
+
+class TestRAGGenerator:
+    """RAG生成器测试"""
+
+    def test_generate_marks_simplified_fallback_as_degraded(self, monkeypatch):
+        """测试生成回退到简化模式时会显式暴露 degraded 状态"""
+        class FakeCompletions:
+            def create(self, **kwargs):
+                raise RuntimeError("llm upstream unavailable")
+
+        class FakeChat:
+            completions = FakeCompletions()
+
+        class FakeClient:
+            chat = FakeChat()
+
+        import openai
+        monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: FakeClient())
+
+        generator = RAGGenerator(api_key="dummy", api_base="https://example.invalid")
+        result = generator.generate(query="Krashen 是什么", retrieval_results=[])
+
+        assert result.degraded is True
+        assert result.backend == "simplified_fallback"
+        assert "llm upstream unavailable" in result.degraded_reason
+        assert result.answer
 
 
 class TestHybridRetriever:
@@ -184,6 +263,32 @@ class TestHybridRetriever:
 
         assert len(expanded) > 0
         assert "教学方法" in expanded
+
+    def test_sparse_retrieve_rehydrates_from_vector_store_when_index_empty(self):
+        """测试索引为空时可从持久化存储重建后执行稀疏检索"""
+        records = [
+            VectorRecord(
+                id="chunk1",
+                vector=[1.0, 0.0, 0.0],
+                payload={
+                    "doc_id": "doc1",
+                    "content": "The quick brown fox jumps over the lazy dog.",
+                    "metadata": {"title": "Lesson 1"}
+                }
+            )
+        ]
+
+        class FakeVectorStore:
+            def get_all_records(self):
+                return records
+
+        retriever = HybridRetriever(vector_store=FakeVectorStore(), top_k=5)
+
+        results = retriever.retrieve(query="fox dog", method="sparse")
+
+        assert len(results) == 1
+        assert results[0].chunk_id == "chunk1"
+        assert "chunk1" in retriever.chunks
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ Wiki查询服务
 
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from datetime import datetime
 
 from .parser import WikiParser, WikiPage
 
@@ -70,39 +71,42 @@ class WikiQuery:
         查询理论
 
         Args:
-            theory_name: 理论名称
+            theory_name: 理论名称（可以是英文标题或中文标签）
 
         Returns:
             相关理论页面
         """
-        # 搜索理论实体页
         results = []
+        seen_pages = set()
 
-        # 精确匹配
-        exact = self._exact_title_match(theory_name)
-        results.extend(exact)
-
-        # 搜索包含理论名称的页面
-        for page in self.parser.pages.values():
-            if theory_name.lower() in page.frontmatter.title.lower():
+        def _add_result(page, score, match_type, sections):
+            if page.filename not in seen_pages:
+                seen_pages.add(page.filename)
                 results.append(QueryResult(
                     page=page,
-                    relevance_score=0.9,
-                    match_type="exact",
-                    matched_sections=[page.frontmatter.title]
+                    relevance_score=score,
+                    match_type=match_type,
+                    matched_sections=sections
                 ))
 
-        # 搜索标签中包含理论的页面
-        theory_tags = [tag for tag in self.parser.get_all_tags() if 'theory' in tag.lower()]
-        for tag in theory_tags:
-            for page in self.parser.search_by_tag(tag):
-                if theory_name.lower() in page.content.lower():
-                    results.append(QueryResult(
-                        page=page,
-                        relevance_score=0.7,
-                        match_type="related",
-                        matched_sections=self._find_matching_sections(page, theory_name)
-                    ))
+        # 1. 精确匹配标题
+        for page in self._exact_title_match(theory_name):
+            _add_result(page.page, page.relevance_score, page.match_type, page.matched_sections)
+
+        # 2. 搜索包含理论名称的页面（标题匹配）
+        for page in self.parser.pages.values():
+            if theory_name.lower() in page.frontmatter.title.lower():
+                _add_result(page, 0.9, "exact", [page.frontmatter.title])
+
+        # 3. 按标签直接搜索（关键修复：支持中文标签如"核心概念"）
+        tag_pages = self.parser.search_by_tag(theory_name)
+        for page in tag_pages:
+            _add_result(page, 0.85, "tag", [f"标签: {theory_name}"])
+
+        # 4. 搜索内容中包含理论名称的页面
+        for page in self.parser.pages.values():
+            if page.filename not in seen_pages and theory_name.lower() in page.content.lower():
+                _add_result(page, 0.7, "related", self._find_matching_sections(page, theory_name))
 
         return self._deduplicate_and_rank(results)
 
@@ -316,10 +320,61 @@ class WikiQuery:
         seen = {}
         for result in results:
             page_id = result.page.filename
-            if page_id not in seen or result.relevance_score > seen[page_id].relevance_score:
-                seen[page_id] = result
+            adjusted_score = min(result.relevance_score + self._quality_score(result.page), 1.0)
+            candidate = QueryResult(
+                page=result.page,
+                relevance_score=adjusted_score,
+                match_type=result.match_type,
+                matched_sections=result.matched_sections,
+            )
+            if page_id not in seen or candidate.relevance_score > seen[page_id].relevance_score:
+                seen[page_id] = candidate
 
-        # 按相关性排序
+        # 按综合质量排序
         sorted_results = sorted(seen.values(), key=lambda x: x.relevance_score, reverse=True)
 
         return sorted_results
+
+    def _quality_score(self, page: WikiPage) -> float:
+        """根据 frontmatter 质量信号计算排序加权"""
+        score = 0.0
+        confidence = (page.frontmatter.confidence or "").lower()
+        score += {
+            "high": 0.12,
+            "medium": 0.06,
+            "low": 0.0,
+        }.get(confidence, 0.0)
+
+        score += min(len(page.frontmatter.sources or []) * 0.02, 0.06)
+
+        if page.frontmatter.contested:
+            score -= 0.08
+
+        score -= min(len(page.frontmatter.contradictions or []) * 0.02, 0.06)
+
+        updated = self._parse_date(page.frontmatter.updated)
+        if updated is not None:
+            age_days = max((datetime.now().date() - updated.date()).days, 0)
+            if age_days <= 180:
+                score += 0.04
+            elif age_days <= 365:
+                score += 0.03
+            elif age_days <= 730:
+                score += 0.01
+
+        return score
+
+    def _parse_date(self, value: Any) -> Optional[datetime]:
+        """解析 frontmatter 日期"""
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+            return datetime(value.year, value.month, value.day)
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(value, fmt)
+            except (ValueError, TypeError):
+                continue
+        return None

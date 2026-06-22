@@ -3,12 +3,16 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, delete
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import uuid
 
-from app.core.database import get_db
+from app.core.database import get_async_db
+from app.core.security import get_current_user
+from app.models.analysis import AnalysisRecord
 
 router = APIRouter()
 
@@ -50,163 +54,175 @@ class ProjectUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
 
-# 示例项目数据
-SAMPLE_PROJECTS = [
-    {
-        "id": "1",
-        "user_id": "1",
-        "title": "Environmental Protection Text Analysis",
-        "course_type": "intensive_reading",
-        "student_level": "B2",
-        "duration_minutes": 90,
-        "source_text": "Climate change is one of the most pressing issues facing our planet today...",
-        "analysis_status": "completed",
-        "status": "draft",
-        "created_at": datetime.fromisoformat("2026-06-01T10:00:00"),
-        "updated_at": datetime.fromisoformat("2026-06-01T10:30:00")
-    },
-    {
-        "id": "2",
-        "user_id": "1",
-        "title": "Cross-cultural Communication Lesson",
-        "course_type": "oral_english",
-        "student_level": "B1",
-        "duration_minutes": 45,
-        "source_text": "In today's globalized world, understanding cultural differences is essential...",
-        "analysis_status": "pending",
-        "status": "draft",
-        "created_at": datetime.fromisoformat("2026-06-02T14:00:00"),
-        "updated_at": datetime.fromisoformat("2026-06-02T14:00:00")
+def _record_to_response(record: AnalysisRecord) -> dict:
+    """将 AnalysisRecord 转换为 ProjectResponse 格式"""
+    return {
+        "id": record.id,
+        "user_id": record.user_id,
+        "title": record.text_title,
+        "course_type": record.course_type or "general",
+        "student_level": record.student_level,
+        "duration_minutes": record.duration_minutes or 45,
+        "source_text": record.text_content,
+        "analysis_status": record.analysis_status or "pending",
+        "status": record.analysis_status or "draft",
+        "created_at": record.created_at,
+        "updated_at": record.updated_at or record.created_at,
     }
-]
 
 
 @router.get("/", response_model=List[ProjectResponse])
 async def get_projects(
-    user_id: Optional[str] = None,
-    status: Optional[str] = None,
+    project_status: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """获取项目列表"""
-    # 示例实现：返回示例数据
-    projects = SAMPLE_PROJECTS
-
-    # 按用户ID过滤
-    if user_id:
-        projects = [p for p in projects if p["user_id"] == user_id]
+    """获取项目列表（仅返回当前用户的项目）"""
+    query = select(AnalysisRecord)
+    query = query.where(AnalysisRecord.user_id == current_user["user_id"])
 
     # 按状态过滤
-    if status:
-        projects = [p for p in projects if p["status"] == status]
+    if project_status:
+        query = query.where(AnalysisRecord.analysis_status == project_status)
 
-    return projects[skip:skip + limit]
+    query = query.order_by(AnalysisRecord.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    records = result.scalars().all()
+
+    return [_record_to_response(r) for r in records]
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """获取单个项目"""
-    for project in SAMPLE_PROJECTS:
-        if project["id"] == project_id:
-            return project
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Project not found"
+    result = await db.execute(
+        select(AnalysisRecord).where(AnalysisRecord.id == project_id)
     )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    return _record_to_response(record)
 
 
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
     project: ProjectCreate,
-    user_id: str = "1",  # 示例：默认用户ID
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """创建项目"""
-    new_project = {
-        "id": str(len(SAMPLE_PROJECTS) + 1),
-        "user_id": user_id,
-        "title": project.title,
-        "course_type": project.course_type,
-        "student_level": project.student_level,
-        "duration_minutes": project.duration_minutes,
-        "source_text": project.source_text,
-        "analysis_status": "pending",
-        "status": "draft",
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
-    }
-    SAMPLE_PROJECTS.append(new_project)
-    return new_project
+    new_record = AnalysisRecord(
+        id=str(uuid.uuid4()),
+        user_id=current_user["user_id"],
+        text_title=project.title,
+        text_content=project.source_text,
+        text_word_count=len(project.source_text.split()),
+        student_level=project.student_level,
+        course_type=project.course_type,
+        duration_minutes=project.duration_minutes,
+        analysis_status="pending",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(new_record)
+    await db.commit()
+    await db.refresh(new_record)
+    return _record_to_response(new_record)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
     project_id: str,
     project_update: ProjectUpdate,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """更新项目"""
-    for project in SAMPLE_PROJECTS:
-        if project["id"] == project_id:
-            if project_update.title is not None:
-                project["title"] = project_update.title
-            if project_update.course_type is not None:
-                project["course_type"] = project_update.course_type
-            if project_update.student_level is not None:
-                project["student_level"] = project_update.student_level
-            if project_update.duration_minutes is not None:
-                project["duration_minutes"] = project_update.duration_minutes
-            if project_update.source_text is not None:
-                project["source_text"] = project_update.source_text
-            if project_update.tags is not None:
-                project["tags"] = project_update.tags
-            project["updated_at"] = datetime.now()
-            return project
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Project not found"
+    result = await db.execute(
+        select(AnalysisRecord).where(AnalysisRecord.id == project_id)
     )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+
+    if project_update.title is not None:
+        record.text_title = project_update.title
+    if project_update.course_type is not None:
+        record.course_type = project_update.course_type
+    if project_update.student_level is not None:
+        record.student_level = project_update.student_level
+    if project_update.duration_minutes is not None:
+        record.duration_minutes = project_update.duration_minutes
+    if project_update.source_text is not None:
+        record.text_content = project_update.source_text
+
+    record.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(record)
+    return _record_to_response(record)
 
 
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """删除项目"""
-    for i, project in enumerate(SAMPLE_PROJECTS):
-        if project["id"] == project_id:
-            del SAMPLE_PROJECTS[i]
-            return {"message": "Project deleted successfully"}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Project not found"
+    result = await db.execute(
+        select(AnalysisRecord).where(AnalysisRecord.id == project_id)
     )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+
+    await db.delete(record)
+    await db.commit()
+    return {"message": "Project deleted successfully"}
 
 
 @router.post("/{project_id}/analyze")
 async def analyze_project(
     project_id: str,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """分析项目（触发课文分析）"""
-    for project in SAMPLE_PROJECTS:
-        if project["id"] == project_id:
-            # 更新分析状态
-            project["analysis_status"] = "processing"
-            project["updated_at"] = datetime.now()
-
-            # 示例：返回分析任务ID
-            return {
-                "task_id": f"analysis_{project_id}",
-                "status": "processing",
-                "message": "Analysis started"
-            }
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Project not found"
+    result = await db.execute(
+        select(AnalysisRecord).where(AnalysisRecord.id == project_id)
     )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+
+    record.analysis_status = "processing"
+    record.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "task_id": f"analysis_{project_id}",
+        "status": "processing",
+        "message": "Analysis started"
+    }

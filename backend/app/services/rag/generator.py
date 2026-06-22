@@ -18,6 +18,9 @@ class GenerationResult:
     response_time: float
     model: str
     usage: Dict[str, int] = field(default_factory=dict)
+    backend: str = ""
+    degraded: bool = False
+    degraded_reason: str = ""
 
 
 @dataclass
@@ -50,6 +53,11 @@ class RAGGenerator:
         self.temperature = temperature
         self.top_p = top_p
 
+        self.default_backend = "unknown"
+        self.last_backend = "unknown"
+        self.last_degraded = False
+        self.last_degraded_reason = ""
+
         # 初始化客户端
         self._init_client()
 
@@ -63,11 +71,19 @@ class RAGGenerator:
                 base_url=self.api_base
             )
             self.use_api = True
+            self.default_backend = "api"
+            self.last_backend = self.default_backend
+            self.last_degraded = False
+            self.last_degraded_reason = ""
 
         except ImportError:
             print("警告: openai未安装，将使用简化实现")
             self.client = None
             self.use_api = False
+            self.default_backend = "simplified_fallback"
+            self.last_backend = self.default_backend
+            self.last_degraded = True
+            self.last_degraded_reason = "openai package not installed"
 
     def generate(
         self,
@@ -92,6 +108,9 @@ class RAGGenerator:
 
         # 组装上下文
         context = self._assemble_context(retrieval_results)
+        self.last_backend = self.default_backend
+        self.last_degraded = False
+        self.last_degraded_reason = ""
 
         # 构建Prompt
         messages = self._build_messages(query, context, system_prompt)
@@ -119,7 +138,10 @@ class RAGGenerator:
             confidence=confidence,
             response_time=response_time,
             model=self.model,
-            usage=usage
+            usage=usage,
+            backend=self.last_backend,
+            degraded=self.last_degraded,
+            degraded_reason=self.last_degraded_reason,
         )
 
     def _assemble_context(self, results: List[RetrievalResult]) -> str:
@@ -196,11 +218,17 @@ class RAGGenerator:
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
             }
+            self.last_backend = "api"
+            self.last_degraded = False
+            self.last_degraded_reason = ""
 
             return answer, usage
 
         except Exception as e:
             print(f"API调用失败: {e}")
+            self.last_backend = "simplified_fallback"
+            self.last_degraded = True
+            self.last_degraded_reason = str(e)
             return self._generate_simplified(
                 messages[-1]["content"],
                 ""
@@ -348,12 +376,32 @@ class RAGGenerator:
         for i, result in enumerate(wiki_results, 1):
             title = result.title if hasattr(result, 'title') else result.get('title', f'Wiki条目{i}')
             content = result.content if hasattr(result, 'content') else result.get('content', '')
+            confidence = result.confidence if hasattr(result, 'confidence') else result.get('confidence', '')
+            contested = result.contested if hasattr(result, 'contested') else result.get('contested', False)
+            contradictions = result.contradictions if hasattr(result, 'contradictions') else result.get('contradictions', [])
+            sources = result.sources if hasattr(result, 'sources') else result.get('sources', [])
+            updated = result.updated if hasattr(result, 'updated') else result.get('updated', '')
 
-            # 截取内容
             if len(content) > 500:
                 content = content[:500] + "..."
 
-            context_parts.append(f"[Wiki {i}] {title}\n{content}")
+            meta_parts = []
+            if confidence:
+                meta_parts.append(f"置信度：{confidence}")
+            if updated:
+                meta_parts.append(f"更新时间：{updated}")
+            meta_parts.append(f"来源：{len(sources or [])}")
+
+            lines = [f"[Wiki {i}] {title}"]
+            if meta_parts:
+                lines.append(" | ".join(meta_parts))
+            lines.append("争议状态：存在争议" if contested else "争议状态：无显式争议")
+            if contradictions:
+                lines.append(f"冲突页：{', '.join(contradictions)}")
+            if content:
+                lines.append(content)
+
+            context_parts.append("\n".join(lines))
 
         return "\n\n".join(context_parts)
 

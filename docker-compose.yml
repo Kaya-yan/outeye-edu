@@ -62,15 +62,28 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - APP_NAME=${APP_NAME:-OutEye Edu}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-outeye}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-outeye_edu}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-outeye_knowledge}
+      - WIKI_DATA_PATH=/app/OutEye-Wiki
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-large-zh-v1.5}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-small-zh-v1.5}
+      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-512}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-logs/outeye.log}
       - DEBUG=${DEBUG:-false}
+    volumes:
+      - ${WIKI_HOST_PATH:-../OutEye-Wiki}:/app/OutEye-Wiki:ro
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +109,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost}
     depends_on:
       backend:
         condition: service_healthy
@@ -125,6 +138,8 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  backend_uploads:
+  backend_logs:
 
 networks:
   outeye-network:

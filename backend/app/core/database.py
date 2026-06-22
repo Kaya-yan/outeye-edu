@@ -40,6 +40,7 @@ AsyncSessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=async_engine,
+    expire_on_commit=False,
 )
 
 

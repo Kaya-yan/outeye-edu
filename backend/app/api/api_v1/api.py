@@ -14,7 +14,10 @@ from app.api.api_v1.endpoints import (
     wiki,
     rag,
     analysis_v2,
+    analysis_whitebox,
+    analysis_parse,
     feedback,
+    expert_review,
 )
 
 # 创建API路由器
@@ -83,4 +86,24 @@ api_router.include_router(
     prefix="/feedback",
     tags=["用户反馈"],
     dependencies=[Depends(check_rate_limit)]
+)
+
+api_router.include_router(
+    analysis_whitebox.router,
+    prefix="/analysis",
+    tags=["白盒分析"],
+    dependencies=[Depends(check_rate_limit)]
+)
+
+api_router.include_router(
+    analysis_parse.router,
+    prefix="/analysis",
+    tags=["文件解析"],
+    dependencies=[Depends(check_rate_limit)]
+)
+
+api_router.include_router(
+    expert_review.router,
+    prefix="/expert-review",
+    tags=["专家评审"],
 )

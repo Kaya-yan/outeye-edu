@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{data.title}} · OutEye Edu</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+:root {
+  --bg: #08081a; --bg2: #0e0e26;
+  --surface: #13132b; --surface2: #1a1a38; --surface3: #242450;
+  --text: #eee8d8; --text2: #a89e8e; --text3: #6a6058;
+  --amber: #f5a623; --amber2: #d4901a; --amber-glow: rgba(245,166,35,0.12);
+  --blue: #5b9ef5; --green: #4ade80; --red: #f87171; --purple: #a78bfa; --pink: #f472b6;
+  --border: rgba(255,255,255,0.05);
+  --glass: rgba(8,8,26,0.8); --glass-border: rgba(255,255,255,0.06);
+  --radius: 14px; --radius-sm: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: "Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  background: var(--bg); color: var(--text);
+  line-height: 1.7; overflow: hidden; height: 100vh;
+}
+
+/* ============ INTRO ============ */
+.intro { position:fixed; inset:0; z-index:9999; background:var(--bg); display:flex; align-items:center; justify-content:center; flex-direction:column; transition:opacity 0.8s cubic-bezier(0.22,1,0.36,1), visibility 0.8s; }
+.intro.hide { opacity:0; visibility:hidden; pointer-events:none; }
+.intro canvas { position:absolute; inset:0; }
+
+/* HUD brackets */
+.hud-bracket { position:absolute; width:50px; height:50px; border-color:rgba(245,166,35,0.4); border-style:solid; border-width:0; opacity:0; animation:bracketIn 0.6s cubic-bezier(0.22,1,0.36,1) forwards; }
+.hud-bracket.tl { top:30%; left:30%; border-top-width:2px; border-left-width:2px; animation-delay:0.8s; }
+.hud-bracket.tr { top:30%; right:30%; border-top-width:2px; border-right-width:2px; animation-delay:0.9s; }
+.hud-bracket.bl { bottom:30%; left:30%; border-bottom-width:2px; border-left-width:2px; animation-delay:1.0s; }
+.hud-bracket.br { bottom:30%; right:30%; border-bottom-width:2px; border-right-width:2px; animation-delay:1.1s; }
+@keyframes bracketIn { from { opacity:0; transform:scale(1.5); } to { opacity:1; transform:scale(1); } }
+
+/* Scan line */
+.intro::after { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px); pointer-events:none; z-index:2; }
+
+.intro-center { position:relative; z-index:3; text-align:center; }
+.intro-logo {
+  font-family:"Noto Serif SC",serif; font-size:clamp(48px,8vw,80px); font-weight:900;
+  background:linear-gradient(135deg, var(--amber), var(--pink), var(--purple));
+  background-size:200% 200%;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  animation:gradientShift 4s ease infinite, logoReveal 1.2s cubic-bezier(0.16,1,0.3,1) 0.6s forwards;
+  opacity:0; letter-spacing:-1px;
+}
+/* Glitch */
+.intro-logo::before, .intro-logo::after { content:attr(data-text); position:absolute; top:0; left:0; width:100%; opacity:0.7; }
+.intro-logo::before { color:#ff0040; animation:glitchL 4s infinite; z-index:-1; -webkit-text-fill-color:#ff0040; background:none; }
+.intro-logo::after { color:#00ffff; animation:glitchR 4s infinite; z-index:-2; -webkit-text-fill-color:#00ffff; background:none; }
+@keyframes glitchL { 0%,88%,100% { clip-path:inset(0 0 0 0); transform:translate(0); } 90% { clip-path:inset(20% 0 60% 0); transform:translate(-3px,1px); } 93% { clip-path:inset(60% 0 10% 0); transform:translate(-2px,-1px); } 96% { clip-path:inset(30% 0 40% 0); transform:translate(-4px,2px); } }
+@keyframes glitchR { 0%,88%,100% { clip-path:inset(0 0 0 0); transform:translate(0); } 89% { clip-path:inset(50% 0 20% 0); transform:translate(3px,-1px); } 92% { clip-path:inset(10% 0 70% 0); transform:translate(2px,1px); } 95% { clip-path:inset(40% 0 30% 0); transform:translate(4px,-2px); } }
+
+.intro-sub { font-size:16px; color:var(--text3); letter-spacing:4px; text-transform:uppercase; margin-top:16px; opacity:0; animation:fadeUp 0.8s 1.2s ease forwards; }
+.intro-bar { width:120px; height:2px; background:rgba(255,255,255,0.08); margin:24px auto 0; border-radius:1px; overflow:hidden; opacity:0; animation:fadeUp 0.6s 1.4s ease forwards; }
+.intro-bar::after { content:''; display:block; width:0; height:100%; background:linear-gradient(90deg, var(--amber), var(--purple)); animation:barFill 1.2s 1.6s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+@keyframes logoReveal { 0% { opacity:0; transform:translateY(20px) scale(0.95); filter:blur(8px); } 100% { opacity:1; transform:translateY(0) scale(1); filter:blur(0); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes barFill { to { width:100%; } }
+@keyframes gradientShift { 0% { background-position:0% 50%; } 50% { background-position:100% 50%; } 100% { background-position:0% 50%; } }
+
+/* ============ APP ============ */
+.app { display:flex; flex-direction:column; height:100vh; opacity:0; transition:opacity 0.6s cubic-bezier(0.22,1,0.36,1); }
+.app.show { opacity:1; }
+
+/* ============ TOPBAR ============ */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 28px; background:var(--glass); backdrop-filter:blur(24px); border-bottom:1px solid var(--glass-border); flex-shrink:0; z-index:10; }
+.topbar-left { display:flex; align-items:center; gap:14px; }
+.topbar-logo { font-family:"Noto Serif SC",serif; font-size:17px; font-weight:900; background:linear-gradient(135deg,var(--amber),var(--pink)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.topbar-title { font-size:14px; color:var(--text2); max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.topbar-right { display:flex; align-items:center; gap:6px; }
+.badge { padding:4px 12px; border-radius:16px; font-size:12px; font-weight:600; background:var(--surface2); color:var(--text2); }
+.badge.accent { background:var(--amber-glow); color:var(--amber); }
+.btn-icon { width:34px; height:34px; border-radius:var(--radius-sm); background:var(--surface2); border:1px solid var(--glass-border); color:var(--text2); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+.btn-icon:hover { background:var(--surface3); color:var(--text); transform:translateY(-1px); }
+.btn-icon:active { transform:scale(0.93); }
+.btn-icon.active { background:var(--amber-glow); color:var(--amber); border-color:rgba(245,166,35,0.3); }
+
+/* ============ TABS ============ */
+.tabs { display:flex; padding:0 28px; background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0; position:relative; }
+.tab { padding:11px 22px; cursor:pointer; font-size:13px; font-weight:500; color:var(--text3); border-bottom:2px solid transparent; transition:all 0.25s; user-select:none; display:flex; align-items:center; gap:5px; }
+.tab:hover { color:var(--text2); background:rgba(255,255,255,0.02); }
+.tab.active { color:var(--amber); border-bottom-color:var(--amber); }
+
+/* ============ MAIN ============ */
+.main { flex:1; overflow-y:auto; padding:36px 44px; scroll-behavior:smooth; position:relative; z-index:1; }
+.main::-webkit-scrollbar { width:4px; }
+.main::-webkit-scrollbar-track { background:transparent; }
+.main::-webkit-scrollbar-thumb { background:var(--surface3); border-radius:2px; }
+.panel { display:none; }
+.panel.active { display:block; }
+
+/* ============ 3D TILT CARD ============ */
+.tilt-card { transform-style:preserve-3d; transition:transform 0.15s ease-out, box-shadow 0.3s ease; }
+.tilt-card:hover { box-shadow:0 12px 40px rgba(0,0,0,0.3); }
+
+/* ============ ANIM ITEMS ============ */
+.anim-item { opacity:0; transform:perspective(800px) rotateX(8deg) translateY(30px); transition:opacity 0.6s ease, transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+.anim-item.in { opacity:1; transform:perspective(800px) rotateX(0) translateY(0); }
+
+/* ============ SECTION HEADER ============ */
+.section-header { margin-bottom:32px; }
+.section-header h2 { font-family:"Noto Serif SC",serif; font-size:32px; font-weight:900; letter-spacing:-0.5px; margin-bottom:4px; }
+.section-header .subtitle { font-size:14px; color:var(--text3); }
+
+/* ============ STATS ============ */
+.stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:32px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--amber),var(--pink)); opacity:0; transition:opacity 0.3s; }
+.stat-card:hover::before { opacity:1; }
+.stat-label { font-size:12px; color:var(--text3); font-weight:500; margin-bottom:6px; }
+.stat-value { font-family:"Noto Serif SC",serif; font-size:30px; font-weight:900; letter-spacing:-1px; font-variant-numeric:tabular-nums; }
+.stat-value.amber { color:var(--amber); }
+.stat-value.blue { color:var(--blue); }
+.stat-value.green { color:var(--green); }
+.stat-value.red { color:var(--red); }
+.stat-hint { font-size:11px; color:var(--text3); margin-top:3px; }
+
+/* ============ CONTENT CARD ============ */
+.content-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:28px; margin-bottom:18px; font-size:16px; line-height:1.9; }
+.content-card p { margin-bottom:12px; }
+.content-card p:last-child { margin-bottom:0; }
+
+/* ============ DATA HINT ============ */
+.data-hint { background:rgba(91,158,245,0.05); border-left:3px solid var(--blue); padding:10px 14px; border-radius:0 8px 8px 0; font-size:13px; color:var(--blue); display:flex; align-items:flex-start; gap:8px; margin-top:14px; }
+
+/* ============ SUGGESTIONS ============ */
+.suggestion-list { display:flex; flex-direction:column; gap:12px; }
+.suggestion-item { display:flex; gap:14px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; transition:border-color 0.3s; }
+.suggestion-item:hover { border-color:rgba(245,166,35,0.12); }
+.suggestion-num { width:36px; height:36px; flex-shrink:0; background:linear-gradient(135deg,var(--amber),var(--amber2)); color:var(--bg); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900; font-family:"Noto Serif SC",serif; }
+.suggestion-content { flex:1; }
+.suggestion-text { font-size:16px; font-weight:500; line-height:1.6; margin-bottom:6px; }
+.suggestion-data { font-size:12px; color:var(--blue); }
+
+/* ============ ACTIVITIES ============ */
+.activity-list { display:flex; flex-direction:column; gap:10px; }
+.activity-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; transition:border-color 0.3s; }
+.activity-card:hover { border-color:rgba(245,166,35,0.12); }
+.activity-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; cursor:pointer; user-select:none; }
+.activity-header-left { display:flex; align-items:center; gap:12px; }
+.activity-icon { width:36px; height:36px; background:var(--surface2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+.activity-name { font-size:16px; font-weight:600; }
+.activity-meta { display:flex; align-items:center; gap:8px; }
+.activity-duration { background:var(--amber-glow); color:var(--amber); padding:3px 12px; border-radius:14px; font-size:12px; font-weight:600; }
+.activity-chevron { color:var(--text3); font-size:14px; transition:transform 0.3s; margin-left:6px; }
+.activity-chevron.open { transform:rotate(180deg); }
+.activity-body { max-height:0; overflow:hidden; transition:max-height 0.5s cubic-bezier(0.16,1,0.3,1); }
+.activity-body.open { max-height:800px; }
+.activity-body-inner { padding:0 22px 22px 22px; }
+.activity-field { margin-bottom:14px; }
+.activity-field:last-child { margin-bottom:0; }
+.activity-field-label { font-size:11px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:2px; margin-bottom:5px; }
+.activity-field-value { font-size:15px; color:var(--text); line-height:1.7; }
+
+/* ============ REVEAL STEPS ============ */
+.reveal-step { display:flex; align-items:center; gap:10px; padding:9px 12px; margin-bottom:6px; border-radius:var(--radius-sm); background:var(--surface2); cursor:pointer; user-select:none; transition:all 0.4s cubic-bezier(0.16,1,0.3,1); border:1px solid transparent; position:relative; overflow:hidden; }
+.reveal-step:hover { border-color:rgba(245,166,35,0.15); }
+.reveal-step .step-icon { width:22px; height:22px; border-radius:6px; background:var(--surface3); color:var(--text3); display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; transition:all 0.4s; }
+.reveal-step.revealed .step-icon { background:var(--amber-glow); color:var(--amber); }
+.reveal-step .step-placeholder { flex:1; height:6px; background:var(--surface3); border-radius:3px; transition:all 0.4s; }
+.reveal-step.revealed .step-placeholder { opacity:0; width:0; height:0; margin:0; overflow:hidden; }
+.reveal-step .step-text { font-size:14px; color:var(--text); overflow:hidden; max-width:0; opacity:0; transition:all 0.5s cubic-bezier(0.16,1,0.3,1); white-space:nowrap; }
+.reveal-step.revealed .step-text { max-width:600px; opacity:1; white-space:normal; }
+
+/* ============ THEORY ============ */
+.theory-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:14px; position:relative; overflow:hidden; }
+.theory-card::before { content:''; position:absolute; top:0; left:0; bottom:0; width:3px; background:linear-gradient(180deg,var(--purple),var(--pink)); }
+.theory-name { font-family:"Noto Serif SC",serif; font-size:18px; font-weight:700; color:var(--purple); margin-bottom:3px; }
+.theory-author { font-size:12px; color:var(--text3); margin-bottom:10px; }
+.theory-desc { font-size:15px; line-height:1.8; color:var(--text2); }
+.theory-tag { display:inline-block; background:rgba(167,139,250,0.08); color:var(--purple); padding:2px 8px; border-radius:5px; font-size:11px; font-weight:500; margin-top:8px; margin-right:4px; }
+
+/* ============ DATA PANEL ============ */
+.data-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+.data-panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; }
+.data-panel-title { font-family:"Noto Serif SC",serif; font-size:16px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.mini-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+.mini-stat { background:var(--surface2); border-radius:8px; padding:12px; }
+.mini-stat .stat-label { font-size:11px; }
+.mini-stat .stat-value { font-size:20px; }
+.cefr-bar-label { font-size:12px; color:var(--text3); margin-bottom:6px; font-weight:500; }
+.cefr-bar { display:flex; height:28px; border-radius:6px; overflow:hidden; gap:2px; margin-bottom:16px; }
+.cefr-bar div { display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:700; transform-origin:left; animation:barGrow 0.8s ease forwards; opacity:0; }
+@keyframes barGrow { from { opacity:0; transform:scaleX(0); } to { opacity:1; transform:scaleX(1); } }
+.word-cloud { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.word-tag { background:var(--amber-glow); color:var(--amber); padding:5px 12px; border-radius:6px; font-size:13px; font-weight:500; border:1px solid rgba(245,166,35,0.1); transition:all 0.2s; animation:wordFloat 5s ease-in-out infinite; }
+.word-tag:nth-child(2n) { animation-delay:-1.2s; }
+.word-tag:nth-child(3n) { animation-delay:-2.5s; }
+.word-tag:nth-child(4n) { animation-delay:-0.7s; }
+.word-tag:hover { background:rgba(245,166,35,0.2); transform:translateY(-2px); }
+.word-tag .level { opacity:0.4; font-size:11px; margin-left:3px; }
+@keyframes wordFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+.long-sentence { background:var(--surface); border:1px solid rgba(248,113,113,0.15); border-radius:var(--radius); padding:20px; margin-top:14px; }
+.long-sentence-badge { background:rgba(248,113,113,0.08); color:var(--red); padding:2px 8px; border-radius:5px; font-size:11px; font-weight:600; display:inline-block; margin-bottom:8px; }
+.long-sentence-text { font-size:15px; line-height:1.8; color:var(--text2); font-style:italic; }
+
+/* ============ FOOTER ============ */
+.footer { padding:10px 28px; background:var(--glass); backdrop-filter:blur(24px); border-top:1px solid var(--glass-border); display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--text3); flex-shrink:0; z-index:10; }
+.kbd { display:inline-block; background:var(--surface2); color:var(--text3); padding:1px 6px; border-radius:4px; font-size:10px; font-family:monospace; border:1px solid var(--border); margin:0 1px; }
+
+/* ============ EDIT MODE ============ */
+[contenteditable="true"] { outline:2px dashed var(--amber); outline-offset:3px; border-radius:4px; cursor:text; }
+
+/* ============ ANNOTATION CANVAS ============ */
+#annoCanvas { position:fixed; top:0; left:0; z-index:50; pointer-events:none; }
+#annoCanvas.active { pointer-events:auto; cursor:none; }
+
+/* Custom cursor */
+.custom-cursor { position:fixed; pointer-events:none; z-index:9998; transition:width 0.15s, height 0.15s, border-radius 0.15s; display:none; }
+.custom-cursor.show { display:block; }
+
+/* Tool indicator */
+.tool-indicator { position:fixed; top:70px; left:50%; transform:translateX(-50%); background:var(--glass); backdrop-filter:blur(20px); border:1px solid var(--glass-border); border-radius:20px; padding:6px 16px; display:flex; align-items:center; gap:8px; z-index:100; font-size:13px; color:var(--text2); opacity:0; transition:all 0.3s cubic-bezier(0.16,1,0.3,1); pointer-events:none; }
+.tool-indicator.show { opacity:1; pointer-events:auto; }
+.tool-indicator .tool-dot { width:8px; height:8px; border-radius:50%; }
+.tool-indicator .exit-btn { background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.2); color:var(--red); padding:2px 10px; border-radius:10px; font-size:11px; cursor:pointer; margin-left:8px; transition:all 0.2s; }
+.tool-indicator .exit-btn:hover { background:rgba(248,113,113,0.3); }
+
+/* ============ ANNO BAR ============ */
+.anno-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--glass); backdrop-filter:blur(24px); border:1px solid var(--glass-border); border-radius:16px; padding:6px 10px; display:flex; align-items:center; gap:3px; z-index:100; box-shadow:0 8px 40px rgba(0,0,0,0.5); opacity:0; visibility:hidden; transition:all 0.3s cubic-bezier(0.16,1,0.3,1); }
+.anno-bar.show { opacity:1; visibility:visible; }
+.anno-btn { width:32px; height:32px; border-radius:8px; background:transparent; border:none; color:var(--text2); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+.anno-btn:hover { background:rgba(255,255,255,0.06); color:var(--text); }
+.anno-btn:active { transform:scale(0.88); }
+.anno-btn.active { background:var(--amber-glow); color:var(--amber); }
+.anno-sep { width:1px; height:20px; background:var(--glass-border); margin:0 3px; }
+.anno-color { width:20px; height:20px; border-radius:50%; border:2px solid transparent; cursor:pointer; transition:all 0.15s; }
+.anno-color:hover { transform:scale(1.2); }
+.anno-color.active { border-color:var(--text); box-shadow:0 0 0 2px var(--bg); }
+.anno-size { width:28px; height:4px; border-radius:2px; background:var(--text2); cursor:pointer; transition:all 0.15s; border:none; }
+.anno-size:hover { background:var(--text); }
+.anno-size.active { background:var(--amber); }
+
+/* ============ TIMER ============ */
+.timer-overlay { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:200; display:none; flex-direction:column; align-items:center; gap:16px; }
+.timer-overlay.show { display:flex; animation:scaleIn 0.3s cubic-bezier(0.16,1,0.3,1); }
+.timer-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:199; display:none; }
+.timer-backdrop.show { display:block; }
+@keyframes scaleIn { from { opacity:0; transform:translate(-50%,-50%) scale(0.85); } }
+.timer-ring { position:relative; width:180px; height:180px; }
+.timer-ring svg { transform:rotate(-90deg); }
+.timer-ring circle { fill:none; stroke-width:7; stroke-linecap:round; }
+.timer-bg { stroke:var(--surface3); }
+.timer-progress { stroke:var(--green); transition:stroke-dashoffset 0.5s linear, stroke 0.5s; }
+.timer-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:"Noto Serif SC",serif; font-size:48px; font-weight:900; color:var(--text); }
+.timer-close { position:absolute; top:-36px; right:-36px; width:28px; height:28px; border-radius:50%; background:var(--surface2); border:1px solid var(--glass-border); color:var(--text2); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+.timer-label { font-size:15px; color:var(--text2); font-weight:500; }
+.timer-presets { display:flex; gap:6px; }
+.timer-preset { padding:5px 14px; border-radius:16px; background:var(--surface2); border:1px solid var(--glass-border); color:var(--text2); cursor:pointer; font-size:12px; transition:all 0.2s; }
+.timer-preset:hover { background:var(--surface3); color:var(--text); }
+
+/* ============ LASER ============ */
+.laser-dot { position:fixed; width:10px; height:10px; background:var(--red); border-radius:50%; box-shadow:0 0 10px var(--red), 0 0 20px rgba(248,113,113,0.3); pointer-events:none; z-index:60; opacity:0; transition:opacity 0.1s; }
+.laser-dot.show { opacity:1; }
+
+/* ============ AMBIENT ============ */
+.ambient-orb { position:fixed; border-radius:50%; filter:blur(80px); opacity:0.06; pointer-events:none; z-index:0; animation:orbFloat 25s ease-in-out infinite; }
+.orb1 { width:500px; height:500px; background:var(--amber); top:-150px; right:-150px; }
+.orb2 { width:350px; height:350px; background:var(--purple); bottom:-80px; left:-80px; animation-delay:-8s; }
+@keyframes orbFloat { 0%,100% { transform:translate(0,0); } 33% { transform:translate(25px,-35px); } 66% { transform:translate(-20px,25px); } }
+</style>
+</head>
+<body>
+
+<!-- Ambient -->
+<div class="ambient-orb orb1"></div>
+<div class="ambient-orb orb2"></div>
+
+<!-- Intro -->
+<div class="intro" id="intro">
+  <canvas id="introCanvas"></canvas>
+  <div class="hud-bracket tl"></div>
+  <div class="hud-bracket tr"></div>
+  <div class="hud-bracket bl"></div>
+  <div class="hud-bracket br"></div>
+  <div class="intro-center">
+    <div class="intro-logo" data-text="OutEye Edu">OutEye Edu</div>
+    <div class="intro-sub">智能教研操作系统 · 教学方案</div>
+    <div class="intro-bar"></div>
+  </div>
+</div>
+
+<!-- Annotation Canvas -->
+<canvas id="annoCanvas"></canvas>
+
+<!-- Custom Cursor -->
+<div class="custom-cursor" id="customCursor"></div>
+
+<!-- Tool Indicator -->
+<div class="tool-indicator" id="toolIndicator">
+  <div class="tool-dot" id="toolDot"></div>
+  <span id="toolName">画笔</span>
+  <span id="toolSize" style="font-size:11px;color:var(--text3)"></span>
+  <button class="exit-btn" onclick="exitWhiteboard()">退出 ✕</button>
+</div>
+
+<!-- Laser -->
+<div class="laser-dot" id="laserDot"></div>
+
+<!-- Timer -->
+<div class="timer-backdrop" id="timerBackdrop" onclick="closeTimer()"></div>
+<div class="timer-overlay" id="timerOverlay">
+  <div class="timer-ring">
+    <svg width="180" height="180">
+      <circle class="timer-bg" cx="90" cy="90" r="82" />
+      <circle class="timer-progress" id="timerProgress" cx="90" cy="90" r="82" stroke-dasharray="515" stroke-dashoffset="0" />
+    </svg>
+    <div class="timer-text" id="timerText">05:00</div>
+    <button class="timer-close" onclick="closeTimer()">✕</button>
+  </div>
+  <div class="timer-label" id="timerLabel">课堂活动计时</div>
+  <div class="timer-presets">
+    <button class="timer-preset" onclick="startTimer(60)">1分钟</button>
+    <button class="timer-preset" onclick="startTimer(180)">3分钟</button>
+    <button class="timer-preset" onclick="startTimer(300)">5分钟</button>
+    <button class="timer-preset" onclick="startTimer(600)">10分钟</button>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">OutEye Edu</div>
+      <div class="topbar-title" id="topbarTitle"></div>
+    </div>
+    <div class="topbar-right">
+      <span class="badge" id="badgeLevel"></span>
+      <span class="badge accent" id="badgeGap"></span>
+      <button class="btn-icon" id="btnWB" onclick="toggleWhiteboard()" title="白板 (W)">✏️</button>
+      <button class="btn-icon" id="btnLaser" onclick="toggleLaser()" title="激光笔 (L)">🔴</button>
+      <button class="btn-icon" onclick="toggleTimer()" title="计时器 (T)">⏱</button>
+      <button class="btn-icon" onclick="toggleEdit()" title="编辑 (E)">📝</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="overview" onclick="switchTab(this)">📊 难度概述</div>
+    <div class="tab" data-tab="suggestions" onclick="switchTab(this)">💡 教学建议</div>
+    <div class="tab" data-tab="activities" onclick="switchTab(this)">🎯 活动设计</div>
+    <div class="tab" data-tab="theory" onclick="switchTab(this)">📚 理论依据</div>
+    <div class="tab" data-tab="data" onclick="switchTab(this)">📈 数据参考</div>
+  </div>
+
+  <div class="main" id="mainContent">
+    <!-- 难度概述 -->
+    <div id="overview" class="panel active"></div>
+    <!-- 教学建议 -->
+    <div id="suggestions" class="panel"></div>
+    <!-- 活动设计 -->
+    <div id="activities" class="panel"></div>
+    <!-- 理论依据 -->
+    <div id="theory" class="panel"></div>
+    <!-- 数据参考 -->
+    <div id="data" class="panel"></div>
+  </div>
+
+  <div class="footer">
+    <div id="footerLeft">OutEye Edu 1.0 · 智能教研操作系统</div>
+    <div><span class="kbd">W</span>白板 <span class="kbd">L</span>激光笔 <span class="kbd">T</span>计时器 <span class="kbd">E</span>编辑 <span class="kbd">Space</span>揭示 <span class="kbd">1-5</span>标签 <span class="kbd">?</span>帮助</div>
+  </div>
+</div>
+
+<!-- Anno Bar -->
+<div class="anno-bar" id="annoBar">
+  <button class="anno-btn active" data-tool="pen" onclick="setTool('pen')" title="画笔 (P)">✏️</button>
+  <button class="anno-btn" data-tool="highlighter" onclick="setTool('highlighter')" title="荧光笔 (H)">🖍️</button>
+  <button class="anno-btn" data-tool="text" onclick="setTool('text')" title="文字 (X)">T</button>
+  <button class="anno-btn" data-tool="circle" onclick="setTool('circle')" title="圆形 (C)">⭕</button>
+  <button class="anno-btn" data-tool="arrow" onclick="setTool('arrow')" title="箭头 (A)">➡️</button>
+  <button class="anno-btn" data-tool="eraser" onclick="setTool('eraser')" title="橡皮 (R)">🧹</button>
+  <div class="anno-sep"></div>
+  <div class="anno-color active" style="background:#f87171" data-color="#f87171" onclick="setAnnoColor(this)"></div>
+  <div class="anno-color" style="background:#5b9ef5" data-color="#5b9ef5" onclick="setAnnoColor(this)"></div>
+  <div class="anno-color" style="background:#4ade80" data-color="#4ade80" onclick="setAnnoColor(this)"></div>
+  <div class="anno-color" style="background:#f5a623" data-color="#f5a623" onclick="setAnnoColor(this)"></div>
+  <div class="anno-sep"></div>
+  <button class="anno-size active" data-size="3" onclick="setAnnoSize(this)"></button>
+  <button class="anno-size" data-size="6" onclick="setAnnoSize(this)" style="height:6px"></button>
+  <button class="anno-size" data-size="10" onclick="setAnnoSize(this)" style="height:10px"></button>
+  <div class="anno-sep"></div>
+  <button class="anno-btn" onclick="undoAnno()" title="撤销 (Ctrl+Z)">↩️</button>
+  <button class="anno-btn" onclick="clearAnno()" title="清除全部">🗑️</button>
+</div>
+
+<!-- Data Injection Point -->
+<script id="plan-data" type="application/json">{{data.json}}</script>
+
+<script>
+// ========== READ DATA ==========
+const PLAN_DATA = JSON.parse(document.getElementById('plan-data').textContent);
+
+// ========== HTML ESCAPE (XSS prevention) ==========
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ========== RENDER CONTENT ==========
+function renderAll() {
+  const d = PLAN_DATA;
+
+  // Topbar
+  document.getElementById('topbarTitle').textContent = d.meta.title;
+  document.getElementById('badgeLevel').textContent = d.meta.level_from + ' → ' + d.meta.level_to;
+  document.getElementById('badgeGap').textContent = d.meta.gap;
+  document.getElementById('footerLeft').textContent = `OutEye Edu 1.0 · 智能教研操作系统 · 模型: ${d.meta.model}`;
+
+  // Overview panel
+  const ov = d.overview;
+  document.getElementById('overview').innerHTML = `
+    <div class="section-header anim-item" style="--i:0"><h2>课文难度概述</h2><div class="subtitle">基于白盒分析的多维度评估</div></div>
+    <div class="stats-row">
+      <div class="stat-card tilt-card anim-item" style="--i:1"><div class="stat-label">课文等级</div><div class="stat-value amber">${esc(d.meta.level_from)}</div><div class="stat-hint">CEFR</div></div>
+      <div class="stat-card tilt-card anim-item" style="--i:2"><div class="stat-label">学生水平</div><div class="stat-value blue">${esc(d.meta.level_to)}</div><div class="stat-hint">当前能力</div></div>
+      <div class="stat-card tilt-card anim-item" style="--i:3"><div class="stat-label">难度差距</div><div class="stat-value green">${esc(d.meta.gap)}</div><div class="stat-hint">最近发展区</div></div>
+      <div class="stat-card tilt-card anim-item" style="--i:4"><div class="stat-label">可读性</div><div class="stat-value red"><span class="counter" data-target="${Math.round(ov.flesch || 0)}">0</span></div><div class="stat-hint">Flesch</div></div>
+    </div>
+    <div class="content-card tilt-card anim-item" style="--i:5"><p>${esc(ov.summary)}</p></div>
+    ${ov.stats_hint ? `<div class="data-hint anim-item" style="--i:6"><span>📊</span><span>${esc(ov.stats_hint)}</span></div>` : ''}
+  `;
+
+  // Suggestions panel
+  const sugs = d.suggestions || [];
+  let sugHtml = `<div class="section-header anim-item" style="--i:0"><h2>教学建议</h2><div class="subtitle">数据驱动的个性化教学策略 · 每条建议附分析依据</div></div><div class="suggestion-list">`;
+  sugs.forEach((s, i) => {
+    sugHtml += `<div class="suggestion-item tilt-card anim-item" style="--i:${i+1}"><div class="suggestion-num">${i+1}</div><div class="suggestion-content"><div class="suggestion-text" contenteditable="false">${esc(s.text)}</div>${s.data_hint ? `<div class="suggestion-data">📊 ${esc(s.data_hint)}</div>` : ''}</div></div>`;
+  });
+  sugHtml += '</div>';
+  document.getElementById('suggestions').innerHTML = sugHtml;
+
+  // Activities panel
+  const acts = d.activities || [];
+  let actHtml = `<div class="section-header anim-item" style="--i:0"><h2>课堂活动设计</h2><div class="subtitle">点击展开 · 点击步骤揭示内容 · 空格键逐条揭示</div></div><div class="activity-list">`;
+  acts.forEach((a, i) => {
+    const steps = Array.isArray(a.steps) ? a.steps : (a.steps ? String(a.steps).split('\n') : []);
+    actHtml += `<div class="activity-card tilt-card anim-item" style="--i:${i+1}">
+      <div class="activity-header" onclick="toggleActivity(this)"><div class="activity-header-left"><div class="activity-icon">${a.icon || '🎯'}</div><div class="activity-name">${esc(a.name) || '课堂活动'}</div></div><div class="activity-meta">${a.duration ? `<span class="activity-duration">⏱ ${esc(a.duration)}</span>` : ''}<span class="activity-chevron">▼</span></div></div>
+      <div class="activity-body"><div class="activity-body-inner">
+        ${a.objective ? `<div class="activity-field"><div class="activity-field-label">目标</div><div class="activity-field-value" contenteditable="false">${esc(a.objective)}</div></div>` : ''}
+        ${steps.length ? `<div class="activity-field"><div class="activity-field-label">步骤 <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0">(点击逐条揭示)</span></div>${steps.map((s, j) => `<div class="reveal-step" onclick="revealStep(this)"><div class="step-icon">${j+1}</div><div class="step-placeholder"></div><div class="step-text">${esc(s)}</div></div>`).join('')}</div>` : ''}
+        ${a.data_hint ? `<div class="data-hint"><span>📊</span><span>${esc(a.data_hint)}</span></div>` : ''}
+      </div></div>
+    </div>`;
+  });
+  actHtml += '</div>';
+  document.getElementById('activities').innerHTML = actHtml;
+
+  // Theory panel
+  const theories = d.theories || [];
+  let theoryHtml = `<div class="section-header anim-item" style="--i:0"><h2>理论依据</h2><div class="subtitle">教学方案的教育学与语言学理论支撑</div></div>`;
+  theories.forEach((t, i) => {
+    const tags = Array.isArray(t.tags) ? t.tags : [];
+    theoryHtml += `<div class="theory-card tilt-card anim-item" style="--i:${i+1}"><div class="theory-name">${esc(t.name)}</div>${t.author ? `<div class="theory-author">${esc(t.author)}</div>` : ''}<div class="theory-desc" contenteditable="false">${esc(t.description)}</div>${tags.map(tg => `<span class="theory-tag">${esc(tg)}</span>`).join(' ')}</div>`;
+  });
+  document.getElementById('theory').innerHTML = theoryHtml;
+
+  // Data panel
+  const vd = d.data || {};
+  const vocab = vd.vocabulary || {};
+  const syn = vd.syntax || {};
+  const disc = vd.discourse || {};
+  const cefr = vocab.cefr_distribution || {};
+  const oolWords = vocab.out_of_level_words || [];
+  const longSent = syn.longest_sentence || {};
+
+  let dataHtml = `<div class="section-header anim-item" style="--i:0"><h2>白盒分析数据</h2><div class="subtitle">完整的多维度文本分析指标</div></div><div class="data-grid">`;
+
+  // Vocabulary panel
+  dataHtml += `<div class="data-panel tilt-card anim-item" style="--i:1"><div class="data-panel-title">📖 词汇分析</div><div class="mini-stats">
+    <div class="mini-stat"><div class="stat-label">总词数</div><div class="stat-value"><span class="counter" data-target="${vocab.total_words || 0}">0</span></div></div>
+    <div class="mini-stat"><div class="stat-label">不重复词</div><div class="stat-value"><span class="counter" data-target="${vocab.unique_words || 0}">0</span></div></div>
+    <div class="mini-stat"><div class="stat-label">AWL 学术词</div><div class="stat-value"><span class="counter" data-target="${vocab.awl_count || 0}">0</span> <span style="font-size:13px;color:var(--text3)">(${vocab.awl_percent || 0}%)</span></div></div>
+    <div class="mini-stat"><div class="stat-label">词汇丰富度</div><div class="stat-value">${esc(vocab.ttr) || '-'}</div></div>
+  </div>`;
+
+  // CEFR bar
+  const cefrTotal = Object.values(cefr).reduce((a, b) => a + b, 0) || 1;
+  const cefrColors = { 'A1-A2': '#4ade80', 'B1-B2': '#f5a623', 'C1': '#f87171', 'C1-C2': '#f87171', 'unclassified': '#64748b' };
+  dataHtml += `<div class="cefr-bar-label">CEFR 分布</div><div class="cefr-bar">`;
+  let barDelay = 0.1;
+  for (const [level, pct] of Object.entries(cefr)) {
+    const w = Math.round((pct / cefrTotal) * 100);
+    dataHtml += `<div style="width:${w}%;background:${cefrColors[level] || '#64748b'};animation-delay:${barDelay}s">${esc(level)} ${w}%</div>`;
+    barDelay += 0.2;
+  }
+  dataHtml += '</div>';
+
+  // Out of level words
+  if (oolWords.length) {
+    dataHtml += `<div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:500;">超纲词（${oolWords.length}个）</div><div class="word-cloud">`;
+    oolWords.forEach(w => {
+      dataHtml += `<span class="word-tag">${esc(w.word)} <span class="level">${esc(w.level)}</span></span>`;
+    });
+    dataHtml += '</div>';
+  }
+  dataHtml += '</div>';
+
+  // Syntax panel
+  dataHtml += `<div class="data-panel tilt-card anim-item" style="--i:2"><div class="data-panel-title">📝 句法分析</div><div class="mini-stats">
+    <div class="mini-stat"><div class="stat-label">句子数</div><div class="stat-value"><span class="counter" data-target="${syn.sentence_count || 0}">0</span></div></div>
+    <div class="mini-stat"><div class="stat-label">平均句长</div><div class="stat-value">${esc(syn.avg_sentence_length) || '-'} <span style="font-size:13px;color:var(--text3)">词</span></div></div>
+    <div class="mini-stat"><div class="stat-label">长句 (&gt;30词)</div><div class="stat-value"><span class="counter" data-target="${syn.long_sentences || 0}">0</span></div></div>
+    <div class="mini-stat"><div class="stat-label">超长句 (&gt;40词)</div><div class="stat-value"><span class="counter" data-target="${syn.very_long_sentences || 0}">0</span></div></div>
+  </div>`;
+
+  if (longSent.text) {
+    dataHtml += `<div class="long-sentence"><div class="long-sentence-badge">最长句 · 第${longSent.index}句 · ${longSent.words}词</div><div class="long-sentence-text">"${esc(longSent.text)}"</div></div>`;
+  }
+  dataHtml += '</div></div>';
+
+  // Discourse + tags
+  dataHtml += `<div class="data-grid"><div class="data-panel tilt-card anim-item" style="--i:3"><div class="data-panel-title">📄 语篇分析</div><div class="mini-stats" style="grid-template-columns:repeat(3,1fr)">
+    <div class="mini-stat"><div class="stat-label">段落数</div><div class="stat-value"><span class="counter" data-target="${disc.paragraph_count || 0}">0</span></div></div>
+    <div class="mini-stat"><div class="stat-label">连接词密度</div><div class="stat-value">${esc(disc.connector_density) || '-'} <span style="font-size:13px;color:var(--text3)">/百词</span></div></div>
+    <div class="mini-stat"><div class="stat-label">体裁</div><div class="stat-value" style="font-size:17px;">${esc(disc.genre) || '-'}</div></div>
+  </div></div>`;
+
+  // Tags
+  const tags = d.meta.tags || [];
+  if (tags.length) {
+    dataHtml += `<div class="data-panel tilt-card anim-item" style="--i:4"><div class="data-panel-title">🏷️ 增强标签</div><div class="word-cloud" style="margin-top:0;">${tags.map(t => `<span class="word-tag">${esc(t)}</span>`).join('')}</div></div>`;
+  }
+  dataHtml += '</div>';
+
+  document.getElementById('data').innerHTML = dataHtml;
+
+  // Re-attach tilt listeners
+  attachTiltListeners();
+  // Animate first panel
+  animatePanel('overview');
+}
+
+// ========== INTRO PARTICLES ==========
+(function(){
+  const c=document.getElementById('introCanvas'),x=c.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight;pts=[];for(let i=0;i<80;i++)pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-0.5)*0.5,vy:(Math.random()-0.5)*0.5,r:Math.random()*2+0.5,a:Math.random()*0.3+0.1});}
+  resize();window.addEventListener('resize',resize);
+  function draw(){
+    x.clearRect(0,0,W,H);
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
+      x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle=`rgba(245,166,35,${p.a})`;x.fill();
+    });
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<150){x.beginPath();x.moveTo(pts[i].x,pts[i].y);x.lineTo(pts[j].x,pts[j].y);x.strokeStyle=`rgba(245,166,35,${0.06*(1-d/150)})`;x.lineWidth=0.5;x.stroke();}
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ========== INTRO SEQUENCE ==========
+setTimeout(()=>{document.getElementById('intro').classList.add('hide');document.getElementById('app').classList.add('show');renderAll();},3200);
+
+// ========== 3D TILT ==========
+function attachTiltListeners(){
+  document.querySelectorAll('.tilt-card').forEach(card=>{
+    card.addEventListener('mousemove',e=>{
+      const r=card.getBoundingClientRect();
+      const x=(e.clientX-r.left)/r.width-0.5,y=(e.clientY-r.top)/r.height-0.5;
+      card.style.transform=`perspective(600px) rotateY(${x*6}deg) rotateX(${-y*6}deg) scale3d(1.01,1.01,1.01)`;
+    });
+    card.addEventListener('mouseleave',()=>{card.style.transition='transform 0.4s ease';card.style.transform='perspective(600px) rotateY(0) rotateX(0) scale3d(1,1,1)';setTimeout(()=>card.style.transition='transform 0.1s ease-out',400);});
+  });
+}
+
+// ========== TABS ==========
+function switchTab(el){
+  const id=el.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  const panel=document.getElementById(id);
+  panel.classList.add('active');
+  panel.querySelectorAll('.anim-item').forEach(i=>{i.classList.remove('in');void i.offsetWidth;});
+  setTimeout(()=>animatePanel(id),50);
+}
+function animatePanel(id){
+  const panel=document.getElementById(id);
+  panel.querySelectorAll('.anim-item').forEach((item,i)=>{setTimeout(()=>item.classList.add('in'),i*70);});
+  panel.querySelectorAll('.counter').forEach(el=>{animateCounter(el,parseInt(el.dataset.target));});
+}
+function animateCounter(el,target,d=1000){
+  const s=performance.now();
+  function u(now){const p=Math.min((now-s)/d,1);el.textContent=Math.floor((1-Math.pow(1-p,3))*target);if(p<1)requestAnimationFrame(u);else el.textContent=target;}
+  requestAnimationFrame(u);
+}
+
+// ========== ACTIVITIES ==========
+function toggleActivity(h){const b=h.nextElementSibling,hc=h.querySelector('.activity-chevron');b.classList.toggle('open');hc.classList.toggle('open');}
+
+// ========== REVEAL ==========
+function revealStep(el){
+  if(el.classList.contains('revealed'))return;
+  el.classList.add('revealed');
+  el.querySelector('.step-icon').textContent='✓';
+}
+
+// ========== EDIT ==========
+let editMode=false;
+function toggleEdit(){editMode=!editMode;document.querySelectorAll('[contenteditable]').forEach(el=>{el.contentEditable=editMode?'true':'false';});}
+
+// ========== WHITEBOARD ==========
+const canvas=document.getElementById('annoCanvas'),ctx=canvas.getContext('2d');
+const cursor=document.getElementById('customCursor');
+let wbActive=false,laserOn=false,curTool='pen',curColor='#f87171',curSize=3;
+let drawing=false,paths=[],curPath=[],shapeStart=null;
+
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+
+const toolNames={pen:'画笔',highlighter:'荧光笔',text:'文字',circle:'圆形',arrow:'箭头',eraser:'橡皮擦'};
+
+function toggleWhiteboard(){
+  wbActive=!wbActive;
+  canvas.classList.toggle('active',wbActive);
+  document.getElementById('annoBar').classList.toggle('show',wbActive);
+  document.getElementById('toolIndicator').classList.toggle('show',wbActive);
+  document.getElementById('btnWB').classList.toggle('active',wbActive);
+  cursor.classList.toggle('show',wbActive);
+  if(wbActive){updateCursor();if(laserOn)toggleLaser();}
+  else{cursor.classList.remove('show');document.body.style.cursor='';}
+}
+function exitWhiteboard(){if(wbActive)toggleWhiteboard();}
+
+function toggleLaser(){
+  laserOn=!laserOn;
+  document.getElementById('btnLaser').classList.toggle('active',laserOn);
+  document.getElementById('laserDot').classList.toggle('show',laserOn);
+  if(laserOn&&wbActive)toggleWhiteboard();
+}
+
+function setTool(t){
+  curTool=t;
+  document.querySelectorAll('.anno-btn[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));
+  updateCursor();
+  document.getElementById('toolName').textContent=toolNames[t]||t;
+}
+function setAnnoColor(el){curColor=el.dataset.color;document.querySelectorAll('.anno-color').forEach(c=>c.classList.toggle('active',c===el));updateCursor();document.getElementById('toolDot').style.background=curColor;}
+function setAnnoSize(el){curSize=parseInt(el.dataset.size);document.querySelectorAll('.anno-size').forEach(s=>s.classList.toggle('active',s===el));updateCursor();document.getElementById('toolSize').textContent=curSize+'px';}
+
+function updateCursor(){
+  if(!wbActive)return;
+  const s=curTool==='eraser'?40:curTool==='highlighter'?curSize*4:curTool==='text'?24:Math.max(curSize*2,8);
+  cursor.style.width=s+'px';cursor.style.height=s+'px';
+  cursor.style.borderRadius=curTool==='text'?'2px':'50%';
+  cursor.style.border=curTool==='eraser'?'2px dashed rgba(255,255,255,0.5)':'2px solid rgba(255,255,255,0.3)';
+  cursor.style.background=curTool==='text'?'transparent':curTool==='eraser'?'rgba(255,255,255,0.08)':curColor+'33';
+  document.getElementById('toolDot').style.background=curColor;
+  document.getElementById('toolSize').textContent=curSize+'px';
+}
+
+document.addEventListener('pointermove',e=>{
+  if(wbActive){
+    const s=parseInt(cursor.style.width)||8;
+    cursor.style.left=(e.clientX-s/2)+'px';
+    cursor.style.top=(e.clientY-s/2)+'px';
+  }
+  if(laserOn){const d=document.getElementById('laserDot');d.style.left=(e.clientX-5)+'px';d.style.top=(e.clientY-5)+'px';}
+  if(!drawing||!wbActive)return;
+  if(curTool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(e.clientX,e.clientY,20,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';return;}
+  if(curTool==='circle'||curTool==='arrow')return;
+  curPath.push({x:e.clientX,y:e.clientY});redrawAll();
+});
+
+canvas.addEventListener('pointerdown',e=>{
+  if(!wbActive)return;
+  drawing=true;
+  if(curTool==='text'){const t=prompt('输入文字：');if(t){ctx.font=`${curSize*5}px "Noto Sans SC",sans-serif`;ctx.fillStyle=curColor;ctx.fillText(t,e.clientX,e.clientY);paths.push({type:'text',text:t,x:e.clientX,y:e.clientY,color:curColor,size:curSize*5});}drawing=false;return;}
+  if(curTool==='circle'||curTool==='arrow'){shapeStart={x:e.clientX,y:e.clientY};return;}
+  if(curTool==='eraser'){ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(e.clientX,e.clientY,20,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';return;}
+  curPath=[{x:e.clientX,y:e.clientY}];
+});
+
+canvas.addEventListener('pointerup',e=>{
+  if(!drawing||!wbActive)return;
+  drawing=false;
+  if(curTool==='circle'&&shapeStart){const dx=e.clientX-shapeStart.x,dy=e.clientY-shapeStart.y;paths.push({type:'circle',cx:shapeStart.x,cy:shapeStart.y,r:Math.sqrt(dx*dx+dy*dy),color:curColor,size:curSize});redrawAll();shapeStart=null;return;}
+  if(curTool==='arrow'&&shapeStart){paths.push({type:'arrow',x1:shapeStart.x,y1:shapeStart.y,x2:e.clientX,y2:e.clientY,color:curColor,size:curSize});redrawAll();shapeStart=null;return;}
+  if(curPath.length){paths.push({type:'path',points:[...curPath],color:curColor,size:curSize,tool:curTool});curPath=[];}
+});
+
+function redrawAll(){ctx.clearRect(0,0,canvas.width,canvas.height);paths.forEach(drawShape);if(curPath.length)drawPath(curPath,curColor,curSize,curTool);}
+function drawShape(s){
+  if(s.type==='path')drawPath(s.points,s.color,s.size,s.tool);
+  else if(s.type==='circle'){ctx.beginPath();ctx.arc(s.cx,s.cy,s.r,0,Math.PI*2);ctx.strokeStyle=s.color;ctx.lineWidth=s.size;ctx.stroke();}
+  else if(s.type==='arrow')drawArrow(s.x1,s.y1,s.x2,s.y2,s.color,s.size);
+  else if(s.type==='text'){ctx.font=`${s.size}px "Noto Sans SC",sans-serif`;ctx.fillStyle=s.color;ctx.fillText(s.text,s.x,s.y);}
+}
+function drawPath(pts,color,size,tool){
+  if(pts.length<2)return;
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length-1;i++){const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;ctx.quadraticCurveTo(pts[i].x,pts[i].y,mx,my);}
+  ctx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y);
+  ctx.strokeStyle=color;ctx.lineWidth=tool==='highlighter'?size*3:size;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.globalAlpha=tool==='highlighter'?0.35:1;ctx.stroke();ctx.globalAlpha=1;
+}
+function drawArrow(x1,y1,x2,y2,color,size){
+  const a=Math.atan2(y2-y1,x2-x1);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=color;ctx.lineWidth=size;ctx.lineCap='round';ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-15*Math.cos(a-Math.PI/6),y2-15*Math.sin(a-Math.PI/6));ctx.moveTo(x2,y2);ctx.lineTo(x2-15*Math.cos(a+Math.PI/6),y2-15*Math.sin(a+Math.PI/6));ctx.stroke();
+}
+function undoAnno(){paths.pop();redrawAll();}
+function clearAnno(){if(!paths.length)return;paths=[];ctx.clearRect(0,0,canvas.width,canvas.height);}
+
+// ========== TIMER ==========
+let timerInt=null,timerRem=0,timerTotal=0;
+function toggleTimer(){const o=document.getElementById('timerOverlay'),b=document.getElementById('timerBackdrop');o.classList.toggle('show');b.classList.toggle('show');}
+function closeTimer(){document.getElementById('timerOverlay').classList.remove('show');document.getElementById('timerBackdrop').classList.remove('show');if(timerInt){clearInterval(timerInt);timerInt=null;}}
+function startTimer(sec){
+  if(timerInt)clearInterval(timerInt);
+  timerTotal=sec;timerRem=sec;updateTimer();
+  timerInt=setInterval(()=>{timerRem--;updateTimer();if(timerRem<=0){clearInterval(timerInt);timerInt=null;document.getElementById('timerLabel').textContent='时间到！';document.querySelector('.timer-ring').style.animation='timerFlash 0.5s ease 3';setTimeout(()=>document.querySelector('.timer-ring').style.animation='',1500);}},1000);
+}
+function updateTimer(){
+  const m=Math.floor(timerRem/60),s=timerRem%60;
+  document.getElementById('timerText').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const c=2*Math.PI*82,pct=timerRem/timerTotal;
+  document.getElementById('timerProgress').style.strokeDashoffset=c*(1-pct);
+  document.getElementById('timerProgress').style.stroke=pct>0.5?'#4ade80':pct>0.25?'#f5a623':'#f87171';
+  document.getElementById('timerText').style.animation=timerRem<=10&&timerRem>0?'timerPulse 0.5s ease infinite':'';
+  document.getElementById('timerLabel').textContent='课堂活动计时';
+}
+
+// ========== KEYBOARD ==========
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.isContentEditable)return;
+  switch(e.key.toLowerCase()){
+    case'w':toggleWhiteboard();break;
+    case'l':toggleLaser();break;
+    case't':toggleTimer();break;
+    case'e':toggleEdit();break;
+    case'p':if(wbActive)setTool('pen');break;
+    case'h':if(wbActive)setTool('highlighter');break;
+    case'x':if(wbActive)setTool('text');break;
+    case'c':if(wbActive)setTool('circle');break;
+    case'a':if(wbActive)setTool('arrow');break;
+    case'r':if(wbActive)setTool('eraser');break;
+    case' ':e.preventDefault();const ns=document.querySelector('.panel.active .reveal-step:not(.revealed)');if(ns)revealStep(ns);break;
+    case'1':case'2':case'3':case'4':case'5':if(!editMode)switchTab(document.querySelectorAll('.tab')[parseInt(e.key)-1]);break;
+    case'escape':if(wbActive)exitWhiteboard();if(laserOn)toggleLaser();if(editMode)toggleEdit();closeTimer();break;
+    case'z':if(e.ctrlKey||e.metaKey){e.preventDefault();undoAnno();}break;
+    case'?':alert('快捷键：\nW 白板 | L 激光笔 | T 计时器 | E 编辑\nSpace 揭示步骤 | 1-5 切换标签\n白板模式：P 画笔 | H 荧光笔 | X 文字 | C 圆形 | A 箭头 | R 橡皮\nCtrl+Z 撤销 | Esc 退出');break;
+  }
+});
+
+// Injected keyframes
+const s=document.createElement('style');
+s.textContent=`@keyframes timerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}@keyframes timerFlash{0%,100%{opacity:1}50%{opacity:0.3}}`;
+document.head.appendChild(s);
+</script>
+</body>
+</html>

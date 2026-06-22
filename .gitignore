@@ -76,3 +76,20 @@ docker/nginx/ssl/
 *.temp
 .tmp/
 .temp/
+
+# 演示和测试数据
+backend/demo_*.json
+backend/demo_*.txt
+backend/run_demo_analysis.py
+backend/test_rag*.py
+backend/data/
+
+# 开发工具
+.superpowers/
+docs/superpowers/
+.claude/
+
+# 开发过程文件
+findings.md
+progress.md
+task_plan.md

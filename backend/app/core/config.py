@@ -42,8 +42,11 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2000
 
     # Embedding模型配置
-    EMBEDDING_MODEL: str = "bge-large-zh-v1.5"
-    EMBEDDING_DIMENSION: int = 1024
+    EMBEDDING_MODEL: str = "bge-small-zh-v1.5"
+    EMBEDDING_DIMENSION: int = 512
+
+    # Wiki数据路径
+    WIKI_DATA_PATH: str = ""
 
     # CORS配置
     CORS_ORIGINS: List[str] = [
@@ -70,6 +73,11 @@ class Settings(BaseSettings):
     # Mimo API配置（可选）
     MIMO_API_KEY: Optional[str] = None
     MIMO_API_URL: Optional[str] = None
+
+    # 阿里云 OCR 配置（可选）
+    ALIYUN_OCR_ACCESS_KEY_ID: Optional[str] = None
+    ALIYUN_OCR_ACCESS_KEY_SECRET: Optional[str] = None
+    ALIYUN_OCR_ENDPOINT: str = "ocr-api.cn-hangzhou.aliyuncs.com"
 
     # 前端配置（可选）
     NEXT_PUBLIC_API_URL: Optional[str] = None

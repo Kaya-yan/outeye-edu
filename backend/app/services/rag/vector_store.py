@@ -43,6 +43,9 @@ class VectorStore:
         self.vector_size = vector_size
         self.distance = distance
         self.client = None
+        self.backend = "unknown"
+        self.degraded = False
+        self.degraded_reason = ""
         self._init_client()
 
     def _init_client(self):
@@ -52,6 +55,9 @@ class VectorStore:
             from qdrant_client.models import Distance, VectorParams
 
             self.client = QdrantClient(host=self.host, port=self.port)
+            self.backend = "qdrant"
+            self.degraded = False
+            self.degraded_reason = ""
 
             # 检查集合是否存在，不存在则创建
             collections = self.client.get_collections().collections
@@ -70,11 +76,17 @@ class VectorStore:
         except ImportError:
             print("警告: qdrant_client未安装，将使用内存存储")
             self.client = None
+            self.backend = "memory"
+            self.degraded = True
+            self.degraded_reason = "qdrant_client not installed"
             self._memory_store: Dict[str, VectorRecord] = {}
 
         except Exception as e:
             print(f"Qdrant连接失败: {e}，将使用内存存储")
             self.client = None
+            self.backend = "memory"
+            self.degraded = True
+            self.degraded_reason = str(e)
             self._memory_store: Dict[str, VectorRecord] = {}
 
     def upsert(self, records: List[VectorRecord]) -> bool:
@@ -290,7 +302,10 @@ class VectorStore:
                 "name": self.collection_name,
                 "vectors_count": info.vectors_count,
                 "points_count": info.points_count,
-                "status": info.status
+                "status": info.status,
+                "backend": self.backend,
+                "degraded": self.degraded,
+                "degraded_reason": self.degraded_reason,
             }
         except Exception as e:
             print(f"获取集合信息失败: {e}")
@@ -302,8 +317,50 @@ class VectorStore:
             "name": self.collection_name,
             "vectors_count": len(self._memory_store),
             "points_count": len(self._memory_store),
-            "status": "memory"
+            "status": "memory",
+            "backend": self.backend or "memory",
+            "degraded": self.degraded,
+            "degraded_reason": self.degraded_reason,
         }
+
+    def get_all_records(self) -> List[VectorRecord]:
+        """读取全部记录，用于服务重启后的检索器重建"""
+        if self.client is not None:
+            return self._get_all_records_qdrant()
+        return list(self._memory_store.values())
+
+    def _get_all_records_qdrant(self) -> List[VectorRecord]:
+        """从Qdrant读取全部记录"""
+        try:
+            records: List[VectorRecord] = []
+            offset = None
+
+            while True:
+                points, offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=256,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=True,
+                )
+
+                for point in points:
+                    vector = point.vector
+                    if isinstance(vector, dict):
+                        vector = next(iter(vector.values()), [])
+                    records.append(VectorRecord(
+                        id=str(point.id),
+                        vector=vector or [],
+                        payload=point.payload or {},
+                    ))
+
+                if offset is None:
+                    break
+
+            return records
+        except Exception as e:
+            print(f"读取Qdrant全部记录失败: {e}")
+            return []
 
     def count(self) -> int:
         """获取记录数量"""

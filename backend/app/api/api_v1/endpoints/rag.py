@@ -81,18 +81,25 @@ def get_rag_services():
             RAGGenerator
         )
         from app.core.config import settings
+        from urllib.parse import urlparse
+
+        # 解析Qdrant URL
+        qdrant_url = getattr(settings, 'QDRANT_URL', 'http://localhost:6333')
+        parsed = urlparse(qdrant_url)
+        qdrant_host = parsed.hostname or 'localhost'
+        qdrant_port = parsed.port or 6333
 
         _document_parser = DocumentParser()
         _embedding_service = EmbeddingService(
             model_name=getattr(settings, 'EMBEDDING_MODEL', 'bge-large-zh'),
-            api_key=getattr(settings, 'EMBEDDING_API_KEY', None),
-            api_base=getattr(settings, 'EMBEDDING_API_BASE', None)
+            api_key=getattr(settings, 'LLM_API_KEY', None),
+            api_base=getattr(settings, 'LLM_BASE_URL', None)
         )
         _vector_store = VectorStore(
-            host=getattr(settings, 'QDRANT_HOST', 'localhost'),
-            port=getattr(settings, 'QDRANT_PORT', 6333),
-            collection_name=getattr(settings, 'QDRANT_COLLECTION', 'outeye_documents'),
-            vector_size=getattr(settings, 'VECTOR_SIZE', 1024)
+            host=qdrant_host,
+            port=qdrant_port,
+            collection_name=getattr(settings, 'QDRANT_COLLECTION', 'outeye_knowledge'),
+            vector_size=getattr(settings, 'EMBEDDING_DIMENSION', 1024)
         )
         _retriever = HybridRetriever(
             embedding_service=_embedding_service,
@@ -100,7 +107,7 @@ def get_rag_services():
         )
         _generator = RAGGenerator(
             api_key=getattr(settings, 'LLM_API_KEY', None),
-            api_base=getattr(settings, 'LLM_API_BASE', None),
+            api_base=getattr(settings, 'LLM_BASE_URL', None),
             model=getattr(settings, 'LLM_MODEL', 'deepseek-chat')
         )
 
@@ -115,80 +122,60 @@ def get_rag_services():
 
 # ============ API端点 ============
 
-@router.post("/upload", response_model=Dict[str, Any])
-async def upload_document(request: DocumentUploadRequest):
-    """
-    上传文档
+def _do_upload(title: str, content: str, metadata: dict) -> dict:
+    """同步阻塞操作：解析、Embedding、存储"""
+    services = get_rag_services()
+    parser = services['parser']
+    embedding = services['embedding']
+    vector_store = services['vector_store']
+    retriever = services['retriever']
 
-    上传文档内容，进行解析、分块和向量化
-    """
-    try:
-        services = get_rag_services()
-        parser = services['parser']
-        embedding = services['embedding']
-        vector_store = services['vector_store']
-        retriever = services['retriever']
+    doc = parser.parse_text(text=content, title=title, metadata=metadata)
 
-        # 解析文档
-        doc = parser.parse_text(
-            text=request.content,
-            title=request.title,
-            metadata=request.metadata
+    from app.services.rag.vector_store import VectorRecord
+    from app.services.rag.retriever import DocumentChunk as RetrieverChunk
+
+    records = []
+    retriever_chunks = []
+
+    for chunk in doc.chunks:
+        embed_result = embedding.embed_text(chunk.content)
+        embedding_vector = embed_result.embedding
+
+        record = VectorRecord(
+            id=chunk.id,
+            vector=embedding_vector,
+            payload={'doc_id': chunk.doc_id, 'content': chunk.content, 'title': title, 'metadata': chunk.metadata}
         )
+        records.append(record)
 
-        # 生成Embedding并存储（只计算一次）
-        from app.services.rag.vector_store import VectorRecord
-        from app.services.rag.retriever import DocumentChunk as RetrieverChunk
+        retriever_chunks.append(RetrieverChunk(
+            id=chunk.id, doc_id=chunk.doc_id, content=chunk.content,
+            embedding=embedding_vector, metadata=chunk.metadata
+        ))
 
-        records = []
-        retriever_chunks = []
+    success = vector_store.upsert(records)
+    if not success:
+        raise RuntimeError("向量存储失败")
 
-        for chunk in doc.chunks:
-            # 生成Embedding（只计算一次）
-            embed_result = embedding.embed_text(chunk.content)
-            embedding_vector = embed_result.embedding
+    retriever.add_documents(retriever_chunks)
 
-            # 创建向量记录
-            record = VectorRecord(
-                id=chunk.id,
-                vector=embedding_vector,
-                payload={
-                    'doc_id': chunk.doc_id,
-                    'content': chunk.content,
-                    'title': request.title,
-                    'metadata': chunk.metadata
-                }
-            )
-            records.append(record)
+    return {
+        "success": True,
+        "document_id": doc.id,
+        "title": doc.title,
+        "chunks_count": len(doc.chunks),
+        "message": f"文档 '{title}' 上传成功，已分为 {len(doc.chunks)} 个块"
+    }
 
-            # 创建检索器块
-            retriever_chunks.append(RetrieverChunk(
-                id=chunk.id,
-                doc_id=chunk.doc_id,
-                content=chunk.content,
-                embedding=embedding_vector,
-                metadata=chunk.metadata
-            ))
 
-        # 存储到向量数据库
-        success = vector_store.upsert(records)
-
-        if not success:
-            raise HTTPException(status_code=500, detail="向量存储失败")
-
-        # 添加到检索器
-        retriever.add_documents(retriever_chunks)
-
-        logger.info(f"文档上传成功: {request.title}, {len(doc.chunks)} 个块")
-
-        return {
-            "success": True,
-            "document_id": doc.id,
-            "title": doc.title,
-            "chunks_count": len(doc.chunks),
-            "message": f"文档 '{request.title}' 上传成功，已分为 {len(doc.chunks)} 个块"
-        }
-
+@router.post("/upload", response_model=Dict[str, Any])
+def upload_document(request: DocumentUploadRequest):
+    """上传文档（解析、分块、向量化）"""
+    try:
+        result = _do_upload(request.title, request.content, request.metadata)
+        logger.info(f"文档上传成功: {request.title}, {result['chunks_count']} 个块")
+        return result
     except Exception as e:
         raise handle_api_error(e, "文档上传")
 
@@ -300,108 +287,93 @@ async def upload_file(file: UploadFile = File(...)):
         raise handle_api_error(e, "文件上传")
 
 
+def _do_query(query: str, method: str, top_k: int, filter_conditions: dict) -> dict:
+    """同步阻塞操作：检索+重排序+生成（在线程池中运行）"""
+    services = get_rag_services()
+    retriever = services['retriever']
+    generator = services['generator']
+
+    retrieval_results = retriever.retrieve(
+        query=query, method=method, top_k=top_k, filter_conditions=filter_conditions
+    )
+    retrieval_results = retriever.rerank(query=query, results=retrieval_results, top_k=top_k)
+    result = generator.generate(query=query, retrieval_results=retrieval_results, include_sources=True)
+
+    return {
+        "answer": result.answer,
+        "sources": result.sources,
+        "confidence": result.confidence,
+        "response_time": result.response_time,
+        "model": result.model
+    }
+
+
 @router.post("/query", response_model=RAGQueryResponse)
-async def query_rag(request: RAGQueryRequest):
-    """
-    RAG查询
-
-    基于检索结果生成回答
-    """
+def query_rag(request: RAGQueryRequest):
+    """RAG查询 — 同步函数，FastAPI自动在线程池中运行"""
     try:
-        services = get_rag_services()
-        retriever = services['retriever']
-        generator = services['generator']
-
-        # 检索
-        retrieval_results = retriever.retrieve(
-            query=request.query,
-            method=request.method,
-            top_k=request.top_k,
-            filter_conditions=request.filter_conditions
-        )
-
-        # 重排序
-        retrieval_results = retriever.rerank(
-            query=request.query,
-            results=retrieval_results,
-            top_k=request.top_k
-        )
-
-        # 生成回答
-        result = generator.generate(
-            query=request.query,
-            retrieval_results=retrieval_results,
-            include_sources=True
-        )
-
+        data = _do_query(request.query, request.method, request.top_k, request.filter_conditions)
         logger.info(f"RAG查询完成: {request.query[:50]}...")
-
-        return RAGQueryResponse(
-            answer=result.answer,
-            sources=result.sources,
-            confidence=result.confidence,
-            response_time=result.response_time,
-            model=result.model
-        )
-
+        return RAGQueryResponse(**data)
     except Exception as e:
         raise handle_api_error(e, "RAG查询")
 
 
+def _do_wiki_query(query: str, method: str, top_k: int, filter_conditions: dict, use_wiki: bool) -> dict:
+    """同步阻塞操作：Wiki+RAG联合查询"""
+    services = get_rag_services()
+    retriever = services['retriever']
+    generator = services['generator']
+
+    wiki_results = []
+    if use_wiki:
+        try:
+            from app.services.wiki import WikiQuery
+            from app.core.config import settings as cfg
+            wiki_path = cfg.WIKI_DATA_PATH or "../../OutEye-Wiki"
+            wiki_service = WikiQuery(wiki_root=wiki_path)
+            raw_wiki_results = wiki_service.query(query, max_results=3)
+            wiki_results = [
+                {
+                    "title": r.page.frontmatter.title,
+                    "content": r.page.content,
+                    "relevance_score": r.relevance_score,
+                    "match_type": r.match_type,
+                    "matched_sections": r.matched_sections,
+                    "tags": r.page.frontmatter.tags or [],
+                    "confidence": r.page.frontmatter.confidence,
+                    "contested": r.page.frontmatter.contested,
+                    "contradictions": r.page.frontmatter.contradictions or [],
+                    "sources": r.page.frontmatter.sources or [],
+                    "updated": r.page.frontmatter.updated,
+                }
+                for r in raw_wiki_results
+            ]
+        except Exception as e:
+            logger.warning(f"Wiki查询失败: {e}")
+
+    retrieval_results = retriever.retrieve(
+        query=query, method=method, top_k=top_k, filter_conditions=filter_conditions
+    )
+    retrieval_results = retriever.rerank(query=query, results=retrieval_results, top_k=top_k)
+    result = generator.generate_with_wiki(query=query, wiki_results=wiki_results, rag_results=retrieval_results)
+
+    return {
+        "answer": result.answer,
+        "sources": result.sources,
+        "confidence": result.confidence,
+        "response_time": result.response_time,
+        "model": result.model
+    }
+
+
 @router.post("/query-with-wiki", response_model=RAGQueryResponse)
-async def query_with_wiki(request: RAGQueryRequest):
-    """
-    Wiki + RAG联合查询
-
-    结合Wiki知识库和RAG检索生成回答
-    """
+def query_with_wiki(request: RAGQueryRequest):
+    """Wiki + RAG联合查询 — 同步函数"""
     try:
-        services = get_rag_services()
-        retriever = services['retriever']
-        generator = services['generator']
-
-        # Wiki查询
-        wiki_results = []
-        if request.use_wiki:
-            try:
-                from app.services.wiki import WikiQuery
-                wiki_service = WikiQuery(wiki_path="OutEye-Wiki")
-                wiki_results = wiki_service.search(request.query, limit=3)
-            except Exception as e:
-                logger.warning(f"Wiki查询失败: {e}")
-
-        # RAG检索
-        retrieval_results = retriever.retrieve(
-            query=request.query,
-            method=request.method,
-            top_k=request.top_k,
-            filter_conditions=request.filter_conditions
-        )
-
-        # 重排序
-        retrieval_results = retriever.rerank(
-            query=request.query,
-            results=retrieval_results,
-            top_k=request.top_k
-        )
-
-        # 生成回答
-        result = generator.generate_with_wiki(
-            query=request.query,
-            wiki_results=wiki_results,
-            rag_results=retrieval_results
-        )
-
+        data = _do_wiki_query(request.query, request.method, request.top_k, request.filter_conditions, request.use_wiki)
         logger.info(f"Wiki+RAG查询完成: {request.query[:50]}...")
-
-        return RAGQueryResponse(
-            answer=result.answer,
-            sources=result.sources,
-            confidence=result.confidence,
-            response_time=result.response_time,
-            model=result.model
-        )
-
+        return RAGQueryResponse(**data)
     except Exception as e:
         raise handle_api_error(e, "Wiki+RAG查询")
 
@@ -439,13 +411,30 @@ async def delete_document(doc_id: str):
         services = get_rag_services()
         vector_store = services['vector_store']
 
-        # 获取文档的所有块ID
-        # 这里简化处理，实际应该查询获取
-        success = vector_store.delete([doc_id])
+        # 查询该文档的所有分块 ID
+        chunk_ids = []
+        if hasattr(vector_store, 'client') and vector_store.client is not None:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            results, _ = vector_store.client.scroll(
+                collection_name=vector_store.collection_name,
+                scroll_filter=Filter(must=[
+                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
+                ]),
+                limit=1000,
+                with_payload=False,
+                with_vectors=False,
+            )
+            chunk_ids = [r.id for r in results]
+
+        if not chunk_ids:
+            # fallback: 尝试直接用 doc_id 删除
+            chunk_ids = [doc_id]
+
+        success = vector_store.delete(chunk_ids)
 
         if success:
-            logger.info(f"文档已删除: {doc_id}")
-            return {"success": True, "message": f"文档 {doc_id} 已删除"}
+            logger.info(f"文档已删除: {doc_id}，共 {len(chunk_ids)} 个分块")
+            return {"success": True, "message": f"文档 {doc_id} 已删除", "chunks_deleted": len(chunk_ids)}
         else:
             raise HTTPException(status_code=500, detail="删除失败")
 
@@ -453,41 +442,31 @@ async def delete_document(doc_id: str):
         raise handle_api_error(e, "删除文档")
 
 
+def _do_search_similar(text: str, top_k: int) -> list:
+    """同步阻塞操作：Embedding + 向量搜索"""
+    services = get_rag_services()
+    embedding = services['embedding']
+    vector_store = services['vector_store']
+
+    embed_result = embedding.embed_text(text)
+    results = vector_store.search(query_vector=embed_result.embedding, top_k=top_k)
+
+    chunks = []
+    for result in results:
+        chunks.append({
+            "id": result.id,
+            "doc_id": result.payload.get('doc_id', ''),
+            "content": result.payload.get('content', ''),
+            "metadata": result.payload
+        })
+    return chunks
+
+
 @router.post("/search-similar", response_model=List[DocumentChunkResponse])
-async def search_similar(
-    text: str,
-    top_k: int = 5
-):
-    """
-    搜索相似文档块
-
-    基于文本内容搜索相似的文档块
-    """
+def search_similar(text: str, top_k: int = 5):
+    """搜索相似文档块 — 同步函数"""
     try:
-        services = get_rag_services()
-        embedding = services['embedding']
-        vector_store = services['vector_store']
-
-        # 生成查询向量
-        embed_result = embedding.embed_text(text)
-
-        # 搜索
-        results = vector_store.search(
-            query_vector=embed_result.embedding,
-            top_k=top_k
-        )
-
-        # 转换结果
-        chunks = []
-        for result in results:
-            chunks.append(DocumentChunkResponse(
-                id=result.id,
-                doc_id=result.payload.get('doc_id', ''),
-                content=result.payload.get('content', ''),
-                metadata=result.payload
-            ))
-
-        return chunks
-
+        chunks = _do_search_similar(text, top_k)
+        return [DocumentChunkResponse(**c) for c in chunks]
     except Exception as e:
         raise handle_api_error(e, "搜索相似文档")

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 
 router = APIRouter()
 
@@ -139,7 +140,8 @@ SAMPLE_ANALYSIS_RESULT = {
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_text(
     request: AnalysisRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """分析课文文本"""
     # 示例实现：返回示例分析结果
@@ -159,7 +161,8 @@ async def analyze_text(
 @router.get("/result/{task_id}", response_model=AnalysisResponse)
 async def get_analysis_result(
     task_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """获取分析结果"""
     # 示例实现：返回示例结果
@@ -175,7 +178,8 @@ async def get_analysis_result(
 async def analyze_vocabulary(
     text: str,
     student_level: str = "B2",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """词汇维度分析"""
     # 示例实现
@@ -193,7 +197,8 @@ async def analyze_vocabulary(
 @router.post("/syntax")
 async def analyze_syntax(
     text: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """句法维度分析"""
     # 示例实现
@@ -217,7 +222,8 @@ async def analyze_syntax(
 @router.post("/discourse")
 async def analyze_discourse(
     text: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """语篇维度分析"""
     # 示例实现
@@ -237,7 +243,8 @@ async def analyze_discourse(
 async def analyze_cognitive_load(
     text: str,
     student_level: str = "B2",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """认知负荷分析"""
     # 示例实现

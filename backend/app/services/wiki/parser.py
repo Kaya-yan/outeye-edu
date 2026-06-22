@@ -266,9 +266,15 @@ class WikiParser:
 
         return [self.pages[bl] for bl in page.backlinks if bl in self.pages]
 
+    # 元数据标签前缀，不是用户可见的理论标签
+    _META_TAG_PREFIXES = ("concept-layer:", "type:", "theory-layer:", "source:", "function:")
+
     def get_all_tags(self) -> List[str]:
-        """获取所有标签"""
-        return list(self.index.keys())
+        """获取所有标签（过滤掉元数据标签）"""
+        return [
+            tag for tag in self.index.keys()
+            if not any(tag.startswith(prefix) for prefix in self._META_TAG_PREFIXES)
+        ]
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取统计信息"""

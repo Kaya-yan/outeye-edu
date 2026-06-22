@@ -1,5 +1,8 @@
 # OutEye Edu 1.0 启动指南
 
+> 本文件描述的是**本地开发模式**（backend + frontend 分开启动）。
+> 当前项目的官方部署口径是 `docker compose + nginx`，请优先参考 `README.md` 和 `docs/deployment/deployment-guide.md`。
+
 ## 你需要做什么（按顺序执行）
 
 ### 第一步：安装必要的软件

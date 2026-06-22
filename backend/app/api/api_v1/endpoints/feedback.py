@@ -5,11 +5,12 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import uuid
 from loguru import logger
 
-from app.core.database import AsyncSessionLocal
+from app.core.database import get_async_db
 from app.models.learning import UserFeedback
 from app.core.security import get_current_user
 from app.utils.error_handler import handle_api_error
@@ -62,47 +63,43 @@ class FeedbackStats(BaseModel):
 @router.post("/", response_model=FeedbackResponse)
 async def create_feedback(
     feedback: FeedbackCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """
-    创建用户反馈
-
-    需要用户登录
-    """
+    """创建用户反馈"""
     try:
-        async with AsyncSessionLocal() as session:
-            new_feedback = UserFeedback(
-                id=str(uuid.uuid4()),
-                user_id=current_user["user_id"],
-                feedback_type=feedback.feedback_type,
-                category=feedback.category,
-                rating=feedback.rating,
-                title=feedback.title,
-                content=feedback.content,
-                suggestion=feedback.suggestion,
-                page_url=feedback.page_url,
-                browser_info=feedback.browser_info,
-                status="pending",
-                created_at=datetime.utcnow()
-            )
-            session.add(new_feedback)
-            await session.commit()
-            await session.refresh(new_feedback)
+        new_feedback = UserFeedback(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            feedback_type=feedback.feedback_type,
+            category=feedback.category,
+            rating=feedback.rating,
+            title=feedback.title,
+            content=feedback.content,
+            suggestion=feedback.suggestion,
+            page_url=feedback.page_url,
+            browser_info=feedback.browser_info,
+            status="pending",
+            created_at=datetime.utcnow()
+        )
+        db.add(new_feedback)
+        await db.commit()
+        await db.refresh(new_feedback)
 
-            logger.info(f"用户 {current_user['user_id']} 提交反馈: {feedback.feedback_type}")
+        logger.info(f"用户 {current_user['user_id']} 提交反馈: {feedback.feedback_type}")
 
-            return FeedbackResponse(
-                id=new_feedback.id,
-                feedback_type=new_feedback.feedback_type,
-                category=new_feedback.category,
-                rating=new_feedback.rating,
-                title=new_feedback.title,
-                content=new_feedback.content,
-                suggestion=new_feedback.suggestion,
-                status=new_feedback.status,
-                admin_reply=new_feedback.admin_reply,
-                created_at=new_feedback.created_at.isoformat()
-            )
+        return FeedbackResponse(
+            id=new_feedback.id,
+            feedback_type=new_feedback.feedback_type,
+            category=new_feedback.category,
+            rating=new_feedback.rating,
+            title=new_feedback.title,
+            content=new_feedback.content,
+            suggestion=new_feedback.suggestion,
+            status=new_feedback.status,
+            admin_reply=new_feedback.admin_reply,
+            created_at=new_feedback.created_at.isoformat()
+        )
 
     except Exception as e:
         raise handle_api_error(e, "创建反馈")
@@ -112,93 +109,90 @@ async def create_feedback(
 async def get_my_feedback(
     skip: int = 0,
     limit: int = 20,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """
-    获取当前用户的反馈列表
-    """
+    """获取当前用户的反馈列表"""
     try:
         from sqlalchemy import select, desc
 
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(UserFeedback)
-                .where(UserFeedback.user_id == current_user["user_id"])
-                .order_by(desc(UserFeedback.created_at))
-                .offset(skip)
-                .limit(limit)
-            )
-            feedbacks = result.scalars().all()
+        result = await db.execute(
+            select(UserFeedback)
+            .where(UserFeedback.user_id == current_user["user_id"])
+            .order_by(desc(UserFeedback.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        feedbacks = result.scalars().all()
 
-            return [
-                FeedbackResponse(
-                    id=f.id,
-                    feedback_type=f.feedback_type,
-                    category=f.category,
-                    rating=f.rating,
-                    title=f.title,
-                    content=f.content,
-                    suggestion=f.suggestion,
-                    status=f.status,
-                    admin_reply=f.admin_reply,
-                    created_at=f.created_at.isoformat()
-                )
-                for f in feedbacks
-            ]
+        return [
+            FeedbackResponse(
+                id=f.id,
+                feedback_type=f.feedback_type,
+                category=f.category,
+                rating=f.rating,
+                title=f.title,
+                content=f.content,
+                suggestion=f.suggestion,
+                status=f.status,
+                admin_reply=f.admin_reply,
+                created_at=f.created_at.isoformat()
+            )
+            for f in feedbacks
+        ]
 
     except Exception as e:
         raise handle_api_error(e, "获取反馈列表")
 
 
 @router.get("/stats", response_model=FeedbackStats)
-async def get_feedback_stats():
-    """
-    获取反馈统计（管理员）
-    """
+async def get_feedback_stats(
+    db: AsyncSession = Depends(get_async_db)
+):
+    """获取反馈统计（管理员）"""
     try:
         from sqlalchemy import func, select
 
-        async with AsyncSessionLocal() as session:
-            # 总数
-            result = await session.execute(select(func.count(UserFeedback.id)))
-            total_count = result.scalar() or 0
+        # 总数
+        result = await db.execute(select(func.count(UserFeedback.id)))
+        total_count = result.scalar() or 0
 
-            # 按类型统计
-            result = await session.execute(
-                select(UserFeedback.feedback_type, func.count(UserFeedback.id))
-                .group_by(UserFeedback.feedback_type)
-            )
-            by_type = {row[0]: row[1] for row in result.all()}
+        # 按类型统计
+        result = await db.execute(
+            select(UserFeedback.feedback_type, func.count(UserFeedback.id))
+            .group_by(UserFeedback.feedback_type)
+        )
+        by_type = {row[0]: row[1] for row in result.all()}
 
-            # 按类别统计
-            result = await session.execute(
-                select(UserFeedback.category, func.count(UserFeedback.id))
-                .where(UserFeedback.category.isnot(None))
-                .group_by(UserFeedback.category)
-            )
-            by_category = {row[0]: row[1] for row in result.all()}
+        # 按类别统计
+        result = await db.execute(
+            select(UserFeedback.category, func.count(UserFeedback.id))
+            .where(UserFeedback.category.isnot(None))
+            .group_by(UserFeedback.category)
+        )
+        by_category = {row[0]: row[1] for row in result.all()}
 
-            # 平均评分
-            result = await session.execute(
-                select(func.avg(UserFeedback.rating))
-                .where(UserFeedback.rating.isnot(None))
-            )
-            avg_rating = result.scalar() or 0.0
+        # 平均评分
+        result = await db.execute(
+            select(func.avg(UserFeedback.rating))
+            .where(UserFeedback.rating.isnot(None))
+        )
+        avg_rating = result.scalar() or 0.0
 
-            # 待处理数
-            result = await session.execute(
-                select(func.count(UserFeedback.id))
-                .where(UserFeedback.status == "pending")
-            )
-            pending_count = result.scalar() or 0
+        # 待处理数
+        result = await db.execute(
+            select(func.count(UserFeedback.id))
+            .where(UserFeedback.status == "pending")
+        )
+        pending_count = result.scalar() or 0
 
-            return FeedbackStats(
-                total_count=total_count,
-                by_type=by_type,
-                by_category=by_category,
-                avg_rating=round(avg_rating, 2),
-                pending_count=pending_count
-            )
+        return FeedbackStats(
+            total_count=total_count,
+            by_type=by_type,
+            by_category=by_category,
+            avg_rating=round(avg_rating, 2),
+            pending_count=pending_count
+        )
 
     except Exception as e:
         raise handle_api_error(e, "获取反馈统计")
@@ -208,28 +202,24 @@ async def get_feedback_stats():
 async def submit_satisfaction_rating(
     rating: int = Query(..., ge=1, le=5, description="满意度评分（1-5）"),
     comment: Optional[str] = Query(None, description="评价"),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """
-    提交满意度评分
-
-    简化的反馈接口，用于快速评分
-    """
+    """提交满意度评分"""
     try:
-        async with AsyncSessionLocal() as session:
-            feedback = UserFeedback(
-                id=str(uuid.uuid4()),
-                user_id=current_user["user_id"],
-                feedback_type="satisfaction",
-                rating=rating,
-                content=comment,
-                status="pending",
-                created_at=datetime.utcnow()
-            )
-            session.add(feedback)
-            await session.commit()
+        feedback = UserFeedback(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            feedback_type="satisfaction",
+            rating=rating,
+            content=comment,
+            status="pending",
+            created_at=datetime.utcnow()
+        )
+        db.add(feedback)
+        await db.commit()
 
-            return {"message": "感谢您的评价！", "rating": rating}
+        return {"message": "感谢您的评价！", "rating": rating}
 
     except Exception as e:
         raise handle_api_error(e, "提交满意度评分")

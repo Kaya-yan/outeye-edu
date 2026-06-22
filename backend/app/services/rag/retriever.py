@@ -113,6 +113,8 @@ class HybridRetriever:
         if top_k is None:
             top_k = self.top_k
 
+        self._ensure_rehydrated()
+
         if method == "dense":
             return self._dense_retrieve(query, top_k, filter_conditions)
         elif method == "sparse":
@@ -121,6 +123,40 @@ class HybridRetriever:
             return self._hybrid_retrieve(query, top_k, filter_conditions)
         else:
             raise ValueError(f"不支持的检索方法: {method}")
+
+    def _ensure_rehydrated(self):
+        """在检索器为空时，从向量存储重建文档块和倒排索引"""
+        if self.chunks or not self.vector_store or not hasattr(self.vector_store, "get_all_records"):
+            return
+
+        records = self.vector_store.get_all_records() or []
+        if not records:
+            return
+
+        restored_chunks = []
+        for record in records:
+            payload = record.payload or {}
+            content = payload.get("content", "")
+            doc_id = payload.get("doc_id", record.id)
+            metadata = dict(payload.get("metadata") or {})
+
+            for key in ("title", "source", "file_name"):
+                if key in payload and key not in metadata:
+                    metadata[key] = payload[key]
+
+            if not content:
+                continue
+
+            restored_chunks.append(DocumentChunk(
+                id=record.id,
+                doc_id=doc_id,
+                content=content,
+                embedding=record.vector,
+                metadata=metadata,
+            ))
+
+        if restored_chunks:
+            self.add_documents(restored_chunks)
 
     def _dense_retrieve(
         self,

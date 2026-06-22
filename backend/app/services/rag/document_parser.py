@@ -298,27 +298,30 @@ class DocumentParser:
         return Path(filename).stem
 
     def _chunk_text(self, text: str, doc_id: str) -> List[DocumentChunk]:
-        """
-        文本分块
+        """文本分块"""
+        # 对于短文本，直接作为单个块返回
+        if len(text) <= self.chunk_size:
+            chunk_content = text.strip()
+            if chunk_content:
+                return [DocumentChunk(
+                    id=f"{doc_id}_chunk_0",
+                    doc_id=doc_id,
+                    content=chunk_content,
+                    start_pos=0,
+                    end_pos=len(text),
+                    chunk_index=0
+                )]
+            return []
 
-        Args:
-            text: 文本内容
-            doc_id: 文档ID
-
-        Returns:
-            文档块列表
-        """
         chunks = []
         start = 0
         chunk_index = 0
 
         while start < len(text):
-            # 计算结束位置
             end = min(start + self.chunk_size, len(text))
 
             # 尝试在句子边界分割
             if end < len(text):
-                # 寻找最近的句号、问号、感叹号
                 last_period = max(
                     text.rfind('.', start, end),
                     text.rfind('?', start, end),
@@ -327,18 +330,16 @@ class DocumentParser:
                     text.rfind('？', start, end),
                     text.rfind('！', start, end)
                 )
-
                 if last_period > start + self.min_chunk_size:
                     end = last_period + 1
 
-            # 提取块内容
             chunk_content = text[start:end].strip()
 
-            # 跳过太短的块
             if len(chunk_content) < self.min_chunk_size:
-                start = end - self.chunk_overlap
-                if start >= len(text):
+                next_start = end - self.chunk_overlap
+                if next_start <= start or next_start >= len(text):
                     break
+                start = next_start
                 continue
 
             # 生成块ID

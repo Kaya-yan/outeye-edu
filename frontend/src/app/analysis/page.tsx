@@ -1,414 +1,868 @@
 "use client";
 
 import React, { useState } from "react";
+import { apiPost } from "@/lib/api";
+import dynamic from "next/dynamic";
+import WhiteboxResults from "@/components/WhiteboxResults";
+import TeachingPlanView from "@/components/TeachingPlanView";
+import FileUploadZone from "@/components/FileUploadZone";
 
-interface AnalysisResult {
+const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="border border-gray-300 rounded-lg bg-white min-h-[200px] flex items-center justify-center text-gray-400">
+      加载编辑器...
+    </div>
+  ),
+});
+
+// ============ Types ============
+
+interface WhiteboxAnalysis {
   text_id: string;
   title: string;
-  overall_difficulty: number;
-  cefr_level: string;
-  analysis_summary: string;
-  teaching_suggestions: string[];
-  lexical: {
+  text_level: string;
+  language: string;
+  language_name: string;
+  vocabulary: {
     total_words: number;
     unique_words: number;
+    cefr_distribution: Record<string, number>;
+    awl_count: number;
+    awl_ratio: number;
+    difficult_words: Array<{ word: string; level: string; count: number; in_awl: boolean }>;
     vocabulary_richness: number;
-    academic_word_count: number;
-    academic_words: string[];
-    unknown_words: string[];
-    difficulty_score: number;
   };
-  syntactic: {
+  syntax: {
     total_sentences: number;
     avg_sentence_length: number;
-    sentence_types: Record<string, number>;
-    complexity_score: number;
-    flesch_kincaid_grade: number;
+    max_sentence: { preview: string; word_count: number; index: number };
+    long_sentences_count: number;
+    very_long_sentences_count: number;
+    flesch_reading_ease: number;
   };
   discourse: {
-    coherence_score: number;
-    genre_type: string;
-    thematic_progression: string;
+    paragraph_count: number;
+    connective_density: number;
+    genre_hint: string;
+    text_structure?: string;
+    teaching_points?: string[];
   };
-  cognitive_load: {
-    intrinsic_load: number;
-    extraneous_load: number;
-    germane_load: number;
-    total_load: number;
-    overload: boolean;
+  learner_gap: {
+    text_level: string;
+    student_level: string;
+    gap: string;
+    gap_description: string;
   };
+  enhancement_tags: string[];
+  tag_labels?: Record<string, string>;
+  teaching_insights?: Array<{
+    metric_name: string;
+    metric_value: string;
+    teaching_implication: string;
+    suggested_action: string;
+    confidence: string;
+  }>;
+  cultural_elements?: Array<{
+    category: string;
+    keyword: string;
+    context: string;
+    explanation: string;
+  }>;
+  tag_details: Record<string, unknown>;
+  wiki_tags: string[];
+  rag_tags: string[];
+  teaching_tips: string[];
+  analysis_duration: number;
 }
 
-interface LessonPlan {
-  title: string;
-  level: string;
-  duration: number;
-  objectives: Array<{
-    description: string;
-    bloom_level: string;
-    assessment_method: string;
+interface RetrievalResult {
+  wiki_results: Array<{
+    page_name: string;
+    title: string;
+    summary: string;
+    relevance_score: number;
+    match_type: string;
+    tags: string[];
   }>;
-  activities: Array<{
-    name: string;
-    description: string;
-    duration: number;
-    interaction_pattern: string;
+  rag_results: Array<{
+    chunk_id: string;
+    content: string;
+    score: number;
+    metadata: Record<string, unknown>;
   }>;
-  formatted_plan: string;
+  wiki_count: number;
+  rag_count: number;
+  retrieval_duration: number;
 }
+
+interface TeachingPlan {
+  difficulty_overview: string;
+  teaching_suggestions: string[];
+  activity_designs: Array<{
+    name?: string;
+    objective?: string;
+    steps?: string;
+    duration?: string;
+  }>;
+  differentiation: string;
+  theoretical_basis: string;
+}
+
+interface GeneratePlanResult {
+  text_title: string;
+  text_level: string;
+  student_level: string;
+  learner_gap: { gap: string; gap_description: string };
+  enhancement_tags: string[];
+  tag_labels?: Record<string, string>;
+  teaching_plan: TeachingPlan;
+  sources: Array<{ type: string; title?: string; score?: number }>;
+  retrieval_info: { wiki_count: number; rag_count: number; retrieval_duration: number };
+  generation_duration: number;
+  total_duration: number;
+  model: string;
+}
+
+type Step = "input" | "analysis" | "retrieval" | "plan";
+
+const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
+
+const LANGUAGES = [
+  { code: "", label: "自动检测" },
+  { code: "en", label: "英语 English" },
+  { code: "ja", label: "日语 日本語" },
+  { code: "fr", label: "法语 Français" },
+  { code: "de", label: "德语 Deutsch" },
+  { code: "es", label: "西班牙语 Español" },
+  { code: "ko", label: "韩语 한국어" },
+];
+
+// ============ Page ============
 
 export default function AnalysisPage() {
-  const [text, setText] = useState("");
+  const [step, setStep] = useState<Step>("input");
   const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
   const [studentLevel, setStudentLevel] = useState("B1");
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
-    null
-  );
-  const [lessonPlan, setLessonPlan] = useState<LessonPlan | null>(null);
+  const [language, setLanguage] = useState("");
+  const [nativeLanguage, setNativeLanguage] = useState("");
+  const [courseType, setCourseType] = useState("");
+  const [classSize, setClassSize] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"analysis" | "lesson">("analysis");
+  const [error, setError] = useState("");
 
+  const [analysis, setAnalysis] = useState<WhiteboxAnalysis | null>(null);
+  const [retrieval, setRetrieval] = useState<RetrievalResult | null>(null);
+  const [planResult, setPlanResult] = useState<GeneratePlanResult | null>(null);
+
+  // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
+  const wordCount = (() => {
+    const cleaned = text.replace(/<[^>]*>/g, "").trim();
+    if (!cleaned) return 0;
+    const englishWords = cleaned.split(/\s+/).filter(Boolean).length;
+    const chineseChars = (cleaned.match(/[一-鿿]/g) || []).length;
+    return englishWords + Math.ceil(chineseChars * 0.67);
+  })();
+
+  // Step 1: Whitebox Analysis
   const handleAnalyze = async () => {
-    if (!text.trim()) return;
-
+    if (wordCount < 20) {
+      setError("课文内容太短，至少需要20个词");
+      return;
+    }
+    setError("");
     setLoading(true);
-    setError(null);
     try {
-      const response = await fetch("/api/v1/analysis/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          title,
-          student_level: studentLevel,
-        }),
+      const result = await apiPost<WhiteboxAnalysis>("/analysis/whitebox", {
+        text,
+        title,
+        student_level: studentLevel,
+        language: language || undefined,
+        native_language: nativeLanguage || undefined,
+        course_type: courseType || undefined,
+        class_size: classSize ? parseInt(classSize) : undefined,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnalysisResult(data);
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        setError(errData.detail || `分析失败 (${response.status})`);
-      }
-    } catch {
-      setError("网络错误，请检查后端服务是否运行");
+      setAnalysis(result);
+      setStep("analysis");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "分析失败");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenerateLessonPlan = async () => {
-    if (!text.trim()) return;
-
+  // Step 2: Dual Retrieval
+  const handleRetrieve = async () => {
+    if (!analysis) return;
+    setError("");
     setLoading(true);
-    setError(null);
     try {
-      const response = await fetch("/api/v1/analysis/generate-lesson-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          title,
-          student_level: studentLevel,
-          lesson_duration: 45,
-        }),
+      const result = await apiPost<RetrievalResult>("/analysis/retrieve", {
+        wiki_tags: analysis.wiki_tags,
+        rag_tags: analysis.rag_tags,
+        enhancement_tags: analysis.enhancement_tags,
+        text_title: title,
+        max_results: 3,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setLessonPlan(data);
-        setActiveTab("lesson");
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        setError(errData.detail || `教案生成失败 (${response.status})`);
-      }
-    } catch {
-      setError("网络错误，请检查后端服务是否运行");
+      setRetrieval(result);
+      setStep("retrieval");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "检索失败");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Step 3: Generate Teaching Plan
+  const handleGenerate = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await apiPost<GeneratePlanResult>("/analysis/generate-plan", {
+        text,
+        title,
+        student_level: studentLevel,
+        language: language || undefined,
+        native_language: nativeLanguage || undefined,
+        course_type: courseType || undefined,
+        class_size: classSize ? parseInt(classSize) : undefined,
+        max_retrieval_results: 3,
+      });
+      setPlanResult(result);
+      setStep("plan");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset
+  const handleReset = () => {
+    setStep("input");
+    setAnalysis(null);
+    setRetrieval(null);
+    setPlanResult(null);
+    setError("");
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* 头部 */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">智能课文分析</h1>
-          <p className="text-gray-600 mt-1">
-            基于12大语言学理论的多维度课文分析
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">课文智能分析</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            ADDSR-Lite: 白盒分析 → 双源检索 → 融合生成
           </p>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 输入区域 */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold mb-4">课文输入</h2>
+        {/* Stepper */}
+        <Stepper current={step} />
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                课文标题
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="输入课文标题"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                学生水平
-              </label>
-              <select
-                value={studentLevel}
-                onChange={(e) => setStudentLevel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="A1">A1 - 初级</option>
-                <option value="A2">A2 - 基础</option>
-                <option value="B1">B1 - 中级</option>
-                <option value="B2">B2 - 中高级</option>
-                <option value="C1">C1 - 高级</option>
-                <option value="C2">C2 - 精通</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                课文内容
-              </label>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={12}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="粘贴课文内容..."
-              />
-            </div>
-
-            <div className="flex space-x-4">
-              <button
-                onClick={handleAnalyze}
-                disabled={loading || !text.trim()}
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "分析中..." : "开始分析"}
-              </button>
-              <button
-                onClick={handleGenerateLessonPlan}
-                disabled={loading || !text.trim()}
-                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                生成教案
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-                {error}
-              </div>
-            )}
+        {/* Error */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
           </div>
+        )}
 
-          {/* 结果展示区域 */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            {/* 标签页 */}
-            <div className="flex border-b mb-4">
+        {/* Step Content */}
+        <div className="mt-6">
+          {step === "input" && (
+            <InputStep
+              title={title}
+              setTitle={setTitle}
+              text={text}
+              setText={setText}
+              studentLevel={studentLevel}
+              setStudentLevel={setStudentLevel}
+              language={language}
+              setLanguage={setLanguage}
+              nativeLanguage={nativeLanguage}
+              setNativeLanguage={setNativeLanguage}
+              courseType={courseType}
+              setCourseType={setCourseType}
+              classSize={classSize}
+              setClassSize={setClassSize}
+              wordCount={wordCount}
+              loading={loading}
+              onAnalyze={handleAnalyze}
+            />
+          )}
+
+          {step === "analysis" && analysis && (
+            <AnalysisStep
+              analysis={analysis}
+              loading={loading}
+              onRetrieve={handleRetrieve}
+              onBack={() => setStep("input")}
+            />
+          )}
+
+          {step === "retrieval" && analysis && retrieval && (
+            <RetrievalStep
+              analysis={analysis}
+              retrieval={retrieval}
+              loading={loading}
+              onGenerate={handleGenerate}
+              onBack={() => setStep("analysis")}
+            />
+          )}
+
+          {step === "plan" && planResult && (
+            <PlanStep
+              result={planResult}
+              onReset={handleReset}
+              onUpdate={setPlanResult}
+              text={text}
+              title={title}
+              studentLevel={studentLevel}
+              language={language}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ Stepper ============
+
+function Stepper({ current }: { current: Step }) {
+  const steps: { key: Step; label: string; icon: string }[] = [
+    { key: "input", label: "输入课文", icon: "📝" },
+    { key: "analysis", label: "白盒分析", icon: "📊" },
+    { key: "retrieval", label: "双源检索", icon: "🔍" },
+    { key: "plan", label: "教学方案", icon: "📋" },
+  ];
+  const currentIdx = steps.findIndex((s) => s.key === current);
+
+  return (
+    <div className="flex items-center gap-2">
+      {steps.map((s, i) => (
+        <React.Fragment key={s.key}>
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              i === currentIdx
+                ? "bg-primary text-white"
+                : i < currentIdx
+                ? "bg-green-100 text-green-800"
+                : "bg-gray-100 text-gray-400"
+            }`}
+          >
+            <span>{i < currentIdx ? "✓" : s.icon}</span>
+            {s.label}
+          </div>
+          {i < steps.length - 1 && (
+            <div className={`flex-1 h-px ${i < currentIdx ? "bg-green-300" : "bg-gray-200"}`} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+// ============ Step 1: Input ============
+
+function InputStep({
+  title,
+  setTitle,
+  text,
+  setText,
+  studentLevel,
+  setStudentLevel,
+  language,
+  setLanguage,
+  nativeLanguage,
+  setNativeLanguage,
+  courseType,
+  setCourseType,
+  classSize,
+  setClassSize,
+  wordCount,
+  loading,
+  onAnalyze,
+}: {
+  title: string;
+  setTitle: (v: string) => void;
+  text: string;
+  setText: (v: string) => void;
+  studentLevel: string;
+  setStudentLevel: (v: string) => void;
+  language: string;
+  setLanguage: (v: string) => void;
+  nativeLanguage: string;
+  setNativeLanguage: (v: string) => void;
+  courseType: string;
+  setCourseType: (v: string) => void;
+  classSize: string;
+  setClassSize: (v: string) => void;
+  wordCount: number;
+  loading: boolean;
+  onAnalyze: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">输入课文</h2>
+
+        {/* File Upload */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">上传文件</label>
+          <FileUploadZone
+            onTextExtracted={(extractedText) => setText(extractedText)}
+            onFilename={(filename) => {
+              if (!title) setTitle(filename.replace(/\.[^.]+$/, ""));
+            }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 my-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400">或手动输入</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* Title */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">课文标题</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="例：Language Learning Evolution"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+          />
+        </div>
+
+        {/* Student Level */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">学生水平</label>
+          <div className="flex gap-2">
+            {CEFR_LEVELS.map((level) => (
               <button
-                className={`px-4 py-2 font-medium ${
-                  activeTab === "analysis"
-                    ? "text-blue-600 border-b-2 border-blue-600"
-                    : "text-gray-500"
+                key={level}
+                onClick={() => setStudentLevel(level)}
+                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                  studentLevel === level
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-gray-600 border-gray-300 hover:border-primary/50"
                 }`}
-                onClick={() => setActiveTab("analysis")}
               >
-                分析结果
+                {level}
               </button>
-              <button
-                className={`px-4 py-2 font-medium ${
-                  activeTab === "lesson"
-                    ? "text-blue-600 border-b-2 border-blue-600"
-                    : "text-gray-500"
-                }`}
-                onClick={() => setActiveTab("lesson")}
-              >
-                教案
-              </button>
-            </div>
-
-            {/* 分析结果 */}
-            {activeTab === "analysis" && analysisResult && (
-              <div className="space-y-4">
-                {/* 总体信息 */}
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-blue-900">总体评估</h3>
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <div>
-                      <span className="text-sm text-gray-600">整体难度</span>
-                      <p className="text-2xl font-bold text-blue-600">
-                        {analysisResult.overall_difficulty}/10
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">CEFR等级</span>
-                      <p className="text-2xl font-bold text-green-600">
-                        {analysisResult.cefr_level}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 分析摘要 */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-900 mb-2">分析摘要</h3>
-                  <p className="text-gray-700 whitespace-pre-line">
-                    {analysisResult.analysis_summary}
-                  </p>
-                </div>
-
-                {/* 词汇分析 */}
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">词汇分析</h3>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <span className="text-sm text-gray-600">总词数</span>
-                      <p className="text-xl font-bold">
-                        {analysisResult.lexical.total_words}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">词汇丰富度</span>
-                      <p className="text-xl font-bold">
-                        {(analysisResult.lexical.vocabulary_richness * 100).toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">学术词汇</span>
-                      <p className="text-xl font-bold">
-                        {analysisResult.lexical.academic_word_count}
-                      </p>
-                    </div>
-                  </div>
-                  {analysisResult.lexical.unknown_words.length > 0 && (
-                    <div className="mt-3">
-                      <span className="text-sm text-gray-600">生词：</span>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {analysisResult.lexical.unknown_words
-                          .slice(0, 10)
-                          .map((word, idx) => (
-                            <span
-                              key={idx}
-                              className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm"
-                            >
-                              {word}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 认知负荷 */}
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">认知负荷</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">内在负荷</span>
-                      <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full"
-                          style={{
-                            width: `${
-                              (analysisResult.cognitive_load.intrinsic_load / 10) * 100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium">
-                        {analysisResult.cognitive_load.intrinsic_load}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">外在负荷</span>
-                      <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-orange-500 h-2 rounded-full"
-                          style={{
-                            width: `${
-                              (analysisResult.cognitive_load.extraneous_load / 10) * 100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium">
-                        {analysisResult.cognitive_load.extraneous_load}
-                      </span>
-                    </div>
-                    {analysisResult.cognitive_load.overload && (
-                      <div className="bg-red-50 text-red-700 p-2 rounded text-sm">
-                        ⚠️ 认知负荷过高，建议提供支架支持
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 教学建议 */}
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">教学建议</h3>
-                  <ul className="space-y-2">
-                    {analysisResult.teaching_suggestions.map((suggestion, idx) => (
-                      <li key={idx} className="flex items-start">
-                        <span className="text-blue-500 mr-2">•</span>
-                        <span className="text-gray-700">{suggestion}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {/* 教案 */}
-            {activeTab === "lesson" && lessonPlan && (
-              <div>
-                <div className="bg-green-50 p-4 rounded-lg mb-4">
-                  <h3 className="font-semibold text-green-900">
-                    {lessonPlan.title}
-                  </h3>
-                  <p className="text-green-700">
-                    水平：{lessonPlan.level} | 时长：{lessonPlan.duration}分钟
-                  </p>
-                </div>
-
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 p-4 rounded-lg">
-                    {lessonPlan.formatted_plan}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {/* 空状态 */}
-            {!analysisResult && activeTab === "analysis" && (
-              <div className="text-center text-gray-500 py-12">
-                <p>输入课文内容并点击"开始分析"查看结果</p>
-              </div>
-            )}
-
-            {!lessonPlan && activeTab === "lesson" && (
-              <div className="text-center text-gray-500 py-12">
-                <p>输入课文内容并点击"生成教案"查看结果</p>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-      </main>
+
+        {/* Language */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">课文语种</label>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>{lang.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">默认自动检测，也可手动指定</p>
+        </div>
+
+        {/* Student Profile - Collapsible */}
+        <details className="mb-4 group">
+          <summary className="text-sm font-medium text-gray-600 cursor-pointer hover:text-gray-800 flex items-center gap-1">
+            <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            学生画像（可选，提升教案针对性）
+          </summary>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 pl-5">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">学生母语</label>
+              <select
+                value={nativeLanguage}
+                onChange={(e) => setNativeLanguage(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              >
+                <option value="">未指定</option>
+                <option value="zh">中文</option>
+                <option value="ja">日语</option>
+                <option value="ko">韩语</option>
+                <option value="ar">阿拉伯语</option>
+                <option value="ru">俄语</option>
+                <option value="pt">葡萄牙语</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">课程类型</label>
+              <select
+                value={courseType}
+                onChange={(e) => setCourseType(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              >
+                <option value="">未指定</option>
+                <option value="精读">精读</option>
+                <option value="泛读">泛读</option>
+                <option value="听说">听说</option>
+                <option value="写作">写作</option>
+                <option value="综合">综合</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">班级人数</label>
+              <input
+                type="number"
+                value={classSize}
+                onChange={(e) => setClassSize(e.target.value)}
+                placeholder="例：30"
+                min={1}
+                max={200}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              />
+            </div>
+          </div>
+        </details>
+
+        {/* Text Editor */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            课文内容
+            <span className="ml-2 text-gray-400 font-normal">({wordCount} 词)</span>
+          </label>
+          <TiptapEditor content={text} onChange={setText} />
+        </div>
+
+        {/* Submit */}
+        <button
+          onClick={onAnalyze}
+          disabled={loading || wordCount < 20}
+          className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              分析中...
+            </span>
+          ) : (
+            "开始白盒分析"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ Step 2: Analysis ============
+
+function AnalysisStep({
+  analysis,
+  loading,
+  onRetrieve,
+  onBack,
+}: {
+  analysis: WhiteboxAnalysis;
+  loading: boolean;
+  onRetrieve: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">白盒分析结果</h2>
+          <span className="text-xs text-gray-400">耗时 {analysis.analysis_duration}s</span>
+        </div>
+        <WhiteboxResults data={analysis} />
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          className="px-6 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          返回修改
+        </button>
+        <button
+          onClick={onRetrieve}
+          disabled={loading}
+          className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {loading ? "检索中..." : "下一步：双源检索"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ Step 3: Retrieval ============
+
+function RetrievalStep({
+  analysis,
+  retrieval,
+  loading,
+  onGenerate,
+  onBack,
+}: {
+  analysis: WhiteboxAnalysis;
+  retrieval: RetrievalResult;
+  loading: boolean;
+  onGenerate: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">双源检索结果</h2>
+          <span className="text-xs text-gray-400">耗时 {retrieval.retrieval_duration}s</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="bg-blue-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-blue-700">{retrieval.wiki_count}</div>
+            <div className="text-xs text-blue-600">Wiki 理论</div>
+          </div>
+          <div className="bg-green-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-green-700">{retrieval.rag_count}</div>
+            <div className="text-xs text-green-600">RAG 资源</div>
+          </div>
+        </div>
+
+        {/* Wiki Results */}
+        {retrieval.wiki_results.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">📖 Wiki 教学理论</h3>
+            <div className="space-y-2">
+              {retrieval.wiki_results.map((r, i) => (
+                <div key={i} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-blue-800">{r.title}</span>
+                    <span className="text-xs text-blue-500">相关度 {(r.relevance_score * 100).toFixed(0)}%</span>
+                  </div>
+                  {r.summary && <p className="text-xs text-blue-600 mt-1 line-clamp-2">{r.summary}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* RAG Results */}
+        {retrieval.rag_results.length > 0 && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">📄 教学资源</h3>
+            <div className="space-y-2">
+              {retrieval.rag_results.map((r, i) => (
+                <div key={i} className="p-3 bg-green-50 rounded-lg border border-green-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-green-800">
+                      {(r.metadata as { title?: string })?.title || `文档 ${i + 1}`}
+                    </span>
+                    <span className="text-xs text-green-500">相关度 {(r.score * 100).toFixed(0)}%</span>
+                  </div>
+                  <p className="text-xs text-green-600 line-clamp-2">{r.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {retrieval.wiki_count === 0 && retrieval.rag_count === 0 && (
+          <p className="text-sm text-gray-500 text-center py-4">
+            未检索到相关资源，将基于分析指标直接生成教学方案
+          </p>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          className="px-6 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          返回分析
+        </button>
+        <button
+          onClick={onGenerate}
+          disabled={loading}
+          className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              AI 生成中...
+            </span>
+          ) : (
+            "生成教学方案"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ Step 4: Plan ============
+
+function PlanStep({
+  result,
+  onReset,
+  onUpdate,
+  text,
+  title,
+  studentLevel,
+  language,
+}: {
+  result: GeneratePlanResult;
+  onReset: () => void;
+  onUpdate?: (r: GeneratePlanResult) => void;
+  text?: string;
+  title?: string;
+  studentLevel?: string;
+  language?: string;
+}) {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [revisionError, setRevisionError] = useState("");
+
+  const handleRevise = async (instruction: string, section?: string) => {
+    if (!text) return;
+    setRevising(true);
+    setRevisionError("");
+    try {
+      const resp = await apiPost<{
+        teaching_plan: GeneratePlanResult["teaching_plan"];
+        revision_note: string;
+        generation_duration: number;
+        model: string;
+      }>("/analysis/revise-plan", {
+        original_plan: result.teaching_plan,
+        revision_instruction: instruction,
+        text,
+        title: title || "",
+        student_level: studentLevel || "B1",
+        language: language || undefined,
+        section_to_revise: section || undefined,
+      });
+
+      if (onUpdate) {
+        onUpdate({
+          ...result,
+          teaching_plan: resp.teaching_plan,
+          generation_duration: resp.generation_duration,
+          model: resp.model,
+        });
+      }
+    } catch (e) {
+      setRevisionError(e instanceof Error ? e.message : "修订失败，请稍后重试");
+    } finally {
+      setRevising(false);
+    }
+  };
+
+  const handleExport = async (format: "pptx" | "docx" | "html") => {
+    setExporting(true);
+    setExportError("");
+    try {
+      const token = localStorage.getItem("token");
+
+      const resp = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analysis/export`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            plan: {
+              ...result.teaching_plan,
+              learner_gap: result.learner_gap,
+            },
+            format,
+            title: result.text_title || "教学方案",
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.detail || "导出失败");
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `教学方案.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">教学方案</h2>
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span>{result.text_level} → {result.student_level}</span>
+            <span>总耗时 {result.total_duration}s</span>
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {result.enhancement_tags.map((tag) => (
+            <span
+              key={tag}
+              className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary"
+            >
+              {result.tag_labels?.[tag] || tag.replace(/_/g, " ")}
+            </span>
+          ))}
+        </div>
+
+        <TeachingPlanView
+          plan={result.teaching_plan}
+          sources={result.sources}
+          model={result.model}
+          duration={result.generation_duration}
+          onExport={handleExport}
+          exporting={exporting}
+          onRevise={handleRevise}
+          revising={revising}
+          text={text}
+          title={title}
+          studentLevel={studentLevel}
+          language={language}
+        />
+
+        {exportError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {exportError}
+          </div>
+        )}
+        {revisionError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {revisionError}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onReset}
+        className="w-full py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+      >
+        分析新课文
+      </button>
     </div>
   );
 }

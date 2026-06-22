@@ -8,12 +8,10 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.services.wiki import WikiQuery
 
 router = APIRouter()
-
-# Wiki根目录
-WIKI_ROOT = "../../OutEye-Wiki"
 
 # 初始化Wiki查询服务
 wiki_query = None
@@ -23,7 +21,8 @@ def get_wiki_query():
     """获取Wiki查询服务实例"""
     global wiki_query
     if wiki_query is None:
-        wiki_query = WikiQuery(WIKI_ROOT)
+        wiki_path = settings.WIKI_DATA_PATH or "../../OutEye-Wiki"
+        wiki_query = WikiQuery(wiki_path)
     return wiki_query
 
 
@@ -74,7 +73,7 @@ async def search_wiki(
             relevance_score=result.relevance_score,
             match_type=result.match_type,
             matched_sections=result.matched_sections,
-            tags=result.page.frontmatter.tags,
+            tags=_sanitize_tags(result.page.frontmatter.tags),
             summary=_get_summary(result.page)
         )
         for result in results
@@ -103,7 +102,7 @@ async def get_theory(
             relevance_score=result.relevance_score,
             match_type=result.match_type,
             matched_sections=result.matched_sections,
-            tags=result.page.frontmatter.tags,
+            tags=_sanitize_tags(result.page.frontmatter.tags),
             summary=_get_summary(result.page)
         )
         for result in results
@@ -145,7 +144,7 @@ async def get_analysis_theories(
             relevance_score=result.relevance_score,
             match_type=result.match_type,
             matched_sections=result.matched_sections,
-            tags=result.page.frontmatter.tags,
+            tags=_sanitize_tags(result.page.frontmatter.tags),
             summary=_get_summary(result.page)
         )
         for result in results
@@ -170,7 +169,7 @@ async def get_lesson_plan_theories(
             relevance_score=result.relevance_score,
             match_type=result.match_type,
             matched_sections=result.matched_sections,
-            tags=result.page.frontmatter.tags,
+            tags=_sanitize_tags(result.page.frontmatter.tags),
             summary=_get_summary(result.page)
         )
         for result in results
@@ -211,9 +210,12 @@ async def get_page(
 async def get_all_tags(
     db: Session = Depends(get_db)
 ):
-    """获取所有标签"""
+    """获取所有标签（过滤掉元数据标签）"""
     wiki = get_wiki_query()
-    return wiki.parser.get_all_tags()
+    all_tags = wiki.parser.get_all_tags()
+    # 元数据标签前缀，不是用户可见的理论标签
+    meta_prefixes = ("concept-layer:", "type:", "theory-layer:", "source:", "function:")
+    return [tag for tag in all_tags if not any(tag.startswith(p) for p in meta_prefixes)]
 
 
 @router.get("/statistics", response_model=WikiStatistics)
@@ -241,6 +243,22 @@ async def refresh_wiki(
     global wiki_query
     wiki_query = None
     return {"message": "Wiki cache refreshed"}
+
+
+def _sanitize_tags(tags: list) -> list:
+    """清理标签列表，确保所有元素都是字符串"""
+    result = []
+    for tag in tags:
+        if isinstance(tag, str):
+            result.append(tag)
+        elif isinstance(tag, dict):
+            # dict 标签如 {'tech': 'rag'} -> 提取值
+            for v in tag.values():
+                if isinstance(v, str):
+                    result.append(v)
+        else:
+            result.append(str(tag))
+    return result
 
 
 def _get_summary(page, max_length: int = 200) -> str:

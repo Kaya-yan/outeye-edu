@@ -42,6 +42,29 @@ def setup_logging():
     )
 
 
+async def _migrate_schema():
+    """补充新增列（幂等操作，可重复执行）"""
+    import sqlalchemy as sa
+
+    migrations = [
+        ("analysis_records", "course_type", "VARCHAR(50)"),
+        ("analysis_records", "duration_minutes", "INTEGER"),
+        ("analysis_records", "analysis_status", "VARCHAR(20) DEFAULT 'pending'"),
+        ("analysis_records", "updated_at", "TIMESTAMP"),
+        ("analysis_records", "enhancement_tags", "JSONB"),
+        ("analysis_records", "learner_gap", "JSONB"),
+    ]
+
+    async with async_engine.begin() as conn:
+        for table, column, col_type in migrations:
+            try:
+                await conn.execute(sa.text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+                ))
+            except Exception as e:
+                logger.debug(f"Migration skip {table}.{column}: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -54,10 +77,29 @@ async def lifespan(app: FastAPI):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # 补充新增列（如果表已存在但缺少新字段）
+    await _migrate_schema()
+
     logger.info("Database tables created")
 
-    # 启动定时数据清理任务
+    # 预热RAG服务（在后台线程加载Embedding模型，避免阻塞首次请求）
     import asyncio
+
+    async def _prewarm_rag():
+        import asyncio as _aio
+        loop = _aio.get_event_loop()
+        def _load():
+            from app.api.api_v1.endpoints.rag import get_rag_services
+            get_rag_services()
+            logger.info("RAG services pre-warmed (embedding model loaded)")
+        try:
+            await loop.run_in_executor(None, _load)
+        except Exception as e:
+            logger.warning(f"RAG pre-warm failed (will lazy-load on first request): {e}")
+
+    asyncio.create_task(_prewarm_rag())
+
+    # 启动定时数据清理任务
     cleanup_task = asyncio.create_task(periodic_cleanup())
 
     logger.info(f"API server ready at http://{settings.HOST}:{settings.PORT}")
@@ -97,6 +139,8 @@ app = FastAPI(
 )
 
 # 配置CORS
+import re
+
 CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -108,9 +152,16 @@ CORS_ORIGINS = [
     "http://127.0.0.1:3003",
 ]
 
+# 生产环境：允许 Vercel 部署域名和自定义域名
+CORS_ORIGIN_PATTERNS = [
+    r"https://.*\.vercel\.app$",
+    r"https://outeye.*\.vercel\.app$",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex="|".join(CORS_ORIGIN_PATTERNS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,6 +172,7 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     """记录请求日志"""
     start_time = time.time()
+    path = request.url.path
 
     # 处理请求
     response = await call_next(request)

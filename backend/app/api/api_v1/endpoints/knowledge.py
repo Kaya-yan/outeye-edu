@@ -3,12 +3,15 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_async_db
+from app.core.security import get_current_user
+from app.models.document import DocumentChunk
 
 router = APIRouter()
 
@@ -49,64 +52,20 @@ class SearchResult(BaseModel):
     metadata: Optional[dict]
 
 
-# 示例知识单元数据
-SAMPLE_KNOWLEDGE_CHUNKS = [
-    {
-        "id": "1",
-        "content": "Krashen的输入假说认为，学习者需要接触略高于当前水平的输入（i+1），才能促进语言习得。这个理论强调可理解性输入的重要性。",
-        "content_type": "theory",
-        "source_type": "academic_paper",
-        "vector_id": "vec_001",
-        "quality_score": 0.95,
-        "verified": True,
-        "retrieval_count": 45,
-        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
-    },
-    {
-        "id": "2",
-        "content": "Bloom认知分类学将认知过程分为六个层级：记忆、理解、应用、分析、评价、创造。教学设计应覆盖所有层级。",
-        "content_type": "theory",
-        "source_type": "textbook",
-        "vector_id": "vec_002",
-        "quality_score": 0.95,
-        "verified": True,
-        "retrieval_count": 38,
-        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
-    },
-    {
-        "id": "3",
-        "content": "CEFR（欧洲语言共同参考框架）将语言能力分为A1、A2、B1、B2、C1、C2六个等级，从初学者到精通者。",
-        "content_type": "framework",
-        "source_type": "official_document",
-        "vector_id": "vec_003",
-        "quality_score": 0.95,
-        "verified": True,
-        "retrieval_count": 60,
-        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
-    },
-    {
-        "id": "4",
-        "content": "认知负荷理论区分了三种认知负荷：内在认知负荷（由学习材料本身决定）、外在认知负荷（由教学设计不当引起）、相关认知负荷（促进学习的认知处理）。",
-        "content_type": "theory",
-        "source_type": "academic_paper",
-        "vector_id": "vec_004",
-        "quality_score": 0.92,
-        "verified": True,
-        "retrieval_count": 32,
-        "created_at": datetime.fromisoformat("2026-01-01T00:00:00")
-    },
-    {
-        "id": "5",
-        "content": "在环保主题课文教学中，建议使用新闻视频作为导入活动，激活学生的背景知识，然后通过小组讨论促进批判性思维。",
-        "content_type": "teaching_strategy",
-        "source_type": "expert_interview",
-        "vector_id": "vec_005",
-        "quality_score": 0.88,
-        "verified": True,
-        "retrieval_count": 25,
-        "created_at": datetime.fromisoformat("2026-02-15T00:00:00")
+def _chunk_to_response(chunk: DocumentChunk) -> dict:
+    """将 DocumentChunk 转换为 KnowledgeChunkResponse 格式"""
+    extra = chunk.extra_data or {}
+    return {
+        "id": chunk.id,
+        "content": chunk.content,
+        "content_type": extra.get("content_type", "general"),
+        "source_type": extra.get("source_type"),
+        "vector_id": chunk.vector_id or "",
+        "quality_score": extra.get("quality_score", 0.0),
+        "verified": extra.get("verified", False),
+        "retrieval_count": extra.get("retrieval_count", 0),
+        "created_at": chunk.created_at,
     }
-]
 
 
 @router.get("/", response_model=List[KnowledgeChunkResponse])
@@ -115,106 +74,120 @@ async def get_knowledge_chunks(
     source_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """获取知识单元列表"""
-    chunks = SAMPLE_KNOWLEDGE_CHUNKS
+    query = select(DocumentChunk).offset(skip).limit(limit)
+    result = await db.execute(query)
+    chunks = result.scalars().all()
 
-    # 按内容类型过滤
+    items = [_chunk_to_response(c) for c in chunks]
+
     if content_type:
-        chunks = [c for c in chunks if c["content_type"] == content_type]
-
-    # 按来源类型过滤
+        items = [i for i in items if i["content_type"] == content_type]
     if source_type:
-        chunks = [c for c in chunks if c["source_type"] == source_type]
+        items = [i for i in items if i["source_type"] == source_type]
 
-    return chunks[skip:skip + limit]
+    return items
 
 
 @router.get("/theories/all")
-async def get_all_theories(
-    db: Session = Depends(get_db)
-):
+async def get_all_theories(db: AsyncSession = Depends(get_async_db)):
     """获取所有理论知识"""
-    theories = [c for c in SAMPLE_KNOWLEDGE_CHUNKS if c["content_type"] == "theory"]
-    return theories
+    result = await db.execute(select(DocumentChunk))
+    chunks = result.scalars().all()
+    items = [_chunk_to_response(c) for c in chunks]
+    return [i for i in items if i["content_type"] == "theory"]
 
 
 @router.get("/strategies/all")
-async def get_all_strategies(
-    db: Session = Depends(get_db)
-):
+async def get_all_strategies(db: AsyncSession = Depends(get_async_db)):
     """获取所有教学策略"""
-    strategies = [c for c in SAMPLE_KNOWLEDGE_CHUNKS if c["content_type"] == "teaching_strategy"]
-    return strategies
+    result = await db.execute(select(DocumentChunk))
+    chunks = result.scalars().all()
+    items = [_chunk_to_response(c) for c in chunks]
+    return [i for i in items if i["content_type"] == "teaching_strategy"]
 
 
 @router.get("/{chunk_id}", response_model=KnowledgeChunkResponse)
 async def get_knowledge_chunk(
     chunk_id: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """获取单个知识单元"""
-    for chunk in SAMPLE_KNOWLEDGE_CHUNKS:
-        if chunk["id"] == chunk_id:
-            # 增加检索次数
-            chunk["retrieval_count"] += 1
-            return chunk
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Knowledge chunk not found"
+    result = await db.execute(
+        select(DocumentChunk).where(DocumentChunk.id == chunk_id)
     )
+    chunk = result.scalar_one_or_none()
+
+    if not chunk:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge chunk not found"
+        )
+
+    # 增加检索次数
+    extra = chunk.extra_data or {}
+    extra["retrieval_count"] = extra.get("retrieval_count", 0) + 1
+    chunk.extra_data = extra
+    await db.commit()
+
+    return _chunk_to_response(chunk)
 
 
 @router.post("/", response_model=KnowledgeChunkResponse)
 async def create_knowledge_chunk(
     chunk: KnowledgeChunkCreate,
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """创建知识单元"""
-    new_chunk = {
-        "id": str(len(SAMPLE_KNOWLEDGE_CHUNKS) + 1),
-        "content": chunk.content,
+    extra = {
         "content_type": chunk.content_type,
         "source_type": chunk.source_type,
-        "vector_id": f"vec_{len(SAMPLE_KNOWLEDGE_CHUNKS) + 1:03d}",
         "quality_score": 0.0,
         "verified": False,
         "retrieval_count": 0,
-        "created_at": datetime.now()
     }
-    SAMPLE_KNOWLEDGE_CHUNKS.append(new_chunk)
-    return new_chunk
+    if chunk.metadata:
+        extra.update(chunk.metadata)
+
+    new_chunk = DocumentChunk(
+        id=str(uuid.uuid4()),
+        document_id=str(uuid.uuid4()),  # 独立知识单元，生成临时文档ID
+        content=chunk.content,
+        chunk_index=0,
+        word_count=len(chunk.content.split()),
+        extra_data=extra,
+        created_at=datetime.utcnow(),
+    )
+    db.add(new_chunk)
+    await db.commit()
+    await db.refresh(new_chunk)
+    return _chunk_to_response(new_chunk)
 
 
 @router.post("/search", response_model=List[SearchResult])
 async def search_knowledge(
     request: SearchRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """搜索知识库（RAG检索）"""
-    # 示例实现：简单关键词搜索
-    # 实际应用中应调用Qdrant进行向量检索
-    results = []
+    """搜索知识库"""
+    result = await db.execute(select(DocumentChunk))
+    chunks = result.scalars().all()
+
     query_lower = request.query.lower()
+    results = []
+    for chunk in chunks:
+        if query_lower in chunk.content.lower():
+            results.append(SearchResult(
+                chunk_id=chunk.id,
+                content=chunk.content,
+                score=0.85,
+                metadata=chunk.extra_data
+            ))
 
-    for chunk in SAMPLE_KNOWLEDGE_CHUNKS:
-        # 简单的关键词匹配
-        if query_lower in chunk["content"].lower():
-            results.append({
-                "chunk_id": chunk["id"],
-                "content": chunk["content"],
-                "score": 0.85,  # 示例分数
-                "metadata": {
-                    "content_type": chunk["content_type"],
-                    "source_type": chunk["source_type"]
-                }
-            })
-
-    # 按分数排序
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    # 返回Top-K结果
+    results.sort(key=lambda x: x.score, reverse=True)
     return results[:request.top_k]
 
 
@@ -222,18 +195,9 @@ async def search_knowledge(
 async def rag_query(
     query: str,
     top_k: int = 3,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """RAG查询（检索增强生成）"""
-    # 示例实现：返回检索结果
-    # 实际应用中应：
-    # 1. 查询扩展
-    # 2. 混合检索（稠密+稀疏）
-    # 3. RRF融合
-    # 4. 重排序
-    # 5. 注入Prompt生成答案
-
-    # 简化版：直接返回检索结果
     search_results = await search_knowledge(
         SearchRequest(query=query, top_k=top_k),
         db

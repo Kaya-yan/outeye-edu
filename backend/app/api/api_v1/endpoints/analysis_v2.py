@@ -5,11 +5,17 @@
 """
 
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+import uuid
+import time
 
 from app.utils.error_handler import handle_api_error
+from app.core.database import get_async_db
+from app.core.security import get_current_user
+from app.models.analysis import AnalysisRecord
 
 router = APIRouter()
 
@@ -149,13 +155,18 @@ def get_analysis_services():
 # ============ API端点 ============
 
 @router.post("/analyze", response_model=TextAnalysisResponse)
-async def analyze_text(request: TextAnalysisRequest):
+async def analyze_text(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     分析课文
 
     提供多维度的课文分析，包括词汇、句法、语篇和认知负荷
     """
     try:
+        start_time = time.time()
         services = get_analysis_services()
         analyzer = services['analyzer']
 
@@ -166,6 +177,63 @@ async def analyze_text(request: TextAnalysisRequest):
             student_level=request.student_level,
             learning_objectives=request.learning_objectives
         )
+
+        analysis_duration = time.time() - start_time
+
+        # 持久化到数据库
+        record = AnalysisRecord(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            text_title=request.title or "Untitled",
+            text_content=request.text,
+            text_word_count=result.lexical.total_words,
+            student_level=request.student_level,
+            lexical_result={
+                "total_words": result.lexical.total_words,
+                "unique_words": result.lexical.unique_words,
+                "vocabulary_richness": result.lexical.vocabulary_richness,
+                "academic_word_count": result.lexical.academic_word_count,
+                "academic_words": result.lexical.academic_words,
+                "unknown_words": result.lexical.unknown_words,
+                "cefr_distribution": result.lexical.cefr_distribution,
+                "difficulty_score": result.lexical.difficulty_score,
+            },
+            syntactic_result={
+                "total_sentences": result.syntactic.total_sentences,
+                "avg_sentence_length": result.syntactic.avg_sentence_length,
+                "sentence_types": result.syntactic.sentence_types,
+                "clause_density": result.syntactic.clause_density,
+                "complexity_score": result.syntactic.complexity_score,
+                "flesch_kincaid_grade": result.syntactic.flesch_kincaid_grade,
+                "flesch_reading_ease": result.syntactic.flesch_reading_ease,
+            },
+            discourse_result={
+                "coherence_score": result.discourse.coherence_score,
+                "genre_type": result.discourse.genre_type,
+                "cohesion_devices": result.discourse.cohesion_devices,
+                "thematic_progression": result.discourse.thematic_progression,
+                "paragraph_count": result.discourse.paragraph_count,
+                "topic_consistency": result.discourse.topic_consistency,
+            },
+            cognitive_load_result={
+                "intrinsic_load": result.cognitive_load.intrinsic_load,
+                "extraneous_load": result.cognitive_load.extraneous_load,
+                "germane_load": result.cognitive_load.germane_load,
+                "total_load": result.cognitive_load.total_load,
+                "overload": result.cognitive_load.overload,
+                "recommendations": result.cognitive_load.recommendations,
+            },
+            overall_difficulty=result.overall_difficulty,
+            cefr_level=result.cefr_level,
+            teaching_suggestions=result.teaching_suggestions,
+            analysis_duration=analysis_duration,
+            model_used="rule-based",
+            analysis_status="completed",
+        )
+        db.add(record)
+        await db.commit()
+
+        logger.info(f"Analysis result saved: {record.id}")
 
         # 转换为响应格式
         return TextAnalysisResponse(
@@ -219,7 +287,10 @@ async def analyze_text(request: TextAnalysisRequest):
 
 
 @router.post("/analyze/detailed", response_model=Dict[str, Any])
-async def analyze_text_detailed(request: TextAnalysisRequest):
+async def analyze_text_detailed(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     详细分析课文
 
@@ -245,7 +316,11 @@ async def analyze_text_detailed(request: TextAnalysisRequest):
 
 
 @router.post("/generate-lesson-plan", response_model=LessonPlanResponse)
-async def generate_lesson_plan(request: LessonPlanRequest):
+async def generate_lesson_plan(
+    request: LessonPlanRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     生成教案
 
@@ -286,6 +361,28 @@ async def generate_lesson_plan(request: LessonPlanRequest):
         # 格式化教案
         formatted_plan = generator.format_lesson_plan(lesson_plan)
 
+        # 持久化教案到数据库
+        from app.models.analysis import LessonPlan as LessonPlanModel
+
+        lp_record = LessonPlanModel(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            title=request.title or "Untitled Lesson Plan",
+            student_level=request.student_level,
+            duration=request.lesson_duration,
+            objectives=[{"description": o.description, "bloom_level": o.bloom_level, "measurable": o.measurable, "assessment_method": o.assessment_method} for o in lesson_plan.objectives],
+            activities=[{"name": a.name, "description": a.description, "duration": a.duration, "activity_type": a.activity_type, "materials": a.materials, "interaction_pattern": a.interaction_pattern} for a in lesson_plan.activities],
+            materials=lesson_plan.materials,
+            assessment=lesson_plan.assessment,
+            differentiation=lesson_plan.differentiation,
+            homework=lesson_plan.homework,
+            formatted_plan=formatted_plan,
+        )
+        db.add(lp_record)
+        await db.commit()
+
+        logger.info(f"Lesson plan saved: {lp_record.id}")
+
         # 转换为响应格式
         return LessonPlanResponse(
             title=lesson_plan.title,
@@ -323,7 +420,10 @@ async def generate_lesson_plan(request: LessonPlanRequest):
 
 
 @router.post("/analyze/lexical", response_model=LexicalAnalysisResponse)
-async def analyze_lexical(request: TextAnalysisRequest):
+async def analyze_lexical(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     词汇分析
 
@@ -351,7 +451,10 @@ async def analyze_lexical(request: TextAnalysisRequest):
 
 
 @router.post("/analyze/syntactic", response_model=SyntacticAnalysisResponse)
-async def analyze_syntactic(request: TextAnalysisRequest):
+async def analyze_syntactic(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     句法分析
 
@@ -379,7 +482,10 @@ async def analyze_syntactic(request: TextAnalysisRequest):
 
 
 @router.post("/analyze/discourse", response_model=DiscourseAnalysisResponse)
-async def analyze_discourse(request: TextAnalysisRequest):
+async def analyze_discourse(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     语篇分析
 
@@ -406,7 +512,10 @@ async def analyze_discourse(request: TextAnalysisRequest):
 
 
 @router.post("/analyze/cognitive-load", response_model=CognitiveLoadResponse)
-async def analyze_cognitive_load(request: TextAnalysisRequest):
+async def analyze_cognitive_load(
+    request: TextAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     认知负荷分析
 
