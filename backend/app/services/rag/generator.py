@@ -68,7 +68,8 @@ class RAGGenerator:
 
             self.client = openai.OpenAI(
                 api_key=self.api_key or "dummy",
-                base_url=self.api_base
+                base_url=self.api_base,
+                timeout=60.0,
             )
             self.use_api = True
             self.default_backend = "api"

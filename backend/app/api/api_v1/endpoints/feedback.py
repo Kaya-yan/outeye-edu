@@ -60,7 +60,7 @@ class FeedbackStats(BaseModel):
 
 # ============ API端点 ============
 
-@router.post("/", response_model=FeedbackResponse)
+@router.post("", response_model=FeedbackResponse)
 async def create_feedback(
     feedback: FeedbackCreate,
     current_user: dict = Depends(get_current_user),

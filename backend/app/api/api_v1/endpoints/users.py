@@ -87,7 +87,7 @@ async def login(user_login: UserLogin, db: AsyncSession = Depends(get_async_db))
     )
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 async def get_users(
     skip: int = 0,
     limit: int = 100,
@@ -135,7 +135,7 @@ async def get_user(
     return user
 
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 async def create_user(
     user: UserCreate,
     db: AsyncSession = Depends(get_async_db)

@@ -68,7 +68,7 @@ def _chunk_to_response(chunk: DocumentChunk) -> dict:
     }
 
 
-@router.get("/", response_model=List[KnowledgeChunkResponse])
+@router.get("", response_model=List[KnowledgeChunkResponse])
 async def get_knowledge_chunks(
     content_type: Optional[str] = None,
     source_type: Optional[str] = None,
@@ -135,7 +135,7 @@ async def get_knowledge_chunk(
     return _chunk_to_response(chunk)
 
 
-@router.post("/", response_model=KnowledgeChunkResponse)
+@router.post("", response_model=KnowledgeChunkResponse)
 async def create_knowledge_chunk(
     chunk: KnowledgeChunkCreate,
     current_user: dict = Depends(get_current_user),

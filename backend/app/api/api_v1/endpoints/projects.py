@@ -71,7 +71,7 @@ def _record_to_response(record: AnalysisRecord) -> dict:
     }
 
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("", response_model=List[ProjectResponse])
 async def get_projects(
     project_status: Optional[str] = None,
     skip: int = 0,
@@ -114,7 +114,7 @@ async def get_project(
     return _record_to_response(record)
 
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse)
 async def create_project(
     project: ProjectCreate,
     current_user: dict = Depends(get_current_user),

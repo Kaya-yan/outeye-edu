@@ -66,7 +66,7 @@ def _doc_to_response(doc: Document) -> dict:
     }
 
 
-@router.get("/", response_model=List[ResourceResponse])
+@router.get("", response_model=List[ResourceResponse])
 async def get_resources(
     type: Optional[str] = None,
     category: Optional[str] = None,
@@ -144,7 +144,7 @@ async def get_resource(
     return _doc_to_response(doc)
 
 
-@router.post("/", response_model=ResourceResponse)
+@router.post("", response_model=ResourceResponse)
 async def create_resource(
     resource: ResourceCreate,
     current_user: dict = Depends(get_current_user),

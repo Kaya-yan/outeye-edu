@@ -768,7 +768,7 @@ function PlanStep({
       const token = localStorage.getItem("token");
 
       const resp = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analysis/export`,
+        `/api/v1/analysis/export`,
         {
           method: "POST",
           headers: {
