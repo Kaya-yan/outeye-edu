@@ -86,7 +86,9 @@ backend/data/
 
 # 开发工具
 .superpowers/
-docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/specs/*.md
 .claude/
 
 # 开发过程文件
