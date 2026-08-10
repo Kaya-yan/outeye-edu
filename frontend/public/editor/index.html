@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#495254">
+<title>OutEye Edu Courseware Editor</title>
+<link rel="stylesheet" href="/editor/css/editor.css?v=1">
+<style>
+.workspace { display: flex; height: calc(100vh - 48px); }
+.topbar {
+  height: 48px; background: rgba(255,255,255,0.92); border-bottom: 1px solid var(--border-default);
+  display: flex; align-items: center; padding: 0 14px; gap: 8px;
+  flex-shrink: 0; backdrop-filter: blur(8px);
+}
+.brand { display: flex; align-items: center; gap: 6px; }
+.brand-mark { width: 24px; height: 24px; border-radius: 6px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.brand-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.topbar-divider { width: 1px; height: 20px; background: var(--border-subtle); }
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px;
+  border: none; background: transparent; border-radius: var(--radius-sm);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: background var(--transition-fast);
+}
+.tb-btn:hover { background: rgba(0,0,0,0.05); color: var(--text-primary); }
+.tb-btn.disabled { opacity: 0.4; pointer-events: none; }
+.tb-btn svg { width: 14px; height: 14px; }
+.topbar-section { display: flex; gap: 2px; }
+.breakpoint-group { display: flex; background: rgba(0,0,0,0.04); border-radius: var(--radius-sm); padding: 2px; }
+.bp-btn { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: none; background: transparent; border-radius: 4px; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
+.bp-btn.active { background: #fff; color: var(--text-primary); box-shadow: var(--shadow-sm); }
+.bp-btn svg { width: 12px; height: 12px; }
+.zoom-control { display: flex; align-items: center; gap: 2px; }
+.zoom-value { font-size: 11px; color: var(--text-tertiary); min-width: 36px; text-align: center; cursor: pointer; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; position: relative; }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px;
+  background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--transition-fast);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px;
+  background: #fff; color: var(--text-secondary); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; transition: all var(--transition-fast);
+}
+.btn-secondary:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+.export-menu {
+  display: none; position: absolute; right: 0; top: 100%; margin-top: 4px;
+  background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); min-width: 200px; padding: 4px; z-index: 100;
+}
+.export-menu button {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px;
+  border: none; background: transparent; border-radius: var(--radius-sm); font-size: 12px;
+  color: var(--text-secondary); cursor: pointer; text-align: left;
+}
+.export-menu button:hover { background: rgba(0,0,0,0.04); }
+.export-divider { height: 1px; background: var(--border-subtle); margin: 4px 8px; }
+
+.left-panel { width: 220px; flex-shrink: 0; background: rgba(255,255,255,0.94); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.panel-title { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; }
+.panel-toggle { background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 2px; }
+.material-list { flex: 1; overflow-y: auto; padding: 8px; }
+.material-group { margin-bottom: 12px; }
+.material-group-title { font-size: 10px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 4px; padding: 0 4px; }
+.material-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-secondary); cursor: grab; transition: background var(--transition-fast);
+}
+.material-item:hover { background: rgba(0,0,0,0.04); }
+.material-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+.material-hint { font-size: 10px; color: var(--text-tertiary); padding: 6px 4px; display: flex; align-items: center; gap: 4px; }
+
+.canvas-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.canvas-info-bar {
+  height: 30px; background: rgba(255,255,255,0.82); border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+  font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; backdrop-filter: blur(6px);
+}
+.canvas-meta { display: flex; align-items: center; gap: 6px; }
+.auto-save-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); display: inline-block; margin-right: 2px; }
+.canvas-container { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 24px; background: var(--bg-ground); }
+.iframe-wrapper { width: 100%; max-width: 960px; background: rgba(255,255,255,0.96); box-shadow: var(--shadow-lg); border-radius: var(--radius-lg); overflow: hidden; min-height: 600px; border: 1px solid rgba(73,82,84,0.08); }
+.iframe-wrapper iframe { width: 100%; height: 100%; min-height: 600px; border: 0; }
+
+.right-panel { width: 240px; flex-shrink: 0; background: rgba(255,255,255,0.94); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
+.property-content { flex: 1; overflow-y: auto; }
+
+.overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+.overlay > * { pointer-events: auto; }
+.hover-box { position: absolute; border: 2px dashed rgba(124,58,237,0.4); border-radius: 3px; display: none; z-index: 10; }
+.select-box { position: absolute; border: 2px solid var(--accent); border-radius: 3px; display: none; z-index: 20; }
+.drag-hint { position: absolute; top: -24px; left: 0; font-size: 10px; color: var(--accent); background: #fff; padding: 2px 6px; border-radius: 3px; box-shadow: var(--shadow-sm); }
+.float-toolbar {
+  position: absolute; top: -36px; right: 0; display: flex; align-items: center; gap: 2px;
+  background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); padding: 3px;
+}
+.float-toolbar button {
+  display: flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-secondary);
+  cursor: pointer; transition: background var(--transition-fast);
+}
+.float-toolbar button:hover { background: rgba(0,0,0,0.05); }
+.float-toolbar button.danger:hover { background: rgba(239,68,68,0.1); color: var(--danger); }
+.float-toolbar-divider { width: 1px; height: 18px; background: var(--border-subtle); margin: 0 2px; }
+.insert-indicator { position: absolute; height: 2px; background: var(--accent); display: none; z-index: 15; }
+.preview-badge {
+  position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
+  background: var(--text-primary); color: #fff; font-size: 11px; padding: 4px 16px;
+  border-radius: 20px; cursor: pointer; display: none; z-index: 50; align-items: center; gap: 4px;
+}
+.preview-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+.quick-actions { display: none; position: fixed; bottom: 24px; right: 24px; z-index: 40; flex-direction: column; gap: 6px; }
+.quick-actions .qa-btn {
+  width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all var(--transition-fast); color: var(--text-secondary);
+}
+.quick-actions .qa-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.quick-actions .qa-btn svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">O</div>
+    <span class="brand-name">OutEye Edu · 课件工作台</span>
+  </div>
+  <div class="topbar-divider"></div>
+  <button class="tb-btn" id="undoBtn" title="撤销 (Ctrl+Z)" disabled>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h7a4 4 0 1 1 0 8H5M3 7l3-3M3 7l3 3"/></svg>
+  </button>
+  <button class="tb-btn" id="redoBtn" title="重做 (Ctrl+Shift+Z)" disabled>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 7H6a4 4 0 1 0 0 8h5M13 7l-3-3M13 7l-3 3"/></svg>
+  </button>
+  <div class="topbar-divider"></div>
+  <div class="breakpoint-group">
+    <button class="bp-btn active" data-bp="desktop"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M6 14h4M8 11v3"/></svg><span>1280</span></button>
+    <button class="bp-btn" data-bp="tablet"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M7 12h2"/></svg><span>768</span></button>
+    <button class="bp-btn" data-bp="mobile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="6" height="12" rx="1"/><path d="M7 12h2"/></svg><span>375</span></button>
+  </div>
+  <div class="topbar-divider"></div>
+  <div class="zoom-control">
+    <button class="tb-btn" id="zoomOutBtn" title="缩小">-</button>
+    <span class="zoom-value" id="zoomValue">100%</span>
+    <button class="tb-btn" id="zoomInBtn" title="放大">+</button>
+  </div>
+  <div class="topbar-divider"></div>
+  <button class="tb-btn" id="previewBtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.5-5 6.5-5 6.5 5 6.5 5-2.5 5-6.5 5-6.5-5-6.5-5z"/><circle cx="8" cy="8" r="2"/></svg>预览</button>
+  <div class="topbar-right">
+    <div style="position:relative;">
+      <button class="btn-secondary" id="exportBtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m0 0L5 7m3 3l3-3M2 12v2h12v-2"/></svg>导出</button>
+      <div class="export-menu" id="exportMenu">
+        <button id="exportDownload">下载当前页 HTML</button>
+        <button id="exportCopy">复制当前页 HTML</button>
+      </div>
+    </div>
+    <button class="btn-primary" id="saveBtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V3h10v10M3 13h10M6 10v3M10 10v3"/></svg>保存</button>
+  </div>
+</div>
+
+<div class="workspace">
+  <div class="left-panel">
+    <div class="panel-header">
+      <span class="panel-title">教学组件</span>
+      <button class="panel-toggle" id="leftPanelToggle"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M10 4L6 8l4 4"/></svg></button>
+    </div>
+    <div class="material-list">
+      <div class="material-group" data-teaching-stage="导入">
+        <div class="material-group-title">课程导入</div>
+        <div class="material-item" draggable="true" data-component="course-cover"><svg viewBox="0 0 16 16" fill="none" stroke="#f59e0b" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M6 6l4 4M10 6l-4 4"/></svg>课程封面页</div>
+        <div class="material-item" draggable="true" data-component="question-intro"><svg viewBox="0 0 16 16" fill="none" stroke="#f59e0b" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M6 7a2 2 0 114 0c0 2-3 2-3 2v1"/></svg>问题导入卡</div>
+        <div class="material-item" draggable="true" data-component="learning-goals"><svg viewBox="0 0 16 16" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M8 2v12M4 6l4-4 4 4M4 12l4 4 4-4"/></svg>学习目标页</div>
+      </div>
+      <div class="material-group" data-teaching-stage="讲授">
+        <div class="material-group-title">知识讲授</div>
+        <div class="material-item" draggable="true" data-component="vocab-card"><svg viewBox="0 0 16 16" fill="none" stroke="#3d5f9a" stroke-width="1.5"><path d="M2 4h12v10H2z"/><path d="M5 2v2M11 2v2"/><path d="M5 9h6M5 12h3"/></svg>词汇讲解卡</div>
+        <div class="material-item" draggable="true" data-component="sentence-breakdown"><svg viewBox="0 0 16 16" fill="none" stroke="#3d5f9a" stroke-width="1.5"><path d="M2 8h12M4 4l6 8M12 4l-6 8"/></svg>长难句拆解卡</div>
+        <div class="material-item" draggable="true" data-component="theory-card"><svg viewBox="0 0 16 16" fill="none" stroke="#3d5f9a" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M4 6h8M4 9h5"/></svg>理论依据卡</div>
+      </div>
+      <div class="material-group" data-teaching-stage="阅读">
+        <div class="material-group-title">阅读分析</div>
+        <div class="material-item" draggable="true" data-component="text-segment"><svg viewBox="0 0 16 16" fill="none" stroke="#059669" stroke-width="1.5"><path d="M2 4h12v8H2z"/><path d="M2 8h12"/><path d="M4 6h3M4 10h6"/></svg>文本分段阅读卡</div>
+        <div class="material-item" draggable="true" data-component="compare-page"><svg viewBox="0 0 16 16" fill="none" stroke="#059669" stroke-width="1.5"><path d="M2 2h5v12H2zM9 2h5v12H9z"/></svg>对比分析页</div>
+      </div>
+      <div class="material-group" data-teaching-stage="活动">
+        <div class="material-group-title">活动组织</div>
+        <div class="material-item" draggable="true" data-component="group-discussion"><svg viewBox="0 0 16 16" fill="none" stroke="#7c3aed" stroke-width="1.5"><circle cx="5" cy="6" r="2"/><circle cx="11" cy="6" r="2"/><path d="M1 14c0-2 2-4 4-4h6c2 0 4 2 4 4"/></svg>小组讨论卡</div>
+        <div class="material-item" draggable="true" data-component="task-flow"><svg viewBox="0 0 16 16" fill="none" stroke="#7c3aed" stroke-width="1.5"><path d="M2 4h4v4H2zM10 4h4v4h-4zM6 8h4v4H6z"/></svg>任务流程卡</div>
+      </div>
+      <div class="material-group" data-teaching-stage="检测">
+        <div class="material-group-title">检测反馈</div>
+        <div class="material-item" draggable="true" data-component="quiz-choice"><svg viewBox="0 0 16 16" fill="none" stroke="#e11d48" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M6 8l2 2 4-4"/></svg>单选题块</div>
+        <div class="material-item" draggable="true" data-component="reveal-answer"><svg viewBox="0 0 16 16" fill="none" stroke="#e11d48" stroke-width="1.5"><path d="M2 10l6-6 6 6"/><path d="M2 14h12"/></svg>点击揭晓答案</div>
+        <div class="material-item" draggable="true" data-component="timer-block"><svg viewBox="0 0 16 16" fill="none" stroke="#e11d48" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>倒计时练习块</div>
+      </div>
+      <div class="material-group" data-teaching-stage="总结">
+        <div class="material-group-title">总结反思</div>
+        <div class="material-item" draggable="true" data-component="summary-page"><svg viewBox="0 0 16 16" fill="none" stroke="#0891b2" stroke-width="1.5"><path d="M4 8h8M4 11h6"/><circle cx="12" cy="12" r="2"/></svg>本课总结页</div>
+        <div class="material-item" draggable="true" data-component="reflection-card"><svg viewBox="0 0 16 16" fill="none" stroke="#0891b2" stroke-width="1.5"><path d="M2 14V4l4-4 4 4 4-4v14"/></svg>反思提问卡</div>
+      </div>
+      <div class="material-group" data-teaching-stage="作业">
+        <div class="material-group-title">作业延伸</div>
+        <div class="material-item" draggable="true" data-component="homework"><svg viewBox="0 0 16 16" fill="none" stroke="#ea580c" stroke-width="1.5"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 8h4M6 11h3"/></svg>作业布置页</div>
+      </div>
+      <div class="material-group" data-teaching-stage="辅助">
+        <div class="material-group-title">教师辅助</div>
+        <div class="material-item" draggable="true" data-component="teacher-notes"><svg viewBox="0 0 16 16" fill="none" stroke="#6b7280" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1"/><path d="M5 4h6M5 7h5M5 10h3"/></svg>教师备注块</div>
+        <div class="material-item" draggable="true" data-component="focus-blackout"><svg viewBox="0 0 16 16" fill="none" stroke="#6b7280" stroke-width="1.5"><circle cx="8" cy="8" r="2"/><path d="M2 8h2M12 8h2M8 2v2M8 12v2"/></svg>聚焦控制块</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-area">
+    <div class="canvas-info-bar">
+      <span class="breadcrumb">课件编辑器</span>
+      <div class="canvas-meta">
+        <div>
+          <span class="auto-save-dot"></span>
+          <span>已保存 <span class="auto-save-time">--:--</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="canvas-container">
+      <div class="iframe-wrapper" id="iframeWrapper">
+        <iframe id="editor-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
+        <div class="overlay" id="overlay">
+          <div class="hover-box" id="hoverBox"></div>
+          <div class="select-box" id="selectBox"></div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-badge" id="previewBadge"><span class="dot"></span>预览模式 · 点击退出</div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-header">
+      <span class="panel-title">属性</span>
+      <button class="panel-toggle" id="rightPanelToggle"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M6 4l4 4-4 4"/></svg></button>
+    </div>
+    <div class="property-content" id="propertyContent">
+      <div style="padding: 40px 16px; text-align: center; color: var(--text-tertiary);">
+        <p style="font-size:12px;">点击页面元素开始编辑</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/editor/js/event-bus.js?v=1"></script>
+<script src="/editor/js/undo-redo.js?v=1"></script>
+<script src="/editor/js/html-sanitizer.js?v=1"></script>
+<script src="/editor/js/iframe-manager.js?v=1"></script>
+<script src="/editor/js/dom-annotator.js?v=1"></script>
+<script src="/editor/js/element-factory.js?v=1"></script>
+<script src="/editor/js/selection.js?v=1"></script>
+<script src="/editor/js/inline-editor.js?v=1"></script>
+<script src="/editor/js/cssom-editor.js?v=1"></script>
+<script src="/editor/js/property-panel.js?v=1"></script>
+<script src="/editor/js/exporter.js?v=1"></script>
+<script src="/editor/js/page-manager.js?v=1"></script>
+<script src="/editor/js/page-panel.js?v=1"></script>
+<script src="/editor/js/layout-detector.js?v=1"></script>
+<script src="/editor/js/drag-manager.js?v=1"></script>
+<script src="/editor/js/icon-library.js?v=1"></script>
+<script src="/editor/js/animation-manager.js?v=1"></script>
+<script src="/editor/js/outline-panel.js?v=1"></script>
+<script src="/editor/js/js-prerenderer.js?v=1"></script>
+<script src="/editor/js/main.js?v=1"></script>
+</body>
+</html>
