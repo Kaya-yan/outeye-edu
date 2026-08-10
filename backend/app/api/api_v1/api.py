@@ -18,6 +18,7 @@ from app.api.api_v1.endpoints import (
     analysis_parse,
     feedback,
     expert_review,
+    courseware,
 )
 
 # 创建API路由器
@@ -106,4 +107,11 @@ api_router.include_router(
     expert_review.router,
     prefix="/expert-review",
     tags=["专家评审"],
+)
+
+api_router.include_router(
+    courseware.router,
+    prefix="/courseware",
+    tags=["教学课件"],
+    dependencies=[Depends(check_rate_limit)]
 )

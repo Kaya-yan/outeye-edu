@@ -82,6 +82,15 @@ async def lifespan(app: FastAPI):
 
     logger.info("Database tables created")
 
+    # 播种官方教学组件（如果组件库为空）
+    try:
+        from app.services.courseware_seed import seed_official_components_via_connection
+        async with async_engine.begin() as seed_conn:
+            await seed_conn.run_sync(seed_official_components_via_connection)
+        logger.info("Official courseware components seeded")
+    except Exception as e:
+        logger.warning(f"Courseware seed skipped: {e}")
+
     # 预热RAG服务（在后台线程加载Embedding模型，避免阻塞首次请求）
     import asyncio
 

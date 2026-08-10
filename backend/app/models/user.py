@@ -31,6 +31,8 @@ class User(Base):
     lesson_plans = relationship("LessonPlan", back_populates="user")
     learning_records = relationship("LearningRecord", back_populates="user")
     feedback = relationship("UserFeedback", back_populates="user")
+    courseware_projects = relationship("CoursewareProject", back_populates="owner")
+    component_definitions = relationship("ComponentDefinition", back_populates="owner")
 
     def to_dict(self):
         """转换为字典"""
