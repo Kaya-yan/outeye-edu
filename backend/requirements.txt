@@ -35,6 +35,8 @@ langdetect>=1.0.9
 # 工具库
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# 锁定 bcrypt 4.x，避免 pip 解析到 bcrypt 5.x 触发 passlib 1.7.4 版本自检失败（注册/登录 500）
+bcrypt==4.0.1
 python-dotenv==1.0.0
 pydantic==2.5.2
 pydantic-settings==2.1.0
