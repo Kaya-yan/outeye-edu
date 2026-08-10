@@ -42,7 +42,7 @@ export default function OCRPreview({
       <textarea
         value={editedText}
         onChange={(e) => setEditedText(e.target.value)}
-        className="w-full h-40 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
+        className="w-full h-40 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none resize-y"
         placeholder="识别结果将显示在这里..."
       />
 

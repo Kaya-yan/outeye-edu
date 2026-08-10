@@ -117,7 +117,7 @@ function ToolbarBtn({
       title={title}
       className={`px-2 py-1 text-sm rounded font-medium transition-colors ${
         active
-          ? "bg-primary text-white"
+          ? "bg-primary-600 text-white"
           : "text-gray-600 hover:bg-gray-200"
       }`}
     >

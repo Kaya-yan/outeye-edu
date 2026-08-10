@@ -39,7 +39,7 @@ export default function PageRangeSelector({
           key={i}
           className={`h-3 rounded-sm transition-colors ${
             isIncluded
-              ? "bg-primary"
+              ? "bg-primary-600"
               : "bg-gray-200"
           }`}
           style={{ width: `${Math.max(8, 100 / Math.min(totalPages / step, maxShow))}%` }}
@@ -64,7 +64,7 @@ export default function PageRangeSelector({
         <select
           value={mode}
           onChange={(e) => setMode(e.target.value as "all" | "custom")}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
         >
           <option value="all">全部页面</option>
           <option value="custom">自定义范围</option>
@@ -82,7 +82,7 @@ export default function PageRangeSelector({
               setPageFrom(v);
               if (v > pageTo) setPageTo(v);
             }}
-            className="px-2 py-1 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            className="px-2 py-1 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
           >
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n} disabled={n > pageTo}>
@@ -98,7 +98,7 @@ export default function PageRangeSelector({
               setPageTo(v);
               if (v < pageFrom) setPageFrom(v);
             }}
-            className="px-2 py-1 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            className="px-2 py-1 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
           >
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n} disabled={n < pageFrom}>
@@ -121,7 +121,7 @@ export default function PageRangeSelector({
         <button
           onClick={() => onConfirm(mode === "all" ? 1 : pageFrom, mode === "all" ? totalPages : pageTo)}
           disabled={loading || !isValid}
-          className="px-4 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="px-4 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {loading ? "解析中..." : "确认提取"}
         </button>

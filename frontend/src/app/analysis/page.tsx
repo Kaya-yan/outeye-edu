@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import dynamic from "next/dynamic";
 import WhiteboxResults from "@/components/WhiteboxResults";
@@ -141,6 +142,7 @@ const LANGUAGES = [
 // ============ Page ============
 
 export default function AnalysisPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("input");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
@@ -248,22 +250,43 @@ export default function AnalysisPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">课文智能分析</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            ADDSR-Lite: 白盒分析 → 双源检索 → 融合生成
-          </p>
+        <div className="brand-surface px-6 py-7 sm:px-8 sm:py-8 mb-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="section-title mb-2">Academic Analysis Workbench</div>
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">课文智能分析</h1>
+              <p className="text-sm sm:text-base text-ink-500 mt-3 max-w-2xl leading-7">
+                在柔和、克制的工作台中完成课文输入、白盒分析、双源检索与教学方案生成，并把结果自然推进到 HTML 课件编辑与课堂展示链路。
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:w-[360px]">
+              <div className="data-card p-4 text-center bg-white/90">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">CEFR</div>
+                <div className="mt-2 text-lg font-semibold text-ink-900">A1-C2</div>
+              </div>
+              <div className="data-card p-4 text-center bg-white/90">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Dual</div>
+                <div className="mt-2 text-lg font-semibold text-ink-900">Wiki + RAG</div>
+              </div>
+              <div className="data-card p-4 text-center bg-white/90">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Flow</div>
+                <div className="mt-2 text-lg font-semibold text-ink-900">Plan → Courseware</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Stepper */}
-        <Stepper current={step} />
+        <div className="page-surface-strong px-4 py-4 sm:px-6 mb-4">
+          <Stepper current={step} />
+        </div>
 
         {/* Error */}
         {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         )}
@@ -331,35 +354,51 @@ export default function AnalysisPage() {
 // ============ Stepper ============
 
 function Stepper({ current }: { current: Step }) {
-  const steps: { key: Step; label: string; icon: string }[] = [
-    { key: "input", label: "输入课文", icon: "📝" },
-    { key: "analysis", label: "白盒分析", icon: "📊" },
-    { key: "retrieval", label: "双源检索", icon: "🔍" },
-    { key: "plan", label: "教学方案", icon: "📋" },
+  const steps: { key: Step; label: string; icon: string; hint: string }[] = [
+    { key: "input", label: "输入课文", icon: "📝", hint: "准备文本" },
+    { key: "analysis", label: "白盒分析", icon: "📊", hint: "形成判断" },
+    { key: "retrieval", label: "双源检索", icon: "🔍", hint: "补证据" },
+    { key: "plan", label: "教学方案", icon: "📋", hint: "进入课件" },
   ];
   const currentIdx = steps.findIndex((s) => s.key === current);
 
   return (
-    <div className="flex items-center gap-2">
-      {steps.map((s, i) => (
-        <React.Fragment key={s.key}>
+    <div className="grid gap-3 sm:grid-cols-4">
+      {steps.map((s, i) => {
+        const isCurrent = i === currentIdx;
+        const isDone = i < currentIdx;
+        return (
           <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              i === currentIdx
-                ? "bg-primary text-white"
-                : i < currentIdx
-                ? "bg-green-100 text-green-800"
-                : "bg-gray-100 text-gray-400"
+            key={s.key}
+            className={`rounded-2xl border px-4 py-3 transition-colors ${
+              isCurrent
+                ? "bg-primary-100 border-primary-300 shadow-soft"
+                : isDone
+                  ? "bg-sage-100 border-sage-200"
+                  : "bg-canvas-100/80 border-black/5"
             }`}
           >
-            <span>{i < currentIdx ? "✓" : s.icon}</span>
-            {s.label}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                  isCurrent ? "bg-white text-ink-900" : isDone ? "bg-white text-ink-800" : "bg-white/80 text-ink-500"
+                }`}>
+                  {isDone ? "✓" : s.icon}
+                </span>
+                <div>
+                  <div className={`text-sm font-semibold ${isCurrent || isDone ? "text-ink-900" : "text-ink-600"}`}>{s.label}</div>
+                  <div className={`text-xs ${isCurrent ? "text-ink-600" : isDone ? "text-ink-500" : "text-ink-400"}`}>{s.hint}</div>
+                </div>
+              </div>
+              <span className={`text-[10px] uppercase tracking-[0.16em] ${
+                isCurrent ? "text-ink-700" : isDone ? "text-ink-500" : "text-ink-400"
+              }`}>
+                {isCurrent ? "进行中" : isDone ? "完成" : `Step ${i + 1}`}
+              </span>
+            </div>
           </div>
-          {i < steps.length - 1 && (
-            <div className={`flex-1 h-px ${i < currentIdx ? "bg-green-300" : "bg-gray-200"}`} />
-          )}
-        </React.Fragment>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -405,8 +444,17 @@ function InputStep({
 }) {
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">输入课文</h2>
+      <div className="workbench-panel space-y-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="section-title mb-2">Step 1</div>
+            <h2 className="text-2xl font-semibold text-ink-900">输入课文</h2>
+            <p className="text-sm text-ink-500 mt-2">支持上传、OCR 与手动输入。完成后即可进入白盒分析。</p>
+          </div>
+          <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft">
+            当前字数：{wordCount}
+          </div>
+        </div>
 
         {/* File Upload */}
         <div className="mb-4">
@@ -433,7 +481,7 @@ function InputStep({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="例：Language Learning Evolution"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
           />
         </div>
 
@@ -447,8 +495,8 @@ function InputStep({
                 onClick={() => setStudentLevel(level)}
                 className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
                   studentLevel === level
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-primary/50"
+                    ? "bg-primary-600 text-white border-primary-600"
+                    : "bg-white text-gray-600 border-gray-300 hover:border-primary-500/50"
                 }`}
               >
                 {level}
@@ -463,7 +511,7 @@ function InputStep({
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+            className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none text-sm"
           >
             {LANGUAGES.map((lang) => (
               <option key={lang.code} value={lang.code}>{lang.label}</option>
@@ -484,7 +532,7 @@ function InputStep({
               <select
                 value={nativeLanguage}
                 onChange={(e) => setNativeLanguage(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
               >
                 <option value="">未指定</option>
                 <option value="zh">中文</option>
@@ -501,7 +549,7 @@ function InputStep({
               <select
                 value={courseType}
                 onChange={(e) => setCourseType(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
               >
                 <option value="">未指定</option>
                 <option value="精读">精读</option>
@@ -520,7 +568,7 @@ function InputStep({
                 placeholder="例：30"
                 min={1}
                 max={200}
-                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
               />
             </div>
           </div>
@@ -539,7 +587,7 @@ function InputStep({
         <button
           onClick={onAnalyze}
           disabled={loading || wordCount < 20}
-          className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -570,10 +618,15 @@ function AnalysisStep({
 }) {
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">白盒分析结果</h2>
-          <span className="text-xs text-gray-400">耗时 {analysis.analysis_duration}s</span>
+      <div className="workbench-panel space-y-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="section-title mb-2">Step 2</div>
+            <h2 className="text-2xl font-semibold text-ink-900">白盒分析结果</h2>
+          </div>
+          <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft">
+            耗时 {analysis.analysis_duration}s
+          </div>
         </div>
         <WhiteboxResults data={analysis} />
       </div>
@@ -588,7 +641,7 @@ function AnalysisStep({
         <button
           onClick={onRetrieve}
           disabled={loading}
-          className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {loading ? "检索中..." : "下一步：双源检索"}
         </button>
@@ -614,20 +667,27 @@ function RetrievalStep({
 }) {
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">双源检索结果</h2>
-          <span className="text-xs text-gray-400">耗时 {retrieval.retrieval_duration}s</span>
+      <div className="workbench-panel space-y-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="section-title mb-2">Step 3</div>
+            <h2 className="text-2xl font-semibold text-ink-900">双源检索结果</h2>
+          </div>
+          <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft">
+            耗时 {retrieval.retrieval_duration}s
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-blue-50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-blue-700">{retrieval.wiki_count}</div>
-            <div className="text-xs text-blue-600">Wiki 理论</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
+          <div className="data-card text-center bg-primary-50/70 border-primary-100">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Wiki</div>
+            <div className="mt-2 text-3xl font-semibold text-ink-900">{retrieval.wiki_count}</div>
+            <div className="text-xs text-ink-500 mt-1">相关理论被召回</div>
           </div>
-          <div className="bg-green-50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-green-700">{retrieval.rag_count}</div>
-            <div className="text-xs text-green-600">RAG 资源</div>
+          <div className="data-card text-center bg-sage-50/80 border-sage-200">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">RAG</div>
+            <div className="mt-2 text-3xl font-semibold text-ink-900">{retrieval.rag_count}</div>
+            <div className="text-xs text-ink-500 mt-1">相关教学资源</div>
           </div>
         </div>
 
@@ -686,7 +746,7 @@ function RetrievalStep({
         <button
           onClick={onGenerate}
           disabled={loading}
-          className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -721,10 +781,32 @@ function PlanStep({
   studentLevel?: string;
   language?: string;
 }) {
+  const router = useRouter();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [revising, setRevising] = useState(false);
   const [revisionError, setRevisionError] = useState("");
+  const [creatingCourseware, setCreatingCourseware] = useState(false);
+
+  const handleCreateCourseware = async () => {
+    setCreatingCourseware(true);
+    try {
+      const resp = await apiPost<{ project: { id: string } }>("/courseware/from-plan", {
+        title: result.text_title || "教学课件",
+        source_plan_id: undefined,
+        mode: "slides",
+        template_id: "classroom_default",
+        plan: result.teaching_plan,
+        learner_gap: result.learner_gap,
+        enhancement_tags: result.enhancement_tags,
+      });
+      router.push(`/courseware/${resp.project.id}/edit`);
+    } catch (e: unknown) {
+      setRevisionError(e instanceof Error ? e.message : "创建课件失败，请重试");
+    } finally {
+      setCreatingCourseware(false);
+    }
+  };
 
   const handleRevise = async (instruction: string, section?: string) => {
     if (!text) return;
@@ -809,12 +891,30 @@ function PlanStep({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">教学方案</h2>
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <span>{result.text_level} → {result.student_level}</span>
-            <span>总耗时 {result.total_duration}s</span>
+      <div className="workbench-panel">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-5">
+          <div>
+            <div className="section-title mb-2">Step 4</div>
+            <h2 className="text-2xl font-semibold text-ink-900">教学方案</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-canvas-200 px-3 py-1.5 text-ink-600 shadow-soft">{result.text_level} → {result.student_level}</span>
+            <span className="rounded-full bg-sage-100 px-3 py-1.5 text-ink-700 shadow-soft">总耗时 {result.total_duration}s</span>
+          </div>
+        </div>
+
+        <div className="archive-surface p-4 mb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="section-title mb-2">Ready for Courseware</div>
+              <p className="text-sm text-ink-600 leading-6">
+                教学方案已经完成。你可以继续导出传统格式，也可以直接把它推进到教学课件工作台，进入可编辑、可展示、可沉淀组件的下一阶段。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-ink-500">
+              <span className="drawer-handle bg-white border border-black/5 text-ink-500">保留 PPT / Word / HTML 导出</span>
+              <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">生成后自动进入编辑器</span>
+            </div>
           </div>
         </div>
 
@@ -823,7 +923,7 @@ function PlanStep({
           {result.enhancement_tags.map((tag) => (
             <span
               key={tag}
-              className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary"
+              className="px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700"
             >
               {result.tag_labels?.[tag] || tag.replace(/_/g, " ")}
             </span>
@@ -857,9 +957,61 @@ function PlanStep({
         )}
       </div>
 
+      {/* Courseware entry */}
+      <div className="archive-surface p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-2xl bg-canvas-300 flex items-center justify-center text-ink-700 shadow-soft">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+            </div>
+            <div className="flex-1 max-w-2xl">
+              <div className="section-title mb-2">Courseware</div>
+              <h3 className="text-lg font-semibold text-ink-900">把教学方案推进到课件工作台</h3>
+              <p className="text-sm text-ink-500 mt-1 leading-6">
+                当前这份方案已经具备进入课件生产链路的条件。生成后会自动创建课件项目，并直接进入编辑器继续工作。
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+            <button
+              onClick={handleCreateCourseware}
+              disabled={creatingCourseware}
+              className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingCourseware ? "生成中..." : "生成教学课件"}
+            </button>
+            <button
+              onClick={() => router.push('/courseware')}
+              className="btn-secondary w-full rounded-xl py-3"
+            >
+              查看课件工作台
+            </button>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Create</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">创建课件项目</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">用当前教学方案建立可继续编辑的 HTML 课件。</p>
+          </div>
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Edit</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">进入编辑器</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">生成后自动跳转到编辑器，继续做页面与组件调整。</p>
+          </div>
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Present</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">进入展示终态</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内继续进入课堂展示模式，完成完整演示链。</p>
+          </div>
+        </div>
+      </div>
+
       <button
         onClick={onReset}
-        className="w-full py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+        className="btn-secondary w-full rounded-xl py-3"
       >
         分析新课文
       </button>

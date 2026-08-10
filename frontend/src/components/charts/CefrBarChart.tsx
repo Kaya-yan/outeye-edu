@@ -2,6 +2,7 @@
 
 import "@/lib/chartjs";
 import { Bar } from "react-chartjs-2";
+import type { TooltipItem } from "chart.js";
 
 interface CefrBarChartProps {
   distribution: Record<string, number>;
@@ -9,8 +10,8 @@ interface CefrBarChartProps {
 }
 
 const LEVELS = ["A1-A2", "B1-B2", "C1-C2", "未分级"];
-const COLORS = ["#4ade80", "#facc15", "#f87171", "#d1d5db"];
-const BORDER_COLORS = ["#22c55e", "#eab308", "#ef4444", "#9ca3af"];
+const COLORS = ["#cbd6c5", "#d8c46a", "#c7d3d4", "#dccfc8"];
+const BORDER_COLORS = ["#96a790", "#c4b257", "#7f8b8d", "#a99893"];
 
 export default function CefrBarChart({ distribution, totalWords }: CefrBarChartProps) {
   const counts = LEVELS.map((l) => distribution[l] || 0);
@@ -48,9 +49,8 @@ export default function CefrBarChart({ distribution, totalWords }: CefrBarChartP
       legend: { display: false },
       tooltip: {
         callbacks: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          label: (ctx: any) =>
-            `${counts[ctx.dataIndex]} 词 (${ctx.parsed.x.toFixed(1)}%)`,
+          label: (ctx: TooltipItem<"bar">) =>
+            `${counts[ctx.dataIndex]} 词 (${(ctx.parsed.x ?? 0).toFixed(1)}%)`,
         },
       },
     },

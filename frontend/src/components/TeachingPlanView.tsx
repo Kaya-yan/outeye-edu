@@ -134,10 +134,10 @@ export default function TeachingPlanView({
             {plan.activity_designs.map((act, i) => (
               <div
                 key={i}
-                className="border border-gray-200 rounded-lg p-4 hover:border-primary/30 transition-colors"
+                className="border border-gray-200 rounded-lg p-4 hover:border-primary-500/30 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-primary/10 text-primary">
+                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-primary-100 text-primary-700">
                     活动 {i + 1}
                   </span>
                   {act.name && (
@@ -329,7 +329,7 @@ function Section({
         {hasRevise && sectionKey && onStartRevise && revisionTarget !== sectionKey && (
           <button
             onClick={() => onStartRevise(sectionKey)}
-            className="text-xs text-primary hover:text-primary/80 border border-primary/20 rounded px-2 py-0.5 hover:bg-primary/5 transition-colors"
+            className="text-xs text-primary-700 hover:text-primary-600 border border-primary-200 rounded px-2 py-0.5 hover:bg-primary-50 transition-colors"
           >
             修改
           </button>
@@ -359,7 +359,7 @@ function RevisionInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="输入修改意见，如：活动时间太长、请换成小组活动、第2条建议不适合我的学生..."
-        className="w-full text-sm border border-amber-300 rounded p-2 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+        className="w-full text-sm border border-amber-300 rounded p-2 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-primary-500"
         rows={3}
       />
       <div className="flex gap-2 mt-2 justify-end">
@@ -372,7 +372,7 @@ function RevisionInput({
         <button
           onClick={onSubmit}
           disabled={!value.trim() || loading}
-          className="px-3 py-1 text-xs text-white bg-primary rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="px-3 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {loading ? "修订中..." : "重新生成"}
         </button>
@@ -409,7 +409,7 @@ function SuggestionItem({ index, text }: { index: number; text: string }) {
           <>
             <button
               onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+              className="mt-1 text-xs text-primary-700 hover:text-primary-600 flex items-center gap-1"
             >
               <span className={`transition-transform ${expanded ? "rotate-90" : ""}`}>▶</span>
               {expanded ? "收起依据" : "查看依据"}

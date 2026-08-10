@@ -188,8 +188,8 @@ export default function FileUploadZone({ onTextExtracted, onFilename }: FileUplo
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
             dragOver
-              ? "border-primary bg-primary/5"
-              : "border-gray-300 hover:border-primary/50 hover:bg-gray-50"
+              ? "border-primary-500 bg-primary-50"
+              : "border-gray-300 hover:border-primary-500/50 hover:bg-gray-50"
           }`}
           onClick={() => fileInputRef.current?.click()}
         >
