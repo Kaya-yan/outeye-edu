@@ -4,6 +4,7 @@ RAG服务测试
 
 import sys
 import types
+import uuid
 
 import numpy as np
 import pytest
@@ -171,6 +172,47 @@ class TestEmbeddingFailureBehavior:
 
 class TestVectorStore:
     """向量存储测试"""
+
+    def test_upsert_maps_chunk_id_to_qdrant_uuid(self):
+        """应用层 chunk ID 写入 Qdrant 时必须映射为合法 UUID。"""
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import Distance, VectorParams
+
+        client = QdrantClient(":memory:")
+        client.create_collection(
+            collection_name="qdrant_id_test",
+            vectors_config=VectorParams(size=3, distance=Distance.COSINE),
+        )
+
+        store = VectorStore.__new__(VectorStore)
+        store.client = client
+        store.collection_name = "qdrant_id_test"
+        store.vector_size = 3
+        store.backend = "qdrant"
+        store.degraded = False
+        store.degraded_reason = ""
+
+        source_chunk_id = "e4d909c290d0fb1ca068ffaddf22cbd0_chunk_0"
+        record = VectorRecord(
+            id=source_chunk_id,
+            vector=np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            payload={"doc_id": "e4d909c290d0fb1ca068ffaddf22cbd0"},
+        )
+
+        assert store.upsert([record]) is True
+
+        points, _ = client.scroll(
+            collection_name="qdrant_id_test",
+            with_payload=True,
+            with_vectors=False,
+        )
+        assert len(points) == 1
+        uuid.UUID(str(points[0].id))
+        assert points[0].payload["source_chunk_id"] == source_chunk_id
+
+        results = store.search([1.0, 0.0, 0.0], top_k=1)
+        assert results[0].id == str(points[0].id)
+        assert results[0].payload["source_chunk_id"] == source_chunk_id
 
     def setup_method(self):
         self.store = VectorStore(collection_name="test_collection", vector_size=3)

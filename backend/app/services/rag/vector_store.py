@@ -104,6 +104,13 @@ class VectorStore:
         else:
             return self._upsert_memory(records)
 
+    def _qdrant_point_id(self, record_id: str) -> str:
+        """将应用层记录 ID 稳定映射为 Qdrant 可接受的 UUID。"""
+        try:
+            return str(uuid.UUID(record_id))
+        except ValueError:
+            return str(uuid.uuid5(uuid.NAMESPACE_URL, record_id))
+
     def _upsert_qdrant(self, records: List[VectorRecord]) -> bool:
         """使用Qdrant插入记录"""
         try:
@@ -111,10 +118,12 @@ class VectorStore:
 
             points = []
             for record in records:
+                payload = dict(record.payload)
+                payload.setdefault("source_chunk_id", record.id)
                 points.append(PointStruct(
-                    id=record.id,
+                    id=self._qdrant_point_id(record.id),
                     vector=record.vector,
-                    payload=record.payload
+                    payload=payload
                 ))
 
             self.client.upsert(
