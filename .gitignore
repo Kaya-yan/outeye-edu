@@ -77,6 +77,12 @@ docker/nginx/ssl/
 .tmp/
 .temp/
 
+# 一次性前端静态预览副本
+frontend-preview.html
+
+# 部署产物打包（保留 manifest 便于溯源）
+deployment-bundles/*.zip
+
 # 演示和测试数据
 backend/demo_*.json
 backend/demo_*.txt
