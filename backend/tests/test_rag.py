@@ -2,7 +2,12 @@
 RAG服务测试
 """
 
+import sys
+import types
+
+import numpy as np
 import pytest
+from app.core.config import Settings
 from app.services.rag.document_parser import DocumentParser
 from app.services.rag.embedding import EmbeddingService
 from app.services.rag.vector_store import VectorStore, VectorRecord
@@ -81,13 +86,78 @@ class TestEmbeddingService:
         assert self.service.similarity(embedding1, embedding2) < 0.5
         assert self.service.similarity(embedding1, embedding3) > 0.9
 
-    def test_embed_text_marks_simplified_fallback_as_degraded(self, monkeypatch):
-        """测试 API embedding 回退到简化向量时会显式暴露 degraded 状态"""
-        service = EmbeddingService(model_name="deepseek-embedding", api_key="dummy", api_base="https://example.invalid")
+
+class TestEmbeddingConfiguration:
+    """Embedding 默认配置测试。"""
+
+    def test_defaults_to_multilingual_local_model(self):
+        settings = Settings(
+            _env_file=None,
+            SECRET_KEY="test-secret",
+            JWT_SECRET_KEY="test-jwt-secret",
+            DATABASE_URL="postgresql+asyncpg://test:test@localhost/test",
+            REDIS_URL="redis://localhost:6379/0",
+            LLM_API_KEY="test-key",
+        )
+
+        assert settings.EMBEDDING_MODEL == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        assert settings.EMBEDDING_DIMENSION == 384
+
+
+class TestEmbeddingFailureBehavior:
+    """Embedding 模型初始化与失败策略测试。"""
+
+    def test_local_multilingual_model_loads_by_full_hub_id(self, monkeypatch):
+        """非 BGE 的完整 Hub ID 必须通过 SentenceTransformer 加载。"""
+        loaded_models = []
+
+        class FakeModel:
+            def get_sentence_embedding_dimension(self):
+                return 384
+
+            def encode(self, text, normalize_embeddings=True, **kwargs):
+                return np.array([1.0, 0.0, 0.0])
+
+        class FakeSentenceTransformer:
+            def __new__(cls, model_name):
+                loaded_models.append(model_name)
+                return FakeModel()
+
+        monkeypatch.setitem(
+            sys.modules,
+            "sentence_transformers",
+            types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+        )
+
+        model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        service = EmbeddingService(model_name=model_name)
+
+        assert loaded_models == [model_name]
+        assert service.default_backend == "local_model"
+        assert service.dimension == 384
+
+    def test_local_model_configuration_failure_does_not_fall_back_to_api(self, monkeypatch):
+        """本地模型不可用时必须给出可行动的配置错误。"""
+        class FailingSentenceTransformer:
+            def __new__(cls, model_name):
+                raise OSError("model files unavailable")
+
+        monkeypatch.setitem(
+            sys.modules,
+            "sentence_transformers",
+            types.SimpleNamespace(SentenceTransformer=FailingSentenceTransformer),
+        )
+
+        with pytest.raises(ValueError, match="本地 Embedding 模型加载失败"):
+            EmbeddingService(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+
+    def test_api_embedding_failure_does_not_generate_simplified_vector(self, monkeypatch):
+        """API embedding 失败必须暴露配置错误，不能继续写入伪向量。"""
+        service = EmbeddingService(model_name="text-embedding-test", api_key="dummy", api_base="https://example.invalid")
 
         class FakeEmbeddings:
             def create(self, **kwargs):
-                raise RuntimeError("embedding upstream unavailable")
+                raise RuntimeError("404 endpoint not found")
 
         class FakeClient:
             embeddings = FakeEmbeddings()
@@ -95,12 +165,8 @@ class TestEmbeddingService:
         import openai
         monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: FakeClient())
 
-        result = service.embed_text("hello world")
-
-        assert result.degraded is True
-        assert result.backend == "simplified_fallback"
-        assert "embedding upstream unavailable" in result.degraded_reason
-        assert len(result.embedding) == service.dimension
+        with pytest.raises(ValueError, match="Embedding API 配置错误"):
+            service.embed_text("hello world")
 
 
 class TestVectorStore:

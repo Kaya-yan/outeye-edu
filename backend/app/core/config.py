@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2000
 
     # Embedding模型配置
-    EMBEDDING_MODEL: str = "bge-small-zh-v1.5"
-    EMBEDDING_DIMENSION: int = 512
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    EMBEDDING_DIMENSION: int = 384
 
     # Wiki数据路径
     WIKI_DATA_PATH: str = ""

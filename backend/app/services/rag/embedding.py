@@ -26,7 +26,7 @@ class EmbeddingService:
 
     def __init__(
         self,
-        model_name: str = "bge-large-zh",
+        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
         batch_size: int = 32,
@@ -53,36 +53,17 @@ class EmbeddingService:
 
     def _init_bge_model(self):
         """初始化BGE模型"""
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            model_map = {
-                "bge-large-zh": "BAAI/bge-large-zh-v1.5",
-                "bge-large-zh-v1.5": "BAAI/bge-large-zh-v1.5",
-                "bge-base-zh": "BAAI/bge-base-zh-v1.5",
-                "bge-base-zh-v1.5": "BAAI/bge-base-zh-v1.5",
-                "bge-small-zh": "BAAI/bge-small-zh-v1.5",
-                "bge-small-zh-v1.5": "BAAI/bge-small-zh-v1.5",
-                "bge-large-en": "BAAI/bge-large-en-v1.5",
-                "bge-base-en": "BAAI/bge-base-en-v1.5"
-            }
-
-            actual_model = model_map.get(self.model_name, self.model_name)
-            print(f"Loading embedding model: {actual_model}")
-            self.model = SentenceTransformer(actual_model)
-            self.use_api = False
-            self.default_backend = "local_model"
-            self.last_backend = self.default_backend
-            self.last_degraded = False
-            self.last_degraded_reason = ""
-            try:
-                self.dimension = self.model.get_embedding_dimension()
-            except AttributeError:
-                self.dimension = self.model.get_sentence_embedding_dimension()
-
-        except ImportError:
-            print("警告: sentence_transformers未安装，将回退到API Embedding")
-            self._init_api_model()
+        model_map = {
+            "bge-large-zh": "BAAI/bge-large-zh-v1.5",
+            "bge-large-zh-v1.5": "BAAI/bge-large-zh-v1.5",
+            "bge-base-zh": "BAAI/bge-base-zh-v1.5",
+            "bge-base-zh-v1.5": "BAAI/bge-base-zh-v1.5",
+            "bge-small-zh": "BAAI/bge-small-zh-v1.5",
+            "bge-small-zh-v1.5": "BAAI/bge-small-zh-v1.5",
+            "bge-large-en": "BAAI/bge-large-en-v1.5",
+            "bge-base-en": "BAAI/bge-base-en-v1.5"
+        }
+        self._init_sentence_transformer(model_map.get(self.model_name, self.model_name))
 
     def _init_api_model(self):
         """初始化API模型（DeepSeek/OpenAI兼容）"""
@@ -97,13 +78,34 @@ class EmbeddingService:
 
     def _init_local_model(self):
         """初始化本地模型"""
-        self.model = None
-        self.use_api = False
-        self.default_backend = "local_fallback"
-        self.last_backend = self.default_backend
-        self.last_degraded = False
-        self.last_degraded_reason = ""
-        self.dimension = 768
+        self._init_sentence_transformer(self.model_name)
+
+    def _init_sentence_transformer(self, actual_model: str):
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:
+            raise ValueError(
+                f"本地 Embedding 模型加载失败：未安装 sentence-transformers，无法加载 '{actual_model}'。"
+                "请使用 requirements.txt 安装运行依赖。"
+            ) from exc
+
+        try:
+            print(f"Loading embedding model: {actual_model}")
+            self.model = SentenceTransformer(actual_model)
+            self.use_api = False
+            self.default_backend = "local_model"
+            self.last_backend = self.default_backend
+            self.last_degraded = False
+            self.last_degraded_reason = ""
+            try:
+                self.dimension = self.model.get_embedding_dimension()
+            except AttributeError:
+                self.dimension = self.model.get_sentence_embedding_dimension()
+        except Exception as exc:
+            raise ValueError(
+                f"本地 Embedding 模型加载失败：无法加载 '{actual_model}'。"
+                "请检查 EMBEDDING_MODEL、模型文件和服务器网络。"
+            ) from exc
 
     def embed_text(self, text: str) -> EmbeddingResult:
         """
@@ -126,7 +128,10 @@ class EmbeddingService:
         elif self.model is not None:
             embedding = self._embed_with_model(processed_text)
         else:
-            embedding = self._embed_with_api(processed_text)
+            raise ValueError(
+                f"本地 Embedding 服务未初始化：模型 '{self.model_name}' 不可用。"
+                "请检查 EMBEDDING_MODEL 与 sentence-transformers 安装。"
+            )
 
         return EmbeddingResult(
             text=text,
@@ -167,7 +172,10 @@ class EmbeddingService:
         elif self.model is not None:
             embeddings = self._embed_with_model_batch(processed_texts)
         else:
-            embeddings = [self._embed_with_api(t) for t in processed_texts]
+            raise ValueError(
+                f"本地 Embedding 服务未初始化：模型 '{self.model_name}' 不可用。"
+                "请检查 EMBEDDING_MODEL 与 sentence-transformers 安装。"
+            )
 
         results = []
         for i, (text, embedding, token_count) in enumerate(zip(texts, embeddings, token_counts)):
@@ -202,20 +210,26 @@ class EmbeddingService:
             self.last_degraded = False
             self.last_degraded_reason = ""
             return embedding.tolist()
-        except Exception as e:
-            print(f"模型Embedding生成失败: {e}")
+        except Exception as exc:
             self.last_degraded = True
-            self.last_degraded_reason = str(e)
-            return self._embed_with_api(text)
+            self.last_degraded_reason = str(exc)
+            raise ValueError(
+                f"本地 Embedding 模型推理失败：模型 '{self.model_name}' 无法生成向量。"
+                "请检查模型文件、可用内存和输入文本。"
+            ) from exc
 
     def _embed_with_model_batch(self, texts: List[str]) -> List[List[float]]:
         """使用本地模型批量生成Embedding"""
         try:
             embeddings = self.model.encode(texts, normalize_embeddings=True, batch_size=self.batch_size)
             return [e.tolist() for e in embeddings]
-        except Exception as e:
-            print(f"批量Embedding生成失败: {e}")
-            return [self._embed_with_api(t) for t in texts]
+        except Exception as exc:
+            self.last_degraded = True
+            self.last_degraded_reason = str(exc)
+            raise ValueError(
+                f"本地 Embedding 模型推理失败：模型 '{self.model_name}' 无法批量生成向量。"
+                "请检查模型文件、可用内存和输入文本。"
+            ) from exc
 
     def _embed_with_api(self, text: str) -> List[float]:
         """使用API生成Embedding（DeepSeek/OpenAI兼容）"""
@@ -243,43 +257,15 @@ class EmbeddingService:
             self.dimension = len(embedding)
             return embedding
 
-        except Exception as e:
-            print(f"API Embedding生成失败: {e}")
-            self.last_backend = "simplified_fallback"
+        except Exception as exc:
+            self.last_backend = "api"
             self.last_degraded = True
-            self.last_degraded_reason = str(e)
-            return self._embed_simplified(text)
-
-    def _embed_simplified(self, text: str) -> List[float]:
-        """
-        简化Embedding实现
-
-        使用哈希生成伪向量，仅用于降级回退
-        """
-        import hashlib
-
-        hash_obj = hashlib.sha256(text.encode())
-        hash_bytes = hash_obj.digest()
-
-        embedding = []
-        for i in range(0, len(hash_bytes), 4):
-            if len(embedding) >= self.dimension:
-                break
-            chunk = hash_bytes[i:i + 4]
-            if len(chunk) == 4:
-                value = int.from_bytes(chunk, byteorder='big') / (2**32)
-                embedding.append(value * 2 - 1)
-
-        while len(embedding) < self.dimension:
-            embedding.append(0.0)
-
-        embedding = embedding[:self.dimension]
-
-        norm = np.linalg.norm(embedding)
-        if norm > 0:
-            embedding = (np.array(embedding) / norm).tolist()
-
-        return embedding
+            self.last_degraded_reason = str(exc)
+            raise ValueError(
+                f"Embedding API 配置错误：模型 '{self.model_name}' 无法通过 "
+                f"'{self.api_base or '默认 OpenAI 地址'}' 生成向量。"
+                "请配置支持 OpenAI Embeddings 的服务，或改用本地 EMBEDDING_MODEL。"
+            ) from exc
 
     def similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
         """计算两个Embedding的余弦相似度"""

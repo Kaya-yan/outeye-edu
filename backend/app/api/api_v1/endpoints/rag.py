@@ -91,7 +91,11 @@ def get_rag_services():
 
         _document_parser = DocumentParser()
         _embedding_service = EmbeddingService(
-            model_name=getattr(settings, 'EMBEDDING_MODEL', 'bge-large-zh'),
+            model_name=getattr(
+                settings,
+                'EMBEDDING_MODEL',
+                'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+            ),
             api_key=getattr(settings, 'LLM_API_KEY', None),
             api_base=getattr(settings, 'LLM_BASE_URL', None)
         )
@@ -99,7 +103,7 @@ def get_rag_services():
             host=qdrant_host,
             port=qdrant_port,
             collection_name=getattr(settings, 'QDRANT_COLLECTION', 'outeye_knowledge'),
-            vector_size=getattr(settings, 'EMBEDDING_DIMENSION', 1024)
+            vector_size=getattr(settings, 'EMBEDDING_DIMENSION', 384)
         )
         _retriever = HybridRetriever(
             embedding_service=_embedding_service,
