@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Evidence } from "@/lib/analysis";
+import EvidenceDrawer from "./EvidenceDrawer";
 
 interface Activity {
   name?: string;
   objective?: string;
   steps?: string;
   duration?: string;
+  evidence?: Evidence[];
+  degraded?: boolean;
 }
 
 interface TeachingPlanData {
@@ -62,6 +66,7 @@ export default function TeachingPlanView({
 }) {
   const [revisionTarget, setRevisionTarget] = useState<SectionKey | null>(null);
   const [revisionText, setRevisionText] = useState("");
+  const [evidenceIndex, setEvidenceIndex] = useState<number | null>(null);
 
   const handleRevise = async () => {
     if (!onRevise || !revisionText.trim()) return;
@@ -157,6 +162,22 @@ export default function TeachingPlanView({
                 {act.duration && (
                   <div className="text-xs text-gray-500">
                     <span className="font-medium">时间：</span>{act.duration}
+                  </div>
+                )}
+                {act.evidence && act.evidence.length > 0 && (
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setEvidenceIndex(evidenceIndex === i ? null : i)}
+                      className="text-xs text-primary-700 hover:text-primary-600 flex items-center gap-1"
+                    >
+                      <span className={`transition-transform ${evidenceIndex === i ? "rotate-90" : ""}`}>▶</span>
+                      {evidenceIndex === i ? "收起设计依据" : `设计依据 (${act.evidence.length})`}
+                    </button>
+                    {evidenceIndex === i && (
+                      <div className="mt-2">
+                        <EvidenceDrawer evidence={act.evidence} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

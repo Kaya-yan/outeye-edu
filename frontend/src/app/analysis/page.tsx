@@ -7,6 +7,9 @@ import dynamic from "next/dynamic";
 import WhiteboxResults from "@/components/WhiteboxResults";
 import TeachingPlanView from "@/components/TeachingPlanView";
 import FileUploadZone from "@/components/FileUploadZone";
+import TeachingContextPanel from "@/components/TeachingContextPanel";
+import BlueprintOverview from "@/components/BlueprintOverview";
+import { Blueprint, TeachingContext } from "@/lib/analysis";
 
 const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
   ssr: false,
@@ -77,26 +80,6 @@ interface WhiteboxAnalysis {
   analysis_duration: number;
 }
 
-interface RetrievalResult {
-  wiki_results: Array<{
-    page_name: string;
-    title: string;
-    summary: string;
-    relevance_score: number;
-    match_type: string;
-    tags: string[];
-  }>;
-  rag_results: Array<{
-    chunk_id: string;
-    content: string;
-    score: number;
-    metadata: Record<string, unknown>;
-  }>;
-  wiki_count: number;
-  rag_count: number;
-  retrieval_duration: number;
-}
-
 interface TeachingPlan {
   difficulty_overview: string;
   teaching_suggestions: string[];
@@ -105,6 +88,8 @@ interface TeachingPlan {
     objective?: string;
     steps?: string;
     duration?: string;
+    evidence?: { source_type: "wiki" | "rag"; title: string; relevance: number; content: string }[];
+    degraded?: boolean;
   }>;
   differentiation: string;
   theoretical_basis: string;
@@ -117,7 +102,9 @@ interface GeneratePlanResult {
   learner_gap: { gap: string; gap_description: string };
   enhancement_tags: string[];
   tag_labels?: Record<string, string>;
+  teaching_blueprint: Blueprint | null;
   teaching_plan: TeachingPlan;
+  evidence_annotations: Record<string, unknown> | null;
   sources: Array<{ type: string; title?: string; score?: number }>;
   retrieval_info: { wiki_count: number; rag_count: number; retrieval_duration: number };
   generation_duration: number;
@@ -125,7 +112,7 @@ interface GeneratePlanResult {
   model: string;
 }
 
-type Step = "input" | "analysis" | "retrieval" | "plan";
+type Step = "input" | "analysis" | "plan";
 
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
@@ -155,8 +142,8 @@ export default function AnalysisPage() {
   const [error, setError] = useState("");
 
   const [analysis, setAnalysis] = useState<WhiteboxAnalysis | null>(null);
-  const [retrieval, setRetrieval] = useState<RetrievalResult | null>(null);
   const [planResult, setPlanResult] = useState<GeneratePlanResult | null>(null);
+  const [showContextPanel, setShowContextPanel] = useState(false);
 
   // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
   const wordCount = (() => {
@@ -194,41 +181,22 @@ export default function AnalysisPage() {
     }
   };
 
-  // Step 2: Dual Retrieval
-  const handleRetrieve = async () => {
-    if (!analysis) return;
+  // Step 2: Generate Teaching Plan（含双源检索，内部完成）
+  const handleGenerate = async (context: TeachingContext) => {
     setError("");
     setLoading(true);
-    try {
-      const result = await apiPost<RetrievalResult>("/analysis/retrieve", {
-        wiki_tags: analysis.wiki_tags,
-        rag_tags: analysis.rag_tags,
-        enhancement_tags: analysis.enhancement_tags,
-        text_title: title,
-        max_results: 3,
-      });
-      setRetrieval(result);
-      setStep("retrieval");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "检索失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 3: Generate Teaching Plan
-  const handleGenerate = async () => {
-    setError("");
-    setLoading(true);
+    setShowContextPanel(false);
     try {
       const result = await apiPost<GeneratePlanResult>("/analysis/generate-plan", {
         text,
         title,
-        student_level: studentLevel,
+        student_level: context.studentLevel,
         language: language || undefined,
         native_language: nativeLanguage || undefined,
-        course_type: courseType || undefined,
-        class_size: classSize ? parseInt(classSize) : undefined,
+        course_type: context.courseType || undefined,
+        class_size: context.classSize || undefined,
+        duration_minutes: context.durationMinutes,
+        mode: context.mode,
         max_retrieval_results: 3,
       });
       setPlanResult(result);
@@ -244,8 +212,8 @@ export default function AnalysisPage() {
   const handleReset = () => {
     setStep("input");
     setAnalysis(null);
-    setRetrieval(null);
     setPlanResult(null);
+    setShowContextPanel(false);
     setError("");
   };
 
@@ -319,18 +287,8 @@ export default function AnalysisPage() {
             <AnalysisStep
               analysis={analysis}
               loading={loading}
-              onRetrieve={handleRetrieve}
+              onNext={() => setShowContextPanel(true)}
               onBack={() => setStep("input")}
-            />
-          )}
-
-          {step === "retrieval" && analysis && retrieval && (
-            <RetrievalStep
-              analysis={analysis}
-              retrieval={retrieval}
-              loading={loading}
-              onGenerate={handleGenerate}
-              onBack={() => setStep("analysis")}
             />
           )}
 
@@ -347,6 +305,16 @@ export default function AnalysisPage() {
           )}
         </div>
       </div>
+
+      {/* Teaching Context Panel Modal */}
+      {showContextPanel && (
+        <TeachingContextPanel
+          initialStudentLevel={studentLevel}
+          onConfirm={handleGenerate}
+          onCancel={() => setShowContextPanel(false)}
+          loading={loading}
+        />
+      )}
     </div>
   );
 }
@@ -357,13 +325,12 @@ function Stepper({ current }: { current: Step }) {
   const steps: { key: Step; label: string; icon: string; hint: string }[] = [
     { key: "input", label: "输入课文", icon: "📝", hint: "准备文本" },
     { key: "analysis", label: "白盒分析", icon: "📊", hint: "形成判断" },
-    { key: "retrieval", label: "双源检索", icon: "🔍", hint: "补证据" },
     { key: "plan", label: "教学方案", icon: "📋", hint: "进入课件" },
   ];
   const currentIdx = steps.findIndex((s) => s.key === current);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-3">
       {steps.map((s, i) => {
         const isCurrent = i === currentIdx;
         const isDone = i < currentIdx;
@@ -608,12 +575,12 @@ function InputStep({
 function AnalysisStep({
   analysis,
   loading,
-  onRetrieve,
+  onNext,
   onBack,
 }: {
   analysis: WhiteboxAnalysis;
   loading: boolean;
-  onRetrieve: () => void;
+  onNext: () => void;
   onBack: () => void;
 }) {
   return (
@@ -639,130 +606,18 @@ function AnalysisStep({
           返回修改
         </button>
         <button
-          onClick={onRetrieve}
+          onClick={onNext}
           disabled={loading}
           className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? "检索中..." : "下一步：双源检索"}
+          {loading ? "处理中..." : "下一步：生成教学设计"}
         </button>
       </div>
     </div>
   );
 }
 
-// ============ Step 3: Retrieval ============
-
-function RetrievalStep({
-  analysis,
-  retrieval,
-  loading,
-  onGenerate,
-  onBack,
-}: {
-  analysis: WhiteboxAnalysis;
-  retrieval: RetrievalResult;
-  loading: boolean;
-  onGenerate: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="workbench-panel space-y-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="section-title mb-2">Step 3</div>
-            <h2 className="text-2xl font-semibold text-ink-900">双源检索结果</h2>
-          </div>
-          <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft">
-            耗时 {retrieval.retrieval_duration}s
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
-          <div className="data-card text-center bg-primary-50/70 border-primary-100">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Wiki</div>
-            <div className="mt-2 text-3xl font-semibold text-ink-900">{retrieval.wiki_count}</div>
-            <div className="text-xs text-ink-500 mt-1">相关理论被召回</div>
-          </div>
-          <div className="data-card text-center bg-sage-50/80 border-sage-200">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">RAG</div>
-            <div className="mt-2 text-3xl font-semibold text-ink-900">{retrieval.rag_count}</div>
-            <div className="text-xs text-ink-500 mt-1">相关教学资源</div>
-          </div>
-        </div>
-
-        {/* Wiki Results */}
-        {retrieval.wiki_results.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">📖 Wiki 教学理论</h3>
-            <div className="space-y-2">
-              {retrieval.wiki_results.map((r, i) => (
-                <div key={i} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-blue-800">{r.title}</span>
-                    <span className="text-xs text-blue-500">相关度 {(r.relevance_score * 100).toFixed(0)}%</span>
-                  </div>
-                  {r.summary && <p className="text-xs text-blue-600 mt-1 line-clamp-2">{r.summary}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* RAG Results */}
-        {retrieval.rag_results.length > 0 && (
-          <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-2">📄 教学资源</h3>
-            <div className="space-y-2">
-              {retrieval.rag_results.map((r, i) => (
-                <div key={i} className="p-3 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-green-800">
-                      {(r.metadata as { title?: string })?.title || `文档 ${i + 1}`}
-                    </span>
-                    <span className="text-xs text-green-500">相关度 {(r.score * 100).toFixed(0)}%</span>
-                  </div>
-                  <p className="text-xs text-green-600 line-clamp-2">{r.content}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {retrieval.wiki_count === 0 && retrieval.rag_count === 0 && (
-          <p className="text-sm text-gray-500 text-center py-4">
-            未检索到相关资源，将基于分析指标直接生成教学方案
-          </p>
-        )}
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          onClick={onBack}
-          className="px-6 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          返回分析
-        </button>
-        <button
-          onClick={onGenerate}
-          disabled={loading}
-          className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
-        >
-          {loading ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              AI 生成中...
-            </span>
-          ) : (
-            "生成教学方案"
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ============ Step 4: Plan ============
+// ============ Step 3: Plan ============
 
 function PlanStep({
   result,
@@ -787,6 +642,7 @@ function PlanStep({
   const [revising, setRevising] = useState(false);
   const [revisionError, setRevisionError] = useState("");
   const [creatingCourseware, setCreatingCourseware] = useState(false);
+  const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
 
   const handleCreateCourseware = async () => {
     setCreatingCourseware(true);
@@ -894,7 +750,7 @@ function PlanStep({
       <div className="workbench-panel">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-5">
           <div>
-            <div className="section-title mb-2">Step 4</div>
+            <div className="section-title mb-2">Step 3</div>
             <h2 className="text-2xl font-semibold text-ink-900">教学方案</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -930,20 +786,27 @@ function PlanStep({
           ))}
         </div>
 
-        <TeachingPlanView
-          plan={result.teaching_plan}
-          sources={result.sources}
-          model={result.model}
-          duration={result.generation_duration}
-          onExport={handleExport}
-          exporting={exporting}
-          onRevise={handleRevise}
-          revising={revising}
-          text={text}
-          title={title}
-          studentLevel={studentLevel}
-          language={language}
-        />
+        {result.teaching_blueprint && !blueprintConfirmed ? (
+          <BlueprintOverview
+            blueprint={result.teaching_blueprint}
+            onConfirm={() => setBlueprintConfirmed(true)}
+          />
+        ) : (
+          <TeachingPlanView
+            plan={result.teaching_plan}
+            sources={result.sources}
+            model={result.model}
+            duration={result.generation_duration}
+            onExport={handleExport}
+            exporting={exporting}
+            onRevise={handleRevise}
+            revising={revising}
+            text={text}
+            title={title}
+            studentLevel={studentLevel}
+            language={language}
+          />
+        )}
 
         {exportError && (
           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
