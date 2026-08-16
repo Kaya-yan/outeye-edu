@@ -105,6 +105,7 @@ class TestFileIngestionProcessor:
         class FakeDoc:
             id = "parser-doc-id"
             title = "lesson.txt"
+            content = "hello"
             chunks = [FakeChunk()]
 
         class FakeParser:
@@ -145,3 +146,57 @@ class TestFileIngestionProcessor:
         assert fake_store.records[0].payload["doc_id"] == "doc-123"
         assert fake_store.records[0].payload["scope"] == "private"
         assert fake_store.records[0].payload["owner_id"] == "user-1"
+
+    def test_ingest_file_emits_stages(self, monkeypatch):
+        """文件处理器应依次发出 parsing/chunking/embedding 阶段"""
+        from app.services.ingestion.processor import _ingest_file_sync
+
+        class FakeChunk:
+            def __init__(self):
+                self.id = "chunk-1"
+                self.doc_id = "parser-doc-id"
+                self.content = "hello"
+                self.metadata = {}
+
+        class FakeDoc:
+            id = "parser-doc-id"
+            title = "lesson.txt"
+            content = "hello"
+            chunks = [FakeChunk(), FakeChunk()]
+
+        class FakeParser:
+            def parse_file(self, path):
+                return FakeDoc()
+
+        class FakeEmbedding:
+            def embed_text(self, text):
+                return type("R", (), {"embedding": [0.1, 0.2, 0.3]})()
+
+        class FakeVectorStore:
+            def upsert(self, records):
+                return True
+
+        monkeypatch.setattr(
+            "app.api.api_v1.endpoints.rag.get_rag_services",
+            lambda: {
+                "parser": FakeParser(),
+                "embedding": FakeEmbedding(),
+                "vector_store": FakeVectorStore(),
+                "retriever": None,
+                "generator": None,
+            },
+        )
+
+        stages = []
+
+        def cb(stage, progress=None):
+            stages.append(stage)
+
+        _ingest_file_sync(
+            "lesson.txt", b"hello world", "doc-123", {"user_id": "user-1"},
+            progress_callback=cb,
+        )
+
+        assert stages[0] == "parsing"
+        assert "chunking" in stages
+        assert "embedding" in stages

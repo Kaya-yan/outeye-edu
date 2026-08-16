@@ -8,6 +8,12 @@ from app.services.ingestion.jobs import (
     JOB_PROCESSING,
     JOB_DONE,
     JOB_ERROR,
+    STAGE_RECEIVED,
+    STAGE_PARSING,
+    STAGE_CHUNKING,
+    STAGE_EMBEDDING,
+    STAGE_DONE,
+    STAGE_ERROR,
 )
 from app.services.ingestion.queue import IngestionQueue
 
@@ -18,4 +24,10 @@ __all__ = [
     "JOB_PROCESSING",
     "JOB_DONE",
     "JOB_ERROR",
+    "STAGE_RECEIVED",
+    "STAGE_PARSING",
+    "STAGE_CHUNKING",
+    "STAGE_EMBEDDING",
+    "STAGE_DONE",
+    "STAGE_ERROR",
 ]

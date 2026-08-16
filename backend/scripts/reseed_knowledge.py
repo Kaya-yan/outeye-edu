@@ -12,8 +12,13 @@
 - 只删除 scope=system 的 points，不影响用户 private 数据
 """
 
+import os
 import sys
 from pathlib import Path
+
+# 服务器无法访问 huggingface.co，强制离线模式，避免加载模型时联网校验失败
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 # 让脚本可直接执行，无需手动设置 PYTHONPATH
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

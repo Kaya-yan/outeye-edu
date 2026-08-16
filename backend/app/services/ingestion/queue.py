@@ -15,7 +15,10 @@ from app.services.ingestion.jobs import (
     JOB_PROCESSING,
     JOB_DONE,
     JOB_ERROR,
+    STAGE_DONE,
+    STAGE_ERROR,
 )
+from app.services.ingestion.errors import IngestionError
 
 
 class IngestionQueue:
@@ -35,7 +38,7 @@ class IngestionQueue:
         """查询任务状态"""
         return self._jobs.get(job_id)
 
-    async def worker(self, processor: Callable[[Dict], Awaitable[Dict]]):
+    async def worker(self, processor: Callable[..., Awaitable[Dict]]):
         """单线程 worker：顺序消费队列，调用 processor 处理任务"""
         while True:
             job_id = await self._queue.get()
@@ -45,12 +48,26 @@ class IngestionQueue:
                 continue
 
             job.status = JOB_PROCESSING
+
+            def progress_callback(stage: str, progress: Optional[Dict[str, int]] = None):
+                job.stage = stage
+                if progress is not None:
+                    job.progress = progress
+
             try:
-                job.result = await processor(job.payload)
+                job.result = await processor(job.payload, progress_callback=progress_callback)
                 job.status = JOB_DONE
+                job.stage = STAGE_DONE
                 logger.info(f"入库任务完成: {job_id}")
+            except IngestionError as e:
+                job.status = JOB_ERROR
+                job.stage = STAGE_ERROR
+                job.error = str(e)
+                job.error_code = e.error_code
+                logger.error(f"入库任务失败: {job_id}: [{e.error_code}] {e}")
             except Exception as e:
                 job.status = JOB_ERROR
+                job.stage = STAGE_ERROR
                 job.error = str(e)
                 logger.error(f"入库任务失败: {job_id}: {e}")
             finally:

@@ -59,6 +59,11 @@ class CollectionStatsResponse(BaseModel):
     status: str
 
 
+class RAGStatusResponse(BaseModel):
+    """RAG 系统状态响应"""
+    status: str  # "ready" | "loading"
+
+
 # ============ 服务初始化 ============
 
 # 延迟初始化服务
@@ -449,6 +454,17 @@ async def get_collection_stats(
         raise handle_api_error(e, "获取统计信息")
 
 
+@router.get("/status", response_model=RAGStatusResponse)
+async def get_rag_status(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    获取 RAG 系统状态（仅检查 Embedding 模型是否已加载，不触发加载）
+    """
+    status_value = "ready" if _embedding_service is not None else "loading"
+    return RAGStatusResponse(status=status_value)
+
+
 @router.delete("/documents/{doc_id}")
 async def delete_document(
     doc_id: str,
@@ -542,8 +558,11 @@ class JobStatusResponse(BaseModel):
     """入库任务状态响应"""
     id: str
     status: str
+    stage: str = "received"
+    progress: Optional[Dict[str, int]] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    error_code: Optional[str] = None
 
 
 @router.post("/upload-async", response_model=AsyncUploadResponse)
@@ -587,6 +606,9 @@ async def get_job_status(
     return JobStatusResponse(
         id=job.id,
         status=job.status,
+        stage=job.stage,
+        progress=job.progress,
         result=job.result,
         error=job.error,
+        error_code=job.error_code,
     )
