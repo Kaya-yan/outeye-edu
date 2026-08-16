@@ -9,6 +9,7 @@ import TeachingPlanView from "@/components/TeachingPlanView";
 import FileUploadZone from "@/components/FileUploadZone";
 import TeachingContextPanel from "@/components/TeachingContextPanel";
 import BlueprintOverview from "@/components/BlueprintOverview";
+import PlanEvaluationForm from "@/components/PlanEvaluationForm";
 import { Blueprint, TeachingContext } from "@/lib/analysis";
 
 const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
@@ -142,7 +143,9 @@ export default function AnalysisPage() {
   const [error, setError] = useState("");
 
   const [analysis, setAnalysis] = useState<WhiteboxAnalysis | null>(null);
-  const [planResult, setPlanResult] = useState<GeneratePlanResult | null>(null);
+  const [versions, setVersions] = useState<{ basic?: GeneratePlanResult; enhanced?: GeneratePlanResult }>({});
+  const [activeVersion, setActiveVersion] = useState<"basic" | "enhanced">("enhanced");
+  const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
 
   // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
@@ -182,10 +185,9 @@ export default function AnalysisPage() {
   };
 
   // Step 2: Generate Teaching Plan（含双源检索，内部完成）
-  const handleGenerate = async (context: TeachingContext) => {
+  const generateVersion = async (context: TeachingContext, mode: "basic" | "enhanced") => {
     setError("");
     setLoading(true);
-    setShowContextPanel(false);
     try {
       const result = await apiPost<GeneratePlanResult>("/analysis/generate-plan", {
         text,
@@ -196,10 +198,11 @@ export default function AnalysisPage() {
         course_type: context.courseType || undefined,
         class_size: context.classSize || undefined,
         duration_minutes: context.durationMinutes,
-        mode: context.mode,
+        mode,
         max_retrieval_results: 3,
       });
-      setPlanResult(result);
+      setVersions((prev) => ({ ...prev, [mode]: result }));
+      setActiveVersion(mode);
       setStep("plan");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "生成失败");
@@ -208,11 +211,25 @@ export default function AnalysisPage() {
     }
   };
 
+  const handleGenerate = async (context: TeachingContext) => {
+    setLastContext(context);
+    setShowContextPanel(false);
+    await generateVersion(context, context.mode);
+  };
+
+  const handleGenerateOther = async () => {
+    if (!lastContext) return;
+    const other = activeVersion === "basic" ? "enhanced" : "basic";
+    await generateVersion(lastContext, other);
+  };
+
   // Reset
   const handleReset = () => {
     setStep("input");
     setAnalysis(null);
-    setPlanResult(null);
+    setVersions({});
+    setActiveVersion("enhanced");
+    setLastContext(null);
     setShowContextPanel(false);
     setError("");
   };
@@ -292,11 +309,16 @@ export default function AnalysisPage() {
             />
           )}
 
-          {step === "plan" && planResult && (
+          {step === "plan" && versions[activeVersion] && (
             <PlanStep
-              result={planResult}
+              result={versions[activeVersion]!}
+              versions={versions}
+              activeVersion={activeVersion}
+              onSwitchVersion={setActiveVersion}
+              onGenerateOther={handleGenerateOther}
+              generatingOther={loading}
               onReset={handleReset}
-              onUpdate={setPlanResult}
+              onUpdate={(mode, r) => setVersions((prev) => ({ ...prev, [mode]: r }))}
               text={text}
               title={title}
               studentLevel={studentLevel}
@@ -621,6 +643,11 @@ function AnalysisStep({
 
 function PlanStep({
   result,
+  versions,
+  activeVersion,
+  onSwitchVersion,
+  onGenerateOther,
+  generatingOther,
   onReset,
   onUpdate,
   text,
@@ -629,8 +656,13 @@ function PlanStep({
   language,
 }: {
   result: GeneratePlanResult;
+  versions: { basic?: GeneratePlanResult; enhanced?: GeneratePlanResult };
+  activeVersion: "basic" | "enhanced";
+  onSwitchVersion: (v: "basic" | "enhanced") => void;
+  onGenerateOther: () => void;
+  generatingOther: boolean;
   onReset: () => void;
-  onUpdate?: (r: GeneratePlanResult) => void;
+  onUpdate?: (mode: "basic" | "enhanced", r: GeneratePlanResult) => void;
   text?: string;
   title?: string;
   studentLevel?: string;
@@ -643,6 +675,10 @@ function PlanStep({
   const [revisionError, setRevisionError] = useState("");
   const [creatingCourseware, setCreatingCourseware] = useState(false);
   const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
+
+  const availableVersions = (["basic", "enhanced"] as const).filter(
+    (v) => versions[v]
+  );
 
   const handleCreateCourseware = async () => {
     setCreatingCourseware(true);
@@ -685,7 +721,7 @@ function PlanStep({
       });
 
       if (onUpdate) {
-        onUpdate({
+        onUpdate(activeVersion, {
           ...result,
           teaching_plan: resp.teaching_plan,
           generation_duration: resp.generation_duration,
@@ -757,6 +793,34 @@ function PlanStep({
             <span className="rounded-full bg-canvas-200 px-3 py-1.5 text-ink-600 shadow-soft">{result.text_level} → {result.student_level}</span>
             <span className="rounded-full bg-sage-100 px-3 py-1.5 text-ink-700 shadow-soft">总耗时 {result.total_duration}s</span>
           </div>
+        </div>
+
+        {/* A/B 版本切换 */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {availableVersions.map((v) => (
+            <button
+              key={v}
+              onClick={() => onSwitchVersion(v)}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                activeVersion === v
+                  ? "bg-primary-500 text-ink-900"
+                  : "border border-black/10 bg-white text-ink-600 hover:bg-canvas-100"
+              }`}
+            >
+              {v === "basic" ? "基础模式" : "增强模式"}
+            </button>
+          ))}
+          {availableVersions.length < 2 && (
+            <button
+              onClick={onGenerateOther}
+              disabled={generatingOther}
+              className="rounded-xl border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generatingOther
+                ? "生成中..."
+                : `生成${activeVersion === "basic" ? "增强" : "基础"}版本`}
+            </button>
+          )}
         </div>
 
         <div className="archive-surface p-4 mb-4">
@@ -871,6 +935,8 @@ function PlanStep({
           </div>
         </div>
       </div>
+
+      <PlanEvaluationForm chosenVersion={activeVersion} />
 
       <button
         onClick={onReset}
