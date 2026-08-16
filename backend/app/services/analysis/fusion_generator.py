@@ -244,6 +244,7 @@ def generate_teaching_plan(
     analysis: Dict[str, Any],
     wiki_results: List[Dict],
     rag_results: List[Dict],
+    mode: str = "enhanced",
 ) -> TeachingPlan:
     """
     生成教学方案
@@ -254,6 +255,7 @@ def generate_teaching_plan(
         analysis: 白盒分析结果（完整响应）
         wiki_results: Wiki 检索结果
         rag_results: RAG 检索结果
+        mode: 生成模式（basic 精简版 / enhanced 含证据标注）
 
     Returns:
         教学方案
@@ -307,16 +309,19 @@ def generate_teaching_plan(
     # 解析生成结果
     plan = _parse_plan(answer, wiki_results, rag_results, time.time() - start_time, model_name=model_name)
 
-    # 可追溯证据标注：为每条建议/活动绑定引用或显式降级
-    from app.services.analysis.citation import annotate_plan
-    plan_dict = {
-        "difficulty_overview": plan.difficulty_overview,
-        "teaching_suggestions": plan.teaching_suggestions,
-        "activity_designs": plan.activity_designs,
-        "differentiation": plan.differentiation,
-        "theoretical_basis": plan.theoretical_basis,
-    }
-    plan.evidence_annotations = annotate_plan(plan_dict, wiki_results, rag_results)
+    # 可追溯证据标注：仅增强模式为每条建议/活动绑定引用或显式降级
+    if mode == "enhanced":
+        from app.services.analysis.citation import annotate_plan
+        plan_dict = {
+            "difficulty_overview": plan.difficulty_overview,
+            "teaching_suggestions": plan.teaching_suggestions,
+            "activity_designs": plan.activity_designs,
+            "differentiation": plan.differentiation,
+            "theoretical_basis": plan.theoretical_basis,
+        }
+        plan.evidence_annotations = annotate_plan(plan_dict, wiki_results, rag_results)
+    else:
+        plan.evidence_annotations = {}
 
     return plan
 

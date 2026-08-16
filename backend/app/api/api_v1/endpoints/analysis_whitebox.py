@@ -443,6 +443,8 @@ class GeneratePlanRequest(BaseModel):
     native_language: Optional[str] = Field(None, description="学生母语代码", pattern=r"^[a-z]{2}$")
     course_type: Optional[str] = Field(None, description="课程类型：精读/泛读/听说/写作/综合")
     class_size: Optional[int] = Field(None, description="班级人数", ge=1, le=200)
+    duration_minutes: int = Field(90, description="课时时长（分钟）", ge=5, le=180)
+    mode: str = Field("enhanced", description="生成模式：basic/enhanced", pattern=r"^(basic|enhanced)$")
     max_retrieval_results: int = Field(3, description="每源最大检索数", ge=1, le=10)
 
 
@@ -575,13 +577,23 @@ async def generate_teaching_plan(
             analysis=analysis_dict,
             wiki_results=wiki_results,
             rag_results=rag_results,
+            mode=request.mode,
         )
 
-        # 教学蓝图（单独展示）
-        from app.services.analysis.blueprint import build_teaching_blueprint
-        blueprint = build_teaching_blueprint(analysis_dict, {
-            "activity_designs": plan.activity_designs,
-        }, wiki_results)
+        # 教学蓝图（仅增强模式单独展示）
+        if request.mode == "enhanced":
+            from app.services.analysis.blueprint import build_teaching_blueprint
+            blueprint = build_teaching_blueprint(
+                analysis_dict,
+                {"activity_designs": plan.activity_designs},
+                wiki_results,
+                rag_results,
+                request.duration_minutes,
+            )
+            evidence_annotations = plan.evidence_annotations
+        else:
+            blueprint = None
+            evidence_annotations = None
 
         total_duration = time.time() - start_time
 
@@ -600,7 +612,7 @@ async def generate_teaching_plan(
                 "differentiation": plan.differentiation,
                 "theoretical_basis": plan.theoretical_basis,
             },
-            "evidence_annotations": plan.evidence_annotations,
+            "evidence_annotations": evidence_annotations,
             "sources": plan.sources,
             "retrieval_info": {
                 "wiki_count": retrieval_result.wiki_count,
