@@ -577,6 +577,12 @@ async def generate_teaching_plan(
             rag_results=rag_results,
         )
 
+        # 教学蓝图（单独展示）
+        from app.services.analysis.blueprint import build_teaching_blueprint
+        blueprint = build_teaching_blueprint(analysis_dict, {
+            "activity_designs": plan.activity_designs,
+        }, wiki_results)
+
         total_duration = time.time() - start_time
 
         response = {
@@ -586,6 +592,7 @@ async def generate_teaching_plan(
             "learner_gap": analysis_dict["learner_gap"],
             "enhancement_tags": analysis_result.enhancement_tags,
             "tag_labels": analysis_result.tag_labels,
+            "teaching_blueprint": blueprint,
             "teaching_plan": {
                 "difficulty_overview": plan.difficulty_overview,
                 "teaching_suggestions": plan.teaching_suggestions,
@@ -593,6 +600,7 @@ async def generate_teaching_plan(
                 "differentiation": plan.differentiation,
                 "theoretical_basis": plan.theoretical_basis,
             },
+            "evidence_annotations": plan.evidence_annotations,
             "sources": plan.sources,
             "retrieval_info": {
                 "wiki_count": retrieval_result.wiki_count,
@@ -610,6 +618,37 @@ async def generate_teaching_plan(
     except Exception as e:
         logger.error(f"教学方案生成失败: {e}")
         raise HTTPException(status_code=500, detail="教案生成失败，请稍后重试")
+
+
+# ============ A/B 评价端点 ============
+
+class ABEvaluationRequest(BaseModel):
+    """A/B 评价请求"""
+    chosen_version: str = Field(..., description="选择版本: baseline 或 enhanced", pattern=r"^(baseline|enhanced)$")
+    rating: Optional[int] = Field(None, description="评分 1-5", ge=1, le=5)
+    comment: Optional[str] = Field(None, description="评价内容")
+
+
+@router.post("/ab-evaluate")
+async def submit_ab_evaluation(
+    request: ABEvaluationRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """提交 A/B 两版评价"""
+    from app.services.analysis.ab_evaluation import record_ab_evaluation
+
+    try:
+        result = await record_ab_evaluation(
+            db,
+            user_id=current_user["user_id"],
+            chosen_version=request.chosen_version,
+            rating=request.rating,
+            comment=request.comment,
+        )
+        return result
+    except Exception as e:
+        raise handle_api_error(e, "A/B 评价提交")
 
 
 # ============ 导出端点 ============

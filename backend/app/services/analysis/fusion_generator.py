@@ -11,7 +11,7 @@
 """
 
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from loguru import logger
 import time
 import re
@@ -28,6 +28,7 @@ class TeachingPlan:
     sources: List[Dict[str, Any]]  # 参考来源
     generation_duration: float
     model: str
+    evidence_annotations: Dict[str, Any] = field(default_factory=dict)  # 可追溯证据标注
 
 
 # 系统 Prompt 模板
@@ -305,6 +306,17 @@ def generate_teaching_plan(
 
     # 解析生成结果
     plan = _parse_plan(answer, wiki_results, rag_results, time.time() - start_time, model_name=model_name)
+
+    # 可追溯证据标注：为每条建议/活动绑定引用或显式降级
+    from app.services.analysis.citation import annotate_plan
+    plan_dict = {
+        "difficulty_overview": plan.difficulty_overview,
+        "teaching_suggestions": plan.teaching_suggestions,
+        "activity_designs": plan.activity_designs,
+        "differentiation": plan.differentiation,
+        "theoretical_basis": plan.theoretical_basis,
+    }
+    plan.evidence_annotations = annotate_plan(plan_dict, wiki_results, rag_results)
 
     return plan
 

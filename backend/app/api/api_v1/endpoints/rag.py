@@ -11,6 +11,8 @@ from loguru import logger
 
 from app.utils.error_handler import handle_api_error
 
+from app.core.security import get_current_user
+
 router = APIRouter()
 
 
@@ -126,7 +128,7 @@ def get_rag_services():
 
 # ============ API端点 ============
 
-def _do_upload(title: str, content: str, metadata: dict) -> dict:
+def _do_upload(title: str, content: str, metadata: dict, current_user: dict = None) -> dict:
     """同步阻塞操作：解析、Embedding、存储"""
     services = get_rag_services()
     parser = services['parser']
@@ -138,6 +140,9 @@ def _do_upload(title: str, content: str, metadata: dict) -> dict:
 
     from app.services.rag.vector_store import VectorRecord
     from app.services.rag.retriever import DocumentChunk as RetrieverChunk
+    from app.core.scope import build_upload_scope
+
+    scope_fields = build_upload_scope(current_user or {})
 
     records = []
     retriever_chunks = []
@@ -146,16 +151,24 @@ def _do_upload(title: str, content: str, metadata: dict) -> dict:
         embed_result = embedding.embed_text(chunk.content)
         embedding_vector = embed_result.embedding
 
+        payload = {
+            'doc_id': chunk.doc_id,
+            'content': chunk.content,
+            'title': title,
+            'metadata': chunk.metadata,
+            **scope_fields,
+        }
         record = VectorRecord(
             id=chunk.id,
             vector=embedding_vector,
-            payload={'doc_id': chunk.doc_id, 'content': chunk.content, 'title': title, 'metadata': chunk.metadata}
+            payload=payload
         )
         records.append(record)
 
         retriever_chunks.append(RetrieverChunk(
             id=chunk.id, doc_id=chunk.doc_id, content=chunk.content,
-            embedding=embedding_vector, metadata=chunk.metadata
+            embedding=embedding_vector,
+            metadata={**chunk.metadata, **scope_fields}
         ))
 
     success = vector_store.upsert(records)
@@ -174,10 +187,13 @@ def _do_upload(title: str, content: str, metadata: dict) -> dict:
 
 
 @router.post("/upload", response_model=Dict[str, Any])
-def upload_document(request: DocumentUploadRequest):
+def upload_document(
+    request: DocumentUploadRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """上传文档（解析、分块、向量化）"""
     try:
-        result = _do_upload(request.title, request.content, request.metadata)
+        result = _do_upload(request.title, request.content, request.metadata, current_user)
         logger.info(f"文档上传成功: {request.title}, {result['chunks_count']} 个块")
         return result
     except Exception as e:
@@ -185,7 +201,10 @@ def upload_document(request: DocumentUploadRequest):
 
 
 @router.post("/upload-file", response_model=Dict[str, Any])
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
     """
     上传文件
 
@@ -203,6 +222,11 @@ async def upload_file(file: UploadFile = File(...)):
         import os
 
         suffix = os.path.splitext(file.filename)[1].lower()
+        if suffix == ".doc":
+            raise HTTPException(
+                status_code=400,
+                detail="不支持旧版 .doc 格式，请先另存为 .docx 后再上传"
+            )
         if suffix not in settings.ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
@@ -231,6 +255,9 @@ async def upload_file(file: UploadFile = File(...)):
             # 生成Embedding并存储（只计算一次）
             from app.services.rag.vector_store import VectorRecord
             from app.services.rag.retriever import DocumentChunk as RetrieverChunk
+            from app.core.scope import build_upload_scope
+
+            scope_fields = build_upload_scope(current_user)
 
             records = []
             retriever_chunks = []
@@ -249,7 +276,8 @@ async def upload_file(file: UploadFile = File(...)):
                         'content': chunk.content,
                         'title': doc.title,
                         'file_name': file.filename,
-                        'metadata': chunk.metadata
+                        'metadata': chunk.metadata,
+                        **scope_fields,
                     }
                 )
                 records.append(record)
@@ -260,7 +288,7 @@ async def upload_file(file: UploadFile = File(...)):
                     doc_id=chunk.doc_id,
                     content=chunk.content,
                     embedding=embedding_vector,
-                    metadata=chunk.metadata
+                    metadata={**chunk.metadata, **scope_fields}
                 ))
 
             # 存储
@@ -291,7 +319,14 @@ async def upload_file(file: UploadFile = File(...)):
         raise handle_api_error(e, "文件上传")
 
 
-def _do_query(query: str, method: str, top_k: int, filter_conditions: dict) -> dict:
+def _filter_by_scope(results: list, current_user: dict) -> list:
+    """按三层作用域过滤检索结果（system 全员可见 / private 仅所有者 / organization 同组织）"""
+    from app.core.scope import can_access
+
+    return [r for r in results if can_access(r.metadata, current_user or {})]
+
+
+def _do_query(query: str, method: str, top_k: int, filter_conditions: dict, current_user: dict = None) -> dict:
     """同步阻塞操作：检索+重排序+生成（在线程池中运行）"""
     services = get_rag_services()
     retriever = services['retriever']
@@ -300,6 +335,7 @@ def _do_query(query: str, method: str, top_k: int, filter_conditions: dict) -> d
     retrieval_results = retriever.retrieve(
         query=query, method=method, top_k=top_k, filter_conditions=filter_conditions
     )
+    retrieval_results = _filter_by_scope(retrieval_results, current_user)
     retrieval_results = retriever.rerank(query=query, results=retrieval_results, top_k=top_k)
     result = generator.generate(query=query, retrieval_results=retrieval_results, include_sources=True)
 
@@ -313,17 +349,20 @@ def _do_query(query: str, method: str, top_k: int, filter_conditions: dict) -> d
 
 
 @router.post("/query", response_model=RAGQueryResponse)
-def query_rag(request: RAGQueryRequest):
+def query_rag(
+    request: RAGQueryRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """RAG查询 — 同步函数，FastAPI自动在线程池中运行"""
     try:
-        data = _do_query(request.query, request.method, request.top_k, request.filter_conditions)
+        data = _do_query(request.query, request.method, request.top_k, request.filter_conditions, current_user)
         logger.info(f"RAG查询完成: {request.query[:50]}...")
         return RAGQueryResponse(**data)
     except Exception as e:
         raise handle_api_error(e, "RAG查询")
 
 
-def _do_wiki_query(query: str, method: str, top_k: int, filter_conditions: dict, use_wiki: bool) -> dict:
+def _do_wiki_query(query: str, method: str, top_k: int, filter_conditions: dict, use_wiki: bool, current_user: dict = None) -> dict:
     """同步阻塞操作：Wiki+RAG联合查询"""
     services = get_rag_services()
     retriever = services['retriever']
@@ -359,6 +398,7 @@ def _do_wiki_query(query: str, method: str, top_k: int, filter_conditions: dict,
     retrieval_results = retriever.retrieve(
         query=query, method=method, top_k=top_k, filter_conditions=filter_conditions
     )
+    retrieval_results = _filter_by_scope(retrieval_results, current_user)
     retrieval_results = retriever.rerank(query=query, results=retrieval_results, top_k=top_k)
     result = generator.generate_with_wiki(query=query, wiki_results=wiki_results, rag_results=retrieval_results)
 
@@ -372,10 +412,13 @@ def _do_wiki_query(query: str, method: str, top_k: int, filter_conditions: dict,
 
 
 @router.post("/query-with-wiki", response_model=RAGQueryResponse)
-def query_with_wiki(request: RAGQueryRequest):
+def query_with_wiki(
+    request: RAGQueryRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Wiki + RAG联合查询 — 同步函数"""
     try:
-        data = _do_wiki_query(request.query, request.method, request.top_k, request.filter_conditions, request.use_wiki)
+        data = _do_wiki_query(request.query, request.method, request.top_k, request.filter_conditions, request.use_wiki, current_user)
         logger.info(f"Wiki+RAG查询完成: {request.query[:50]}...")
         return RAGQueryResponse(**data)
     except Exception as e:
@@ -383,7 +426,9 @@ def query_with_wiki(request: RAGQueryRequest):
 
 
 @router.get("/stats", response_model=CollectionStatsResponse)
-async def get_collection_stats():
+async def get_collection_stats(
+    current_user: dict = Depends(get_current_user),
+):
     """
     获取向量集合统计信息
     """
@@ -405,7 +450,10 @@ async def get_collection_stats():
 
 
 @router.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str):
+async def delete_document(
+    doc_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     删除文档
 
@@ -446,31 +494,99 @@ async def delete_document(doc_id: str):
         raise handle_api_error(e, "删除文档")
 
 
-def _do_search_similar(text: str, top_k: int) -> list:
+def _do_search_similar(text: str, top_k: int, current_user: dict = None) -> list:
     """同步阻塞操作：Embedding + 向量搜索"""
     services = get_rag_services()
     embedding = services['embedding']
     vector_store = services['vector_store']
 
+    from app.core.scope import can_access
+
     embed_result = embedding.embed_text(text)
-    results = vector_store.search(query_vector=embed_result.embedding, top_k=top_k)
+    results = vector_store.search(query_vector=embed_result.embedding, top_k=top_k * 2)
 
     chunks = []
     for result in results:
+        if not can_access(result.payload, current_user or {}):
+            continue
         chunks.append({
             "id": result.id,
             "doc_id": result.payload.get('doc_id', ''),
             "content": result.payload.get('content', ''),
             "metadata": result.payload
         })
-    return chunks
+    return chunks[:top_k]
 
 
 @router.post("/search-similar", response_model=List[DocumentChunkResponse])
-def search_similar(text: str, top_k: int = 5):
+def search_similar(
+    text: str,
+    top_k: int = 5,
+    current_user: dict = Depends(get_current_user),
+):
     """搜索相似文档块 — 同步函数"""
     try:
-        chunks = _do_search_similar(text, top_k)
+        chunks = _do_search_similar(text, top_k, current_user)
         return [DocumentChunkResponse(**c) for c in chunks]
     except Exception as e:
         raise handle_api_error(e, "搜索相似文档")
+
+
+class AsyncUploadResponse(BaseModel):
+    """异步入库提交响应"""
+    job_id: str
+    status: str
+
+
+class JobStatusResponse(BaseModel):
+    """入库任务状态响应"""
+    id: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+@router.post("/upload-async", response_model=AsyncUploadResponse)
+async def upload_document_async(
+    request: DocumentUploadRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """异步上传文档（解析、分块、向量化在后台 worker 中执行）"""
+    import uuid
+
+    from app.services.ingestion.queue import ingestion_queue
+    from app.services.ingestion.jobs import IngestionJob
+
+    job = IngestionJob(
+        id=str(uuid.uuid4()),
+        payload={
+            "title": request.title,
+            "content": request.content,
+            "metadata": request.metadata,
+            "current_user": current_user,
+        },
+        user_id=current_user["user_id"],
+    )
+    job_id = await ingestion_queue.submit(job)
+    logger.info(f"异步入库任务已提交: {job_id} ({request.title})")
+    return AsyncUploadResponse(job_id=job_id, status="pending")
+
+
+@router.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """查询入库任务状态"""
+    from app.services.ingestion.queue import ingestion_queue
+
+    job = ingestion_queue.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    return JobStatusResponse(
+        id=job.id,
+        status=job.status,
+        result=job.result,
+        error=job.error,
+    )

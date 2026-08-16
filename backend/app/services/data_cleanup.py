@@ -12,6 +12,7 @@ from loguru import logger
 from app.core.database import AsyncSessionLocal
 from app.models.learning import LearningRecord, UserBehavior
 from app.models.analysis import AnalysisRecord
+from app.models.document import Document, DocumentChunk
 
 
 # 数据保留策略
@@ -19,6 +20,7 @@ RETENTION_POLICIES = {
     "user_behaviors": 30,  # 用户行为保留 30 天
     "learning_records": 90,  # 学习记录保留 90 天
     "analysis_records": 180,  # 分析记录保留 180 天
+    "documents": 90,  # 用户上传文档保留 90 天
 }
 
 
@@ -42,6 +44,9 @@ class DataCleanupService:
 
         # 清理旧的分析记录（保留摘要）
         results["analysis_records"] = await self.cleanup_old_analysis_records()
+
+        # 清理过期的用户上传文档
+        results["documents"] = await self.cleanup_old_documents()
 
         logger.info(f"数据清理完成: {results}")
         return results
@@ -109,6 +114,33 @@ class DataCleanupService:
             except Exception as e:
                 await session.rollback()
                 logger.error(f"清理分析记录失败: {e}")
+                return 0
+
+    async def cleanup_old_documents(self) -> int:
+        """清理过期的用户上传文档（90 天，不含系统种子）"""
+        days = self.policies["documents"]
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+        async with AsyncSessionLocal() as session:
+            try:
+                # 先删除文档块（外键依赖）
+                chunk_ids = select(DocumentChunk.id).join(
+                    Document, DocumentChunk.document_id == Document.id
+                ).where(Document.created_at < cutoff_date)
+                await session.execute(
+                    delete(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids))
+                )
+                # 再删除文档
+                result = await session.execute(
+                    delete(Document).where(Document.created_at < cutoff_date)
+                )
+                await session.commit()
+                deleted_count = result.rowcount
+                logger.info(f"清理用户上传文档: {deleted_count} 条（超过 {days} 天）")
+                return deleted_count
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"清理用户上传文档失败: {e}")
                 return 0
 
     async def get_database_stats(self) -> dict:

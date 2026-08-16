@@ -84,6 +84,8 @@ class Settings(BaseSettings):
 
     # 管理员邮箱（可选）
     ADMIN_EMAIL: Optional[str] = None
+    # 管理员初始密码（可选，创建管理员账户时使用）
+    ADMIN_PASSWORD: Optional[str] = None
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

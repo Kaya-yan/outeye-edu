@@ -42,6 +42,7 @@ def build_courseware_from_plan(
     learner_gap: Optional[Dict[str, Any]] = None,
     enhancement_tags: Optional[List[str]] = None,
     source_meta: Optional[Dict[str, Any]] = None,
+    components: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     normalized_plan = dict(plan)
     if learner_gap is not None:
@@ -50,9 +51,9 @@ def build_courseware_from_plan(
         normalized_plan["tags"] = enhancement_tags
 
     editor_schema = (
-        _build_slides_schema(title, template_id, normalized_plan, source_meta)
+        _build_slides_schema(title, template_id, normalized_plan, source_meta, components)
         if mode == "slides"
-        else _build_longform_schema(title, template_id, normalized_plan, source_meta)
+        else _build_longform_schema(title, template_id, normalized_plan, source_meta, components)
     )
     structure_sync = _build_structure_sync(editor_schema)
     rendered_html = _render_plan_html(title, normalized_plan)
@@ -173,6 +174,7 @@ def _build_slides_schema(
     template_id: str,
     plan: Dict[str, Any],
     source_meta: Optional[Dict[str, Any]],
+    components: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     pages = []
     outline = []
@@ -216,7 +218,7 @@ def _build_slides_schema(
 
     activities = plan.get("activity_designs") or []
     for index, activity in enumerate(activities, 1):
-        blocks = [_activity_block(activity, index)]
+        blocks = [_activity_block(activity, index, components)]
         add_page(f"活动 {index}", f"activity_designs[{index - 1}]", blocks)
 
     if plan.get("differentiation"):
@@ -252,6 +254,7 @@ def _build_longform_schema(
     template_id: str,
     plan: Dict[str, Any],
     source_meta: Optional[Dict[str, Any]],
+    components: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     blocks: List[Dict[str, Any]] = [_title_block(title, None)]
     blocks.append(_meta_block(plan.get("learner_gap") or {}, plan.get("tags") or []))
@@ -265,7 +268,7 @@ def _build_longform_schema(
 
     activities = plan.get("activity_designs") or []
     for index, activity in enumerate(activities, 1):
-        blocks.append(_activity_block(activity, index))
+        blocks.append(_activity_block(activity, index, components))
 
     if plan.get("differentiation"):
         blocks.append(_paragraph_block("差异化教学策略", plan.get("differentiation", ""), "differentiation", editable="structured"))
@@ -383,8 +386,8 @@ def _list_block(label: str, items: List[str], source_key: Optional[str], *, bloc
     }
 
 
-def _activity_block(activity: Dict[str, Any], index: int) -> Dict[str, Any]:
-    return {
+def _activity_block(activity: Dict[str, Any], index: int, components: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    block = {
         "id": f"block-{uuid4().hex[:8]}",
         "type": "activity_card",
         "label": f"活动 {index}",
@@ -397,6 +400,18 @@ def _activity_block(activity: Dict[str, Any], index: int) -> Dict[str, Any]:
             "duration": activity.get("duration", ""),
         },
     }
+
+    # 组件库驱动：若有匹配的官方组件，则引用其 slug 与渲染模板
+    if components:
+        from app.services.analysis.component_mapper import resolve_component_for_section
+        matched = resolve_component_for_section(
+            "活动", activity.get("name", ""), components
+        )
+        if matched:
+            block["component_slug"] = matched.get("slug")
+            block["component_html"] = matched.get("render_template_html")
+
+    return block
 
 
 def _meta_block(learner_gap: Dict[str, Any], enhancement_tags: List[str]) -> Dict[str, Any]:

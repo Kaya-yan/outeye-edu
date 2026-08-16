@@ -13,7 +13,7 @@ from loguru import logger
 
 from app.core.config import settings, init_directories
 from app.api.api_v1.api import api_router
-from app.core.database import Base, async_engine
+from app.core.database import Base, async_engine, AsyncSessionLocal
 from app.models import User, AnalysisRecord, LessonPlan, LearningRecord, UserFeedback, Document, DocumentChunk, UserBehavior
 
 
@@ -82,6 +82,15 @@ async def lifespan(app: FastAPI):
 
     logger.info("Database tables created")
 
+    # 初始化唯一管理员（Kaya-yan@outlook.com）
+    try:
+        from app.services.admin_init import initialize_admin
+        async with AsyncSessionLocal() as admin_db:
+            admin_result = await initialize_admin(admin_db)
+            logger.info(f"管理员初始化完成: {admin_result}")
+    except Exception as e:
+        logger.warning(f"管理员初始化跳过: {e}")
+
     # 播种官方教学组件（如果组件库为空）
     try:
         from app.services.courseware_seed import seed_official_components_via_connection
@@ -99,8 +108,18 @@ async def lifespan(app: FastAPI):
         loop = _aio.get_event_loop()
         def _load():
             from app.api.api_v1.endpoints.rag import get_rag_services
-            get_rag_services()
+            services = get_rag_services()
             logger.info("RAG services pre-warmed (embedding model loaded)")
+
+            # 播种匿名化系统知识（scope=system）
+            try:
+                from app.services.knowledge_seed import seed_system_knowledge
+                result = seed_system_knowledge(
+                    services["vector_store"], services["embedding"]
+                )
+                logger.info(f"System knowledge seeded: {result}")
+            except Exception as seed_err:
+                logger.warning(f"System knowledge seed skipped: {seed_err}")
         try:
             await loop.run_in_executor(None, _load)
         except Exception as e:
@@ -111,11 +130,19 @@ async def lifespan(app: FastAPI):
     # 启动定时数据清理任务
     cleanup_task = asyncio.create_task(periodic_cleanup())
 
+    # 启动异步入库 worker
+    from app.services.ingestion.queue import ingestion_queue
+    from app.services.ingestion.processor import process_ingestion_job
+
+    ingestion_worker = asyncio.create_task(ingestion_queue.worker(process_ingestion_job))
+    logger.info("Ingestion worker started")
+
     logger.info(f"API server ready at http://{settings.HOST}:{settings.PORT}")
     yield
 
     # 关闭时执行
     cleanup_task.cancel()
+    ingestion_worker.cancel()
     logger.info("Shutting down OutEye Edu API...")
     await async_engine.dispose()
 

@@ -364,6 +364,13 @@ async def create_courseware_from_plan(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ):
+    # 查询官方教学组件（组件库驱动课件生成）
+    components_result = await db.execute(
+        select(ComponentDefinition).where(ComponentDefinition.scope == "official")
+    )
+    official_components = components_result.scalars().all()
+    components = [c.to_dict() for c in official_components]
+
     bootstrap_payload = build_courseware_from_plan(
         title=request.title,
         mode=request.mode,
@@ -372,6 +379,7 @@ async def create_courseware_from_plan(
         learner_gap=request.learner_gap,
         enhancement_tags=request.enhancement_tags,
         source_meta=request.source_meta,
+        components=components,
     )
     return await _create_initial_project_state(
         title=request.title,

@@ -140,7 +140,7 @@ class HybridRetriever:
             doc_id = payload.get("doc_id", record.id)
             metadata = dict(payload.get("metadata") or {})
 
-            for key in ("title", "source", "file_name"):
+            for key in ("title", "source", "file_name", "scope", "owner_id", "org_id"):
                 if key in payload and key not in metadata:
                     metadata[key] = payload[key]
 
