@@ -4,7 +4,7 @@
 备份（Qdrant 向量 + PostgreSQL 文档/块）→ 清理 → 审计。
 
 用法（在 backend 目录下执行）：
-    python -m scripts.run_data_migration [备份目录]
+    python scripts/run_data_migration.py [备份目录]
 
 默认备份目录为 backups/（脚本会在其下按时间戳生成 JSON 文件）。
 """
@@ -12,6 +12,10 @@
 import asyncio
 import os
 import sys
+from pathlib import Path
+
+# 让脚本可直接 `python scripts/run_data_migration.py` 运行，无需手动设置 PYTHONPATH
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 async def _main(backup_dir: str):
