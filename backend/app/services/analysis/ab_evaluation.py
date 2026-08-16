@@ -18,6 +18,7 @@ async def record_ab_evaluation(
     user_id: str,
     chosen_version: str,
     rating: Optional[int] = None,
+    sentiment: Optional[str] = None,
     comment: Optional[str] = None,
 ) -> Dict[str, Any]:
     """记录教师对 A/B 两版的评价"""
@@ -27,6 +28,7 @@ async def record_ab_evaluation(
         feedback_type="ab_comparison",
         category="lesson_plan",
         rating=rating,
+        sentiment=sentiment,
         title=chosen_version,  # "baseline" | "enhanced"
         content=comment,
         status="pending",
@@ -34,9 +36,10 @@ async def record_ab_evaluation(
     db.add(feedback)
     await db.commit()
 
-    logger.info(f"A/B 评价已记录: user={user_id} chosen={chosen_version} rating={rating}")
+    logger.info(f"A/B 评价已记录: user={user_id} chosen={chosen_version} sentiment={sentiment} rating={rating}")
     return {
         "feedback_id": feedback.id,
         "chosen_version": chosen_version,
+        "sentiment": sentiment,
         "rating": rating,
     }

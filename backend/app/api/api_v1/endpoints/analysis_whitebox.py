@@ -638,6 +638,7 @@ class ABEvaluationRequest(BaseModel):
     """A/B 评价请求"""
     chosen_version: str = Field(..., description="选择版本: baseline 或 enhanced", pattern=r"^(baseline|enhanced)$")
     rating: Optional[int] = Field(None, description="评分 1-5", ge=1, le=5)
+    sentiment: Optional[str] = Field(None, description="赞成/反对: up 或 down", pattern=r"^(up|down)$")
     comment: Optional[str] = Field(None, description="评价内容")
 
 
@@ -656,6 +657,7 @@ async def submit_ab_evaluation(
             user_id=current_user["user_id"],
             chosen_version=request.chosen_version,
             rating=request.rating,
+            sentiment=request.sentiment,
             comment=request.comment,
         )
         return result

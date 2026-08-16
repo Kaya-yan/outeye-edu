@@ -65,6 +65,7 @@ class UserFeedback(Base):
 
     # 评分
     rating = Column(Integer, nullable=True)  # 1-5 分
+    sentiment = Column(String(10), nullable=True)  # 赞成/反对：up / down
 
     # 反馈详情
     title = Column(String(200), nullable=True)

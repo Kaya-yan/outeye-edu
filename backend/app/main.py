@@ -53,6 +53,7 @@ async def _migrate_schema():
         ("analysis_records", "updated_at", "TIMESTAMP"),
         ("analysis_records", "enhancement_tags", "JSONB"),
         ("analysis_records", "learner_gap", "JSONB"),
+        ("user_feedback", "sentiment", "VARCHAR(10)"),
     ]
 
     async with async_engine.begin() as conn:
