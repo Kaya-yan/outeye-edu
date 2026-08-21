@@ -110,10 +110,15 @@ async def get_knowledge_chunks(
     source_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """获取知识单元列表"""
-    query = select(DocumentChunk).offset(skip).limit(limit)
+    """获取知识单元列表（仅当前用户的 chunks；管理员可看全部）"""
+    is_admin = current_user.get("is_admin", False)
+    query = select(DocumentChunk).join(Document)
+    if not is_admin:
+        query = query.where(Document.user_id == current_user["user_id"])
+    query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     chunks = result.scalars().all()
 
@@ -128,18 +133,32 @@ async def get_knowledge_chunks(
 
 
 @router.get("/theories/all")
-async def get_all_theories(db: AsyncSession = Depends(get_async_db)):
-    """获取所有理论知识"""
-    result = await db.execute(select(DocumentChunk))
+async def get_all_theories(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """获取所有理论知识（仅当前用户的 chunks；管理员可看全部）"""
+    is_admin = current_user.get("is_admin", False)
+    query = select(DocumentChunk).join(Document)
+    if not is_admin:
+        query = query.where(Document.user_id == current_user["user_id"])
+    result = await db.execute(query)
     chunks = result.scalars().all()
     items = [_chunk_to_response(c) for c in chunks]
     return [i for i in items if i["content_type"] == "theory"]
 
 
 @router.get("/strategies/all")
-async def get_all_strategies(db: AsyncSession = Depends(get_async_db)):
-    """获取所有教学策略"""
-    result = await db.execute(select(DocumentChunk))
+async def get_all_strategies(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """获取所有教学策略（仅当前用户的 chunks；管理员可看全部）"""
+    is_admin = current_user.get("is_admin", False)
+    query = select(DocumentChunk).join(Document)
+    if not is_admin:
+        query = query.where(Document.user_id == current_user["user_id"])
+    result = await db.execute(query)
     chunks = result.scalars().all()
     items = [_chunk_to_response(c) for c in chunks]
     return [i for i in items if i["content_type"] == "teaching_strategy"]
@@ -230,19 +249,30 @@ async def delete_knowledge_document(
 @router.get("/{chunk_id}", response_model=KnowledgeChunkResponse)
 async def get_knowledge_chunk(
     chunk_id: str,
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """获取单个知识单元"""
+    """获取单个知识单元（仅所有者或管理员）"""
+    # 用 join 直接取 user_id，避免 async session 中的 lazy load（MissingGreenlet）
     result = await db.execute(
-        select(DocumentChunk).where(DocumentChunk.id == chunk_id)
+        select(DocumentChunk, Document.user_id)
+        .join(Document, DocumentChunk.document_id == Document.id)
+        .where(DocumentChunk.id == chunk_id)
     )
-    chunk = result.scalar_one_or_none()
+    row = result.first()
 
-    if not chunk:
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge chunk not found"
         )
+
+    chunk, owner_user_id = row
+
+    # 权限检查：非管理员仅能查看自己的 chunks
+    is_admin = current_user.get("is_admin", False)
+    if not is_admin and owner_user_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="无权访问该知识单元")
 
     # 增加检索次数
     extra = chunk.extra_data or {}
@@ -259,7 +289,20 @@ async def create_knowledge_chunk(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """创建知识单元"""
+    """创建知识单元（绑定 owner_id = current_user.user_id）"""
+    document_id = str(uuid.uuid4())
+    new_doc = Document(
+        id=document_id,
+        user_id=current_user["user_id"],
+        title=(chunk.content[:50] + "...") if len(chunk.content) > 50 else chunk.content,
+        file_type="manual",
+        file_size=0,
+        word_count=len(chunk.content.split()),
+        chunk_count=1,
+        extra_data={"source_type": chunk.source_type} if chunk.source_type else {},
+        status="indexed",
+    )
+
     extra = {
         "content_type": chunk.content_type,
         "source_type": chunk.source_type,
@@ -272,26 +315,32 @@ async def create_knowledge_chunk(
 
     new_chunk = DocumentChunk(
         id=str(uuid.uuid4()),
-        document_id=str(uuid.uuid4()),  # 独立知识单元，生成临时文档ID
+        document_id=document_id,
         content=chunk.content,
         chunk_index=0,
         word_count=len(chunk.content.split()),
         extra_data=extra,
         created_at=datetime.utcnow(),
     )
+
+    db.add(new_doc)
     db.add(new_chunk)
     await db.commit()
     await db.refresh(new_chunk)
     return _chunk_to_response(new_chunk)
 
 
-@router.post("/search", response_model=List[SearchResult])
-async def search_knowledge(
+async def _search_knowledge_internal(
     request: SearchRequest,
-    db: AsyncSession = Depends(get_async_db)
-):
-    """搜索知识库"""
-    result = await db.execute(select(DocumentChunk))
+    current_user: dict,
+    db: AsyncSession,
+) -> List[SearchResult]:
+    """内部搜索：按 user_id 过滤（管理员可搜全部）"""
+    is_admin = current_user.get("is_admin", False)
+    query = select(DocumentChunk).join(Document)
+    if not is_admin:
+        query = query.where(Document.user_id == current_user["user_id"])
+    result = await db.execute(query)
     chunks = result.scalars().all()
 
     query_lower = request.query.lower()
@@ -309,16 +358,26 @@ async def search_knowledge(
     return results[:request.top_k]
 
 
+@router.post("/search", response_model=List[SearchResult])
+async def search_knowledge(
+    request: SearchRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """搜索知识库（仅搜索当前用户的 chunks）"""
+    return await _search_knowledge_internal(request, current_user, db)
+
+
 @router.post("/rag-query")
 async def rag_query(
     query: str,
     top_k: int = 3,
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """RAG查询（检索增强生成）"""
-    search_results = await search_knowledge(
-        SearchRequest(query=query, top_k=top_k),
-        db
+    """RAG查询（仅基于当前用户的 chunks）"""
+    search_results = await _search_knowledge_internal(
+        SearchRequest(query=query, top_k=top_k), current_user, db
     )
 
     return {

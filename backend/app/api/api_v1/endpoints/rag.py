@@ -470,34 +470,30 @@ async def delete_document(
     doc_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    删除文档
-
-    删除指定文档的所有块
-    """
+    """删除文档（仅所有者或管理员）"""
     try:
         services = get_rag_services()
         vector_store = services['vector_store']
 
-        # 查询该文档的所有分块 ID
-        chunk_ids = []
-        if hasattr(vector_store, 'client') and vector_store.client is not None:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            results, _ = vector_store.client.scroll(
-                collection_name=vector_store.collection_name,
-                scroll_filter=Filter(must=[
-                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id))
-                ]),
-                limit=1000,
-                with_payload=False,
-                with_vectors=False,
-            )
-            chunk_ids = [r.id for r in results]
+        # 拉取全部记录，过滤出该 doc_id 的所有 chunks
+        records = vector_store.get_all_records()
+        matching = [r for r in records if (r.payload or {}).get("doc_id") == doc_id]
 
-        if not chunk_ids:
-            # fallback: 尝试直接用 doc_id 删除
-            chunk_ids = [doc_id]
+        if not matching:
+            raise HTTPException(status_code=404, detail="文档不存在")
 
+        # 用第一条 payload 做权限决策（同 doc_id 的所有 chunks 共享 scope/owner_id）
+        first_payload = matching[0].payload or {}
+        scope = first_payload.get("scope", "private")
+        owner_id = first_payload.get("owner_id")
+
+        is_admin = current_user.get("is_admin", False)
+        if not is_admin:
+            # system 文档非管理员禁删；private 仅所有者可删
+            if scope != "private" or owner_id != current_user["user_id"]:
+                raise HTTPException(status_code=403, detail="无权删除该文档")
+
+        chunk_ids = [r.id for r in matching]
         success = vector_store.delete(chunk_ids)
 
         if success:
@@ -506,6 +502,8 @@ async def delete_document(
         else:
             raise HTTPException(status_code=500, detail="删除失败")
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_api_error(e, "删除文档")
 
@@ -596,12 +594,17 @@ async def get_job_status(
     job_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """查询入库任务状态"""
+    """查询入库任务状态（仅所有者或管理员）"""
     from app.services.ingestion.queue import ingestion_queue
 
     job = ingestion_queue.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="任务不存在")
+
+    # 权限检查：管理员可查任何 job；否则仅限本人
+    is_admin = current_user.get("is_admin", False)
+    if not is_admin and job.user_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="无权查看该任务")
 
     return JobStatusResponse(
         id=job.id,
