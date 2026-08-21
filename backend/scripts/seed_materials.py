@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from seed_lib import (  # noqa: E402
     SeedRecord,
     get_services,
+    normalize_file_path,
     seed_batch,
     write_summary,
 )
@@ -119,6 +120,11 @@ def load_manifest(batch: str) -> List[SeedRecord]:
         if "_verification_note" in e:
             extra_metadata.setdefault("_verification_note", e["_verification_note"])
 
+        # 运行时路径映射：把 manifest 里的本地 Windows 路径映射为服务器路径。
+        # 本地开发机上路径已存在、原样返回；服务器上不存在则映射到 /opt/outeye-edu/seed-materials/
+        if "file_path" in ctor_kwargs:
+            ctor_kwargs["file_path"] = normalize_file_path(ctor_kwargs["file_path"])
+
         ctor_kwargs["extra_metadata"] = extra_metadata
         records.append(SeedRecord(**ctor_kwargs))
 
@@ -147,12 +153,16 @@ def run_batch(batch: str, dry_run: bool, execute: bool, limit: Optional[int]) ->
         return 2
     print(f"已加载 {len(records)} 条记录")
 
-    # 校验文件存在性（dry-run 前置检查）
+    # 校验文件存在性（前置检查，file_path 已在 load_manifest 时做过路径映射）
     missing = [r for r in records if not Path(r.file_path).exists()]
     if missing:
         print(f"\n警告：{len(missing)} 个文件不存在，将跳过：", file=sys.stderr)
         for r in missing[:5]:
-            print(f"  - {r.doc_id} {r.file_path}", file=sys.stderr)
+            print(
+                f"  - {r.doc_id} 文件不存在（路径已映射为：{r.file_path}），"
+                f"请确认素材已传到服务器",
+                file=sys.stderr,
+            )
         if len(missing) > 5:
             print(f"  ... 共 {len(missing)} 个", file=sys.stderr)
 

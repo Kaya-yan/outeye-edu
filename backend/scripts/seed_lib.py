@@ -88,12 +88,49 @@ def get_services():
     return services["parser"], services["embedding"], services["vector_store"]
 
 
+def normalize_file_path(file_path: str) -> str:
+    """把本地 Windows 绝对路径映射为服务器路径（幂等）
+
+    场景：manifest 里的 file_path 记录的是本地 Windows 路径
+    （如 C:\\Users\\ht\\...\\seed-materials\\...），服务器上这些文件不存在，
+    需要映射到 /opt/outeye-edu/seed-materials/<相对路径>。
+
+    逻辑：
+    1. 若路径本机已存在，原样返回（本地开发机上 manifest 路径直接可用）
+    2. 若为 Windows 绝对路径（盘符开头）且本机不存在，映射到服务器
+       seed-materials 根下的相对路径
+    3. 其余情况原样返回
+
+    只做运行时映射，不改动 manifest JSON 本身。
+    """
+    if not file_path:
+        return file_path
+
+    # 本机已存在则直接返回，保证本地开发机不受映射影响
+    if Path(file_path).exists():
+        return file_path
+
+    # 统一为 forward slash，便于切分相对路径
+    norm = file_path.replace("\\", "/")
+
+    # Windows 绝对路径（C:/ 或 C:\ 等盘符开头）
+    if re.match(r"^[A-Za-z]:/", norm):
+        if "seed-materials" in norm:
+            relative = norm.split("seed-materials", 1)[1].lstrip("/")
+            return f"/opt/outeye-edu/seed-materials/{relative}"
+        # 兜底：只保留文件名，放到 seed-materials 根下
+        return f"/opt/outeye-edu/seed-materials/{Path(norm).name}"
+
+    return file_path
+
+
 def parse_file_to_text(parser, file_path: str) -> Tuple[str, Dict[str, Any]]:
     """解析文件，返回 (全文文本, 文件元数据)
 
     直接调用 parser._parse_pdf / _parse_docx / _parse_text 内部方法，
     不走 parse_file（后者会自动按固定字符数分块，与 seed 段落分块策略冲突）。
     """
+    file_path = normalize_file_path(file_path)
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"文件不存在: {file_path}")
