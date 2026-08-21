@@ -21,15 +21,30 @@ function EvidenceRow({ e }: { e: Evidence }) {
 
 export default function EvidenceDrawer({
   evidence,
+  degraded,
 }: {
   evidence: Evidence[];
+  degraded?: boolean;
 }) {
   const wiki = evidence.filter((e) => e.source_type === "wiki");
   const rag = evidence.filter((e) => e.source_type === "rag");
 
+  if (degraded && evidence.length === 0) {
+    return (
+      <div className="rounded-lg border border-canvas-200 bg-canvas-50 p-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-400 mb-1">
+          Degraded
+        </div>
+        <p className="text-xs leading-relaxed text-ink-500">
+          该活动因检索结果不足已降级为纯 LLM 生成，无系统预设策略支撑。
+        </p>
+      </div>
+    );
+  }
+
   if (evidence.length === 0) {
     return (
-      <p className="text-xs text-ink-400">无可用证据（该活动已降级）</p>
+      <p className="text-xs text-ink-400">无可用证据</p>
     );
   }
 

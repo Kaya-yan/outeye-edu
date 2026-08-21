@@ -164,18 +164,26 @@ export default function TeachingPlanView({
                     <span className="font-medium">时间：</span>{act.duration}
                   </div>
                 )}
-                {act.evidence && act.evidence.length > 0 && (
+                {((act.evidence && act.evidence.length > 0) || act.degraded) && (
                   <div className="mt-2">
                     <button
                       onClick={() => setEvidenceIndex(evidenceIndex === i ? null : i)}
-                      className="text-xs text-primary-700 hover:text-primary-600 flex items-center gap-1"
+                      className={`text-xs flex items-center gap-1 ${
+                        act.degraded
+                          ? "text-ink-400 hover:text-ink-500"
+                          : "text-primary-700 hover:text-primary-600"
+                      }`}
                     >
                       <span className={`transition-transform ${evidenceIndex === i ? "rotate-90" : ""}`}>▶</span>
-                      {evidenceIndex === i ? "收起设计依据" : `设计依据 (${act.evidence.length})`}
+                      {evidenceIndex === i
+                        ? "收起设计依据"
+                        : act.degraded
+                        ? "设计依据（已降级）"
+                        : `设计依据 (${act.evidence!.length})`}
                     </button>
                     {evidenceIndex === i && (
                       <div className="mt-2">
-                        <EvidenceDrawer evidence={act.evidence} />
+                        <EvidenceDrawer evidence={act.evidence || []} degraded={act.degraded} />
                       </div>
                     )}
                   </div>

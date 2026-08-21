@@ -21,7 +21,7 @@ export default function PlanEvaluationForm({
     setError("");
     try {
       await apiPost("/analysis/ab-evaluate", {
-        chosen_version: chosenVersion,
+        chosen_version: chosenVersion === "basic" ? "baseline" : chosenVersion,
         sentiment: sentiment || undefined,
         rating: rating || undefined,
         comment: comment.trim() || undefined,
@@ -44,7 +44,10 @@ export default function PlanEvaluationForm({
 
   return (
     <div className="archive-surface p-5">
-      <div className="section-title mb-3">评价此版本</div>
+      <div className="section-title mb-1">评价此版本</div>
+      <p className="mb-3 text-xs text-ink-500">
+        正在评价：{chosenVersion === "basic" ? "基础模式" : "增强模式"}
+      </p>
 
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
