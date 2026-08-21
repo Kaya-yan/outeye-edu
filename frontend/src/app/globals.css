@@ -147,12 +147,62 @@
   }
 
   .hover-lift {
-    transition: transform var(--transition-bounce), box-shadow var(--transition-normal);
+    transition: transform var(--transition-bounce), box-shadow var(--transition-normal), border-color var(--transition-normal);
   }
 
   .hover-lift:hover {
     transform: translateY(-3px);
-    box-shadow: var(--shadow-elevated);
+    box-shadow:
+      var(--shadow-elevated),
+      0 0 0 1px rgba(199, 211, 212, 0.45);
+  }
+
+  .hover-icon-shift > svg,
+  .hover-icon-shift svg {
+    transition: transform var(--transition-fast);
+  }
+
+  .hover-icon-shift:hover > svg,
+  .hover-icon-shift:hover svg {
+    transform: translateX(2px);
+  }
+
+  .link-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0% 1px;
+    transition: background-size var(--transition-normal);
+  }
+
+  .link-underline:hover {
+    background-size: 100% 1px;
+  }
+
+  .card-glow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .card-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at 50% 0%, rgba(199, 211, 212, 0.22), transparent 65%);
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .card-glow > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .card-glow:hover::before {
+    opacity: 1;
   }
 
   .morandi-input {
@@ -175,6 +225,11 @@
     box-shadow: 0 6px 16px rgba(117, 133, 111, 0.24);
   }
 
+  .btn-primary:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 2px 6px rgba(117, 133, 111, 0.18);
+  }
+
   .btn-secondary {
     @apply inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink-800;
   }
@@ -182,6 +237,10 @@
   .btn-secondary:hover {
     @apply bg-canvas-100;
     transform: translateY(-2px);
+  }
+
+  .btn-secondary:active {
+    transform: translateY(0) scale(0.97);
   }
 
   .btn-archive {
@@ -196,14 +255,27 @@
     box-shadow: 0 6px 16px rgba(216, 196, 106, 0.28);
   }
 
+  .btn-archive:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 2px 6px rgba(216, 196, 106, 0.20);
+  }
+
   .archive-card {
     @apply overflow-hidden rounded-2xl border border-black/5 bg-white;
     box-shadow: var(--shadow-soft);
+    transition: transform var(--transition-bounce), box-shadow var(--transition-normal), border-color var(--transition-normal);
   }
 
   .archive-card:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card);
+    box-shadow:
+      var(--shadow-card),
+      0 0 0 1px rgba(199, 211, 212, 0.40);
+    border-color: rgba(199, 211, 212, 0.55);
+  }
+
+  .archive-card:active {
+    transform: translateY(0) scale(0.995);
   }
 
   .drawer-handle {

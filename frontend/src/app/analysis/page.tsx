@@ -828,7 +828,7 @@ function PlanStep({
             <div>
               <div className="section-title mb-2">Ready for Courseware</div>
               <p className="text-sm text-ink-600 leading-6">
-                教学方案已经完成。你可以继续导出传统格式，也可以直接把它推进到教学课件工作台，进入可编辑、可展示、可沉淀组件的下一阶段。
+                教学方案已经完成。你可以继续导出传统格式，也可以直接把它推进到教学课件工作台，进入可编辑、可展示的课件阶段。
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-ink-500">
@@ -930,8 +930,8 @@ function PlanStep({
           </div>
           <div className="data-card p-4 bg-white/90">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Present</div>
-            <div className="mt-2 text-sm font-semibold text-ink-900">进入展示终态</div>
-            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内继续进入课堂展示模式，完成完整演示链。</p>
+            <div className="mt-2 text-sm font-semibold text-ink-900">进入课堂展示</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内继续进入课堂展示模式，完成从分析到课堂的完整流程。</p>
           </div>
         </div>
       </div>

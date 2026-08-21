@@ -98,10 +98,10 @@ export default function CoursewareListPage() {
             <div className="section-title mb-2">Courseware Workbench</div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">教学课件工作台</h1>
             <p className="text-sm sm:text-base text-ink-500 mt-3 leading-7">
-              这里承接分析页生成的教学方案，并把它推进成可编辑、可展示、可沉淀组件的 HTML 课件项目。
+              这里承接分析页生成的教学方案，并把它变成可编辑、可展示的 HTML 课件项目。
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {['分析页生成', '课件项目归档', '编辑器继续工作', '展示端课堂终态'].map((label) => (
+              {['分析页生成', '课件项目管理', '编辑器继续工作', '课堂展示'].map((label) => (
                 <span key={label} className="drawer-handle bg-white/85 border border-black/5 text-ink-600">
                   {label}
                 </span>
@@ -133,7 +133,7 @@ export default function CoursewareListPage() {
               <div className="section-title mb-2">Primary Flow</div>
               <h2 className="text-2xl font-semibold text-ink-900">先从教案生成，再进入课件编辑与课堂展示</h2>
               <p className="mt-3 text-sm text-ink-500 leading-7 max-w-2xl">
-                第二轮主链路优先级放在“分析 → 课件 → 展示”。这页不是普通列表，而是课件资产的入口、续作点和归档总览。
+                主流程：分析 → 课件 → 展示。这里是课件项目的入口与继续点。
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[420px]">

@@ -133,11 +133,14 @@ export default function Home() {
         <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
             <div className="section-title mb-3">Academic Desktop OS</div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight text-ink-900 text-balance">
-              把课文分析、教案生成与 HTML 课件展示，收进同一张学术桌面
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-ink-900 text-balance leading-[1.15]">
+              一张学术桌面，承载课文到课堂
             </h1>
-            <p className="mt-6 max-w-2xl text-base sm:text-lg text-ink-500 leading-8">
-              OutEye Edu 的主演示链不再停在“生成一份方案”，而是把分析结果自然推进到课件项目、编辑工作台与课堂展示终态。
+            <p className="mt-4 text-xl sm:text-2xl font-medium text-ink-700 leading-snug">
+              把课文分析、教案生成与 HTML 课件展示收进同一处
+            </p>
+            <p className="mt-5 max-w-2xl text-base sm:text-lg text-ink-500 leading-8">
+              从课文输入到课堂展示，分析、教案与课件在同一张桌面连续推进，不再停在一份方案。
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {['课文输入与白盒分析', '双源检索与教学方案', 'HTML 课件编辑与课堂展示'].map((label) => (
@@ -150,23 +153,26 @@ export default function Home() {
               <Link href="/analysis" className="btn-primary rounded-full px-7 py-3.5 text-base">
                 进入分析工作台
               </Link>
-              <Link href="/courseware" className="btn-secondary rounded-full px-7 py-3.5 text-base">
+              <Link href="/courseware" className="btn-secondary rounded-full px-7 py-3.5 text-base hover-icon-shift">
                 查看课件工作台
+                <svg className="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
               </Link>
             </div>
             <p className="mt-4 text-sm text-ink-400">
-              推荐演示路径：分析页 → 教学方案 → 生成课件 → 编辑器 → 展示端
+              推荐路径：分析 → 教学方案 → 生成课件 → 编辑器 → 课堂展示
             </p>
           </div>
 
           <div className="relative lg:h-[400px]">
             <div className="grid h-full grid-cols-2 gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-              <div className="archive-surface p-5 hover-lift">
+              <div className="archive-surface p-5 hover-lift card-glow">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Workbench</div>
                 <div className="rounded-[24px] bg-canvas-200 p-5 h-full flex flex-col justify-between">
                   <div>
                     <div className="text-lg font-semibold text-ink-900">分析结果台</div>
-                    <p className="mt-2 text-sm text-ink-500 leading-6">先沉淀证据，再推进教案与课件，不再把 AI 输出停在一份文本里。</p>
+                    <p className="mt-2 text-sm text-ink-500 leading-6">先有证据，再做教案与课件，让 AI 输出真正进入课堂。</p>
                   </div>
                   <div className="mt-6 rounded-2xl bg-white/80 p-4 shadow-soft space-y-2.5">
                     <div className="flex items-center justify-between text-xs text-ink-500">
@@ -183,18 +189,18 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex flex-col gap-4">
-                <div className="archive-surface p-5 hover-lift">
+                <div className="archive-surface p-5 hover-lift card-glow">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Archive</div>
                   <div className="rounded-2xl bg-white p-4 shadow-soft">
-                    <div className="text-base font-semibold text-ink-900">课件项目归档</div>
-                    <p className="mt-2 text-sm text-ink-500">列表、版本、展示配置与组件沉淀形成连续资产视图。</p>
+                    <div className="text-base font-semibold text-ink-900">课件项目</div>
+                    <p className="mt-2 text-sm text-ink-500">列表、版本与展示配置，集中管理你的课件资产。</p>
                   </div>
                 </div>
-                <div className="archive-surface p-5 hover-lift">
+                <div className="archive-surface p-5 hover-lift card-glow">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Presentation</div>
                   <div className="rounded-2xl bg-sage-100/80 p-4 shadow-soft">
-                    <div className="text-base font-semibold text-ink-900">课堂展示终态</div>
-                    <p className="mt-2 text-sm text-ink-500">从教案到 HTML 课件展示，形成真正可演示、可上课的终点。</p>
+                    <div className="text-base font-semibold text-ink-900">课堂展示</div>
+                    <p className="mt-2 text-sm text-ink-500">从教案到 HTML 课件，形成真正可演示、可上课的终点。</p>
                   </div>
                 </div>
               </div>
@@ -225,14 +231,17 @@ export default function Home() {
         <div className="page-surface-strong px-6 py-7 sm:px-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-2xl">
-              <div className="section-title mb-2">Primary Demo Flow</div>
-              <h2 className="text-2xl sm:text-3xl font-semibold text-ink-900">先把主演示链讲明白，再展开其余功能</h2>
+              <div className="section-title mb-2">Primary Flow</div>
+              <h2 className="text-2xl sm:text-3xl font-semibold text-ink-900">主流程：从分析到课堂展示</h2>
               <p className="mt-3 text-sm sm:text-base text-ink-500 leading-7">
-                第二轮重点不是继续平均介绍所有模块，而是让用户一眼读懂：分析结果如何变成可编辑、可展示、可沉淀的课件项目。
+                分析结果可直接生成课件项目，进入编辑与课堂展示，不再停在一份方案。
               </p>
             </div>
-            <Link href="/courseware" className="btn-secondary rounded-full px-5 py-3 text-sm self-start">
+            <Link href="/courseware" className="btn-secondary rounded-full px-5 py-3 text-sm self-start hover-icon-shift">
               打开课件工作台
+              <svg className="w-3.5 h-3.5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
             </Link>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-4">
@@ -403,7 +412,7 @@ export default function Home() {
               从分析直接走到课堂展示
             </h2>
             <p className="mt-4 text-lg text-primary-100/80 max-w-xl mx-auto">
-              继续沿主演示链进入分析工作台，生成方案后再推进到 HTML 课件编辑与展示终态。
+              进入分析工作台，生成方案后即可推进到课件编辑与课堂展示。
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -414,7 +423,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/courseware"
-                className="inline-flex items-center justify-center gap-1.5 px-6 py-3.5 rounded-full text-white/90 font-medium hover:text-white hover:bg-white/10 transition-all duration-200"
+                className="hover-icon-shift inline-flex items-center justify-center gap-1.5 px-6 py-3.5 rounded-full text-white/90 font-medium hover:text-white hover:bg-white/10 transition-all duration-200"
               >
                 查看课件项目
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

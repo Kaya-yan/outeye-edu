@@ -139,7 +139,7 @@ export default function ProjectsPage() {
               <div className="section-title mb-2">Archive Filters</div>
               <h2 className="text-2xl font-semibold text-ink-900">先筛选抽屉，再进入具体项目</h2>
               <p className="mt-3 text-sm text-ink-500 leading-7 max-w-2xl">
-                第二轮重点把档案感从视觉隐喻推进到真实交互：当前抽屉、筛选状态和条目归属都要清楚可见。
+                抽屉、筛选状态与条目归属都清楚可见，便于定位每个项目。
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[440px]">
