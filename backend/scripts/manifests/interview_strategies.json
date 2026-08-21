@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-21T07:29:12.734559+00:00",
+  "source_manifest": "interview.json",
+  "llm_model": "(dry-run, no LLM)",
+  "total_count": 0,
+  "stats": {
+    "direct_quote": 0,
+    "inference": 0,
+    "high_confidence": 0,
+    "low_confidence": 0
+  },
+  "strategies": [],
+  "failures": [],
+  "notes": [
+    "teacher_quote 字段必须是 answer 的子串（if quote in answer）",
+    "不满足则降级为 evidence_type=inference + confidence=low，并用 difflib 找最接近子串兜底",
+    "不入 Qdrant，只产 manifest 供审阅",
+    "scope=system：seed 入库时与现有 5 个 system_seed 并存",
+    "source_tag=seed_interview_strategy：与 seed_materials_interview 区分"
+  ]
+}

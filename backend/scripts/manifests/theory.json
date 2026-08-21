@@ -1,0 +1,742 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-21T08:53:57.387088+00:00",
+  "total_count": 27,
+  "batches": {
+    "core": "0811 教学理论目录 17 篇核心论文",
+    "supplementary": "0729 理论目录 10 篇补充论文"
+  },
+  "entries": [
+    {
+      "doc_id": "T-001",
+      "batch": "supplementary",
+      "title": "“注意假说”视角下的二语习得输入研究",
+      "authors": [
+        "李志强",
+        "李勇忠"
+      ],
+      "theory_tags": [
+        "input",
+        "noticing_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 1,
+      "theory_name": "注意假说（Noticing Hypothesis）",
+      "theorist_and_year": "Schmidt，1990年",
+      "core_content": "该假说认为，输入必须被学习者有意注意才能转化为吸纳（intake）。注意是外界语言信息进入学习者内部认知结构的核心输入装置。影响注意的因素包括外在属性（显著性、频率、近因性）和内在准备（可学性、动机、内在需求）。没有注意，就不会有学习。",
+      "application": "教学干预的目的在于有效改变学习者的注意焦点。在教学实践中可分为三类：（1）对语言意义的注意（如Krashen的可理解输入）；（2）对语言形式的注意（如Focus-on-Forms教学）；（3）对形式与意义并重的注意（如Focus-on-Form和输入强化）。教师应综合利用影响注意的外在属性和内在准备来设计教学方案。",
+      "source_journal": "西安外国语大学学报",
+      "year": 2019,
+      "volume": "27",
+      "issue": "1",
+      "pages": "63-67",
+      "raw_citation": "李志强, 李勇忠. “注意假说”视角下的二语习得输入研究[J]. 西安外国语大学学报, 2019, 27 (1): 63-67.",
+      "abstract": "自1967年Corder首次把\"输入(input)\"这一概念引入二语习得研究领域以来,至今已经有五十多年。输入已然成为在日常研讨教学中人们信手拈来的概念,事实上,输入这一概念及其在二语习得中的作用在学界却一直存在争议。本文从Schmidt的\"注意假说\"的角度梳理二语习得输入研究的发展脉络,以期厘清二语习得的输入概念。本文认为,以\"注意\"为输入装置来定义输入可以使二语习得的输入概念不再含混,而明晰的输入概念有助于指导教学实践。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-李志强，李勇忠-“注意假说”视角下的二语习得输入研究-2019.pdf",
+      "original_filename": "理论-李志强，李勇忠-“注意假说”视角下的二语习得输入研究-2019.pdf"
+    },
+    {
+      "doc_id": "T-002",
+      "batch": "supplementary",
+      "title": "从“输入假说”理论看大学英语精读教学的文学导入",
+      "authors": [
+        "叶海英"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 2,
+      "theory_name": "输入假说（Input Hypothesis）",
+      "theorist_and_year": "Krashen，20世纪80年代初期",
+      "core_content": "该假说是Krashen监察模型的核心组成部分。假说认为，学习者通过接收\"可理解输入\"（i+1）才能习得语言，即输入必须略高于学习者当前水平且能被理解。理想输入应具备四个特点：可理解性、有趣或相关、非语法程序安排、足够的输入量。输入是语言习得的首要条件，语言使用能力不是教出来的，而是通过接触大量可理解输入后自然形成的。",
+      "application": "在教学中应重视不同途径的语言输入量，遵循i+1原则选择教材和课堂用语，改善语言环境（如创设模拟语境），加强阅读输入。具体教学中，可通过文学导入（如利用教材文学作品、组织戏剧表演、欣赏英文电影、多媒体辅助等）实现可理解输入，既提供真实语料，又激发学习兴趣、减轻外语焦虑。",
+      "source_journal": "西南民族大学学报(人文社科版)",
+      "year": 2007,
+      "issue": "S1",
+      "pages": "278-280",
+      "raw_citation": "叶海英. 从“输入假说”理论看大学英语精读教学的文学导入[J]. 西南民族大学学报(人文社科版), 2007, (S1): 278-280.",
+      "abstract": "文章首先介绍了Krashen的\"输入假说\"理论,然后论述了这一视角对大学英语精读教学中文学导入的启示,即有意识地贯彻这一理论在英语精读教学中能够达到抛文学之\"玉\"引教学之\"玉\"的效果。最后重点探讨了大学英语精读教学中文学导入的具体策略和方法。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-叶海英-从“输入假说”理论看大学英语精读教学的文学导入-2007.pdf",
+      "original_filename": "理论-叶海英-从“输入假说”理论看大学英语精读教学的文学导入-2007.pdf"
+    },
+    {
+      "doc_id": "T-003",
+      "batch": "supplementary",
+      "title": "论克拉申的i+1语言输入假说与中国的外语教学",
+      "authors": [
+        "王烈琴"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 3,
+      "theory_name": "输入假说（Input Hypothesis）——补充视角",
+      "theorist_and_year": "Krashen，20世纪80年代初期",
+      "core_content": "该假说建立在儿童母语习得中\"简化语言\"（无意识、句法简单、此时此地）和\"沉默期\"（通过听积累、内化语言）的基础上。主要观点包括：（1）输入是习得的首要条件；（2）输入必须是可理解的\"有效性输入\"；（3）遵循i+1原则；（4）遵循\"此时此地\"原则，强调真实语境。但该假说仍属假设，缺乏充分验证；学习者现有水平\"i\"和难度\"1\"难以量化；且过分强调输入而忽视输出和思维加工的作用。",
+      "application": "该假说对我国教学大纲（如词汇分层要求、增加阅读量）和教学原则（如\"尽量使用英语\"）有积极影响，并对听力、阅读、文化教学有指导作用。但应辩证看待，结合中国实际加以运用和发展，不可全盘照搬。",
+      "source_journal": "渭南师范学院学报",
+      "year": 2008,
+      "issue": "3",
+      "pages": "83-86",
+      "raw_citation": "王烈琴. 论克拉申的i+1语言输入假说与中国的外语教学[J]. 渭南师范学院学报, 2008, (3): 83-86.",
+      "abstract": "语言输入是语言学习的首要条件。外语教师决定着课堂外语输入的质量与教学效果。外语教师对语言学习理论了解与掌握的很大程度影响其教学方法的设计和教学质量的提高。从理论上客观地介绍克拉申的i+1输入假设的理论基础与主要观点,在此基础上讨论输入假设对外语教学的指导意义,同时表达了对假设的质疑。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-王烈琴-论克拉申的i+1语言输入假说与中国的外语教学-2008.pdf",
+      "original_filename": "理论-王烈琴-论克拉申的i+1语言输入假说与中国的外语教学-2008.pdf"
+    },
+    {
+      "doc_id": "T-004",
+      "batch": "supplementary",
+      "title": "布鲁姆教育目标分类理论视域下英语专业阅读课程改革研究——基于认知分层的三阶教学模型构建",
+      "authors": [
+        "李星星"
+      ],
+      "theory_tags": [
+        "taxonomy",
+        "cognitive_hierarchy",
+        "Bloom"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 4,
+      "theory_name": "布鲁姆教育目标分类理论（Bloom's Taxonomy）",
+      "theorist_and_year": "Bloom及其团队，1956年",
+      "core_content": "该理论将认知领域教育目标分为六级梯度：知识、理解、应用、分析、评价、创造。这六级梯度本质上是对人类认知从\"被动接受到主动创造\"的动态过程的解构，揭示了认知发展的螺旋上升规律。该理论突破了传统教学中\"知识传授至上\"的单向度模式，构建起\"低阶能力奠基—高阶思维攀升—情感价值渗透\"的三维育人体系。",
+      "application": "在英语专业阅读课程中构建\"三阶教学模型\"——初级阶段（知识—理解）聚焦词汇语境应用与阅读技能训练，实现\"读懂\"；中级阶段（应用—分析）通过项目式学习和逻辑解构策略，实现\"读透\"；高级阶段（评价—创造）以批判性评价和跨文化创新任务，实现\"读活\"。分层任务设计能有效提升学生的语言精准度、思维批判性与文化阐释力。",
+      "source_journal": "海外英语",
+      "year": 2025,
+      "issue": "13",
+      "pages": "109-111",
+      "raw_citation": "李星星. 布鲁姆教育目标分类理论视域下英语专业阅读课程改革研究——基于认知分层的三阶教学模型构建[J]. 海外英语, 2025, (13): 109-111.",
+      "abstract": "英语专业阅读课程作为语言能力与专业素养培育的核心载体，当前面临“重语言解构、轻思维建构”的教学困境，亟须科学理论指导改革。本研究引入布鲁姆教育目标分类理论，构建“知识—理解—应用—分析—评价—创造”六级认知框架下的三阶能力培养体系：初级阶段通过词汇语境应用与阅读技能训练实现“读懂”文本基础信息；中级阶段依托项目式学习与逻辑解构策略推动“读透”文本深层逻辑；高级阶段以批判性评价与跨文化创新任务达成“读活”文本的知识创造。研究发现，该理论通过分层任务设计与三维育人整合，有效提升学生的语言精准度、思维批判性与文化阐释力，尤其在具身化学习、多模态输出等方面成效显著。未来须进一步强化实证研究、深化智能技术融合，以构建“认知有梯度、文化有厚度”的阅读教学新生态，为培养具备全球化竞争力的外语人才提供理论与实践路径。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-李星星-布鲁姆教育目标分类理论视域下英语专业阅读课程改革研究——基于认知分层的三阶教学模型构建-2025.pdf",
+      "original_filename": "理论-李星星-布鲁姆教育目标分类理论视域下英语专业阅读课程改革研究——基于认知分层的三阶教学模型构建-2025.pdf"
+    },
+    {
+      "doc_id": "T-005",
+      "batch": "supplementary",
+      "title": "克拉申“语言输入假说”综述",
+      "authors": [
+        "李博琳"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 5,
+      "theory_name": "输入假说（Input Hypothesis）——综述视角",
+      "theorist_and_year": "Krashen，20世纪80年代左右",
+      "core_content": "唯有当学习者接触到\"可理解的语言输入\"（i+1），才能转化成习得。理想输入应具备可理解性、有趣且相关、非语法程序安排、充足的输入量。该假说存在争议：（1）基于母语习得提出，未必适用于二语习得者；（2）过分偏重自然语言环境下的输入，轻视非自然输入形式；（3）过分强调输入而轻视输出；（4）习得与学得不可转化的观点脱离实际。",
+      "application": "国内研究分为理论探讨（如徐海铭、罗立胜、詹朋朋等）和实证研究（如王大伟、艾瑞喜、吴朋等），涉及听力、阅读、口语等多方面应用。在教学应用中，教师要注意减弱情感因素对输入造成的影响，将输入与输出相结合。",
+      "source_journal": "海外英语",
+      "year": 2021,
+      "issue": "12",
+      "pages": "103-104",
+      "raw_citation": "李博琳. 克拉申“语言输入假说”综述[J]. 海外英语, 2021, (12): 103-104.",
+      "abstract": "作为第二语言习得范畴中一个极具重要性和影响力的理论,克拉申的语言输入假说在外语教学理论和实践中发挥着重要作用。文章首先对输入假说的基本理论进行总结,其次对过往国内外关于输入假说的研究做了一个回顾,最后,总结了输入假说当前存在的争议性以及从前研究的不足之处。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-李博琳-克拉申“语言输入假说”综述-2021.pdf",
+      "original_filename": "理论-李博琳-克拉申“语言输入假说”综述-2021.pdf"
+    },
+    {
+      "doc_id": "T-006",
+      "batch": "supplementary",
+      "title": "克拉申二语习得理论和多媒体辅助英语听力教学——一项基于大学英语教改模式的实证研究",
+      "authors": [
+        "蒋苏琴"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "affective_filter",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 6,
+      "theory_name": "输入假说与情感过滤假说（Input Hypothesis & Affective Filter Hypothesis）",
+      "theorist_and_year": "Krashen，20世纪80年代初期",
+      "core_content": "输入假说强调可理解的语言输入是习得的必要条件。情感过滤假说认为，情感因素（如动机、自信心、焦虑）直接影响第二语言习得——当情感屏障弱且语言输入可理解时，输入就能顺畅进入语言习得机制，产生习得。有效的输入应具备可理解性、趣味性、非语法程序安排和足够的输入量，并遵循i+1原则和\"此时此地\"原则。",
+      "application": "在多媒体辅助英语听力教学中，多媒体技术能提供更真实、可理解的语言输入，丰富输入形式与内容，同时降低学习者的情感障碍（减少焦虑、增强学习兴趣和自信心）。实验数据显示，多媒体实验班后测成绩（9.28）显著高于传统对照班（7.20），进步幅度也更大（2.6倍 vs 2.0倍），证明多媒体辅助教学优于传统方法。",
+      "source_journal": "外语学刊",
+      "year": 2010,
+      "issue": "3",
+      "pages": "140-143",
+      "raw_citation": "蒋苏琴. 克拉申二语习得理论和多媒体辅助英语听力教学——一项基于大学英语教改模式的实证研究[J]. 外语学刊, 2010, (3): 140-143.",
+      "abstract": "对比大学英语多媒体实验班与传统教学对照班学生听力测试成绩,对实验班多媒体辅助英语听力教学进行问卷调查,研究表明:多媒体辅助英语听力教学比传统方法的听力教学效果更好,它可以激发学习者的学习动机;同时,可以丰富学习者的语言输入形式与内容,提高学生的学习兴趣,从而改善其学习效果;此外,多媒体辅助英语听力教学可以有效提高学习者的听力能力。二语习得理论,特别是\"输入假设\"与\"情感过滤假设\",在多媒体辅助英语听力教学中发挥着积极的促进作用。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-蒋苏琴-克拉申二语习得理论和多媒体辅助英语听力教学——一项基于大学英语教改模式的实证研究-2010.pdf",
+      "original_filename": "理论-蒋苏琴-克拉申二语习得理论和多媒体辅助英语听力教学——一项基于大学英语教改模式的实证研究-2010.pdf"
+    },
+    {
+      "doc_id": "T-007",
+      "batch": "supplementary",
+      "title": "克拉申语言输入假说与计算机网络辅助外语教学",
+      "authors": [
+        "管肖霞"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 7,
+      "theory_name": "输入假说（Input Hypothesis）——网络教学视角",
+      "theorist_and_year": "Krashen，20世纪80年代中期",
+      "core_content": "大量有效的可理解性输入是语言习得的前提。理想输入应具有可理解性、有趣或与学习者相关、不以语法顺序编排、有足够的量。我国外语教学输入存在材料加工过度、缺乏真实语境、依赖书面文字、信息量小等问题，与理想输入相去甚远。",
+      "application": "计算机网络技术可在一定程度上满足理想输入标准。四种网络教学模式各具输入优势：（1）课堂示教模式——教师利用多媒体呈现多样化材料；（2）个别化学习模式——学生自主选择适合自身水平的材料，实现分级学习（i+1）；（3）协作学习模式——通过小组活动创造真实交际环境，降低焦虑；（4）远程教学模式——利用互联网获取丰富资源，实现开放式学习。",
+      "source_journal": "考试周刊",
+      "year": 2009,
+      "issue": "15",
+      "pages": "110-111",
+      "raw_citation": "管肖霞. 克拉申语言输入假说与计算机网络辅助外语教学[J]. 考试周刊, 2009, (15): 110-111.",
+      "abstract": "为了开发多媒体网络教学的潜在资源,以帮助学习者更有效地利用学习资源提高外语水平,本文把克拉申二语习得理论中的\"语言输入假说\"与计算机辅助教学方法相结合,探讨了如何更好地利用计算机网络资源来辅助外语的教与学,分析几种常见的计算机网络辅助外语教学模式的输入优势,对外语教学具有一定理论和实践方面的指导意义。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-管肖霞-克拉申语言输入假说与计算机网络辅助外语教学-2009.pdf",
+      "original_filename": "理论-管肖霞-克拉申语言输入假说与计算机网络辅助外语教学-2009.pdf"
+    },
+    {
+      "doc_id": "T-008",
+      "batch": "supplementary",
+      "title": "克拉申语言输入说与外语教学",
+      "authors": [
+        "罗立胜",
+        "李子男",
+        "葛岚"
+      ],
+      "theory_tags": [
+        "Krashen",
+        "i_plus_1",
+        "input_hypothesis"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 8,
+      "theory_name": "输入假说（Input Hypothesis）——理论基础视角",
+      "theorist_and_year": "Krashen，20世纪80年代初期",
+      "core_content": "输入指学习者接触到的潜在目标语语言材料。该假说建立在儿童母语习得中的\"简化语言\"（无意识、句法简单、此时此地）和\"沉默期\"（通过听积累、内化语言）基础上。强调输入是语言习得的首要条件，有效性输入应具备可理解性、趣味性、非语法程序安排和足够的输入量，遵循i+1原则和\"此时此地\"原则。",
+      "application": "该假说对我国教学的启示包括：应重视多途径输入量、改善语言环境（如创设模拟语境）、加强阅读输入、遵循i+1原则选择教材和课堂用语。但由于国内外语言环境差异（国内输入多为加工过的、以认知为目的、受环境和考试限制、依赖书面文字），应客观了解该假说，结合实际情况应用。",
+      "source_journal": "清华大学学报(哲学社会科学版)",
+      "year": 2001,
+      "issue": "4",
+      "pages": "71-74",
+      "raw_citation": "罗立胜,李子男,葛岚. 克拉申语言输入说与外语教学[J]. 清华大学学报(哲学社会科学版), 2001, (4): 71-74.",
+      "abstract": "文章客观地介绍了美国语言学家克拉申教授在 80年代初期提出的“语言输入说”的主要观点及其理论基础。在此基础上 ,对目前我国的外语教学过程中的语言输入问题进行了探讨 ,并提出了相应的建议。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-罗立胜、李子男、葛岚-克拉申语言输入说与外语教学-2001.pdf",
+      "original_filename": "理论-罗立胜、李子男、葛岚-克拉申语言输入说与外语教学-2001.pdf"
+    },
+    {
+      "doc_id": "T-009",
+      "batch": "supplementary",
+      "title": "最近发展区理论在外语教学中的应用研究30年述评",
+      "authors": [
+        "高瑞阔"
+      ],
+      "theory_tags": [
+        "scaffolding",
+        "ZPD",
+        "Vygotsky"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 9,
+      "theory_name": "最近发展区理论（Zone of Proximal Development， ZPD）",
+      "theorist_and_year": "Vygotsky，20世纪30年代",
+      "core_content": "ZPD是指儿童独立解决问题的实际发展水平与在成人指导下或与能力更强的同伴合作情况下能够解决问题的潜在发展水平之间的距离。实际发展水平反映已成熟的心理功能，潜在发展水平则指\"处在成熟过程中但尚未成熟的功能\"。学习的本质就是要创造ZPD，唤醒诸多内在发展过程。该理论在二语教育中主要被解读为一种互动活动，涉及支架、动态评估等核心概念。",
+      "application": "在外语教学中的应用包括四大领域：（1）聚焦\"支架\"的互动研究——师生支架和生生互助均能创造有效的ZPD；（2）动态评估研究——通过评估者与被评估者的互动调节，揭示学习者的学习潜力和发展能力；（3）基于游戏/表演的教学研究——角色扮演等活动更能激活学生的ZPD；（4）基于ZPD的教师发展研究——同伴合作、行动研究等能促进教师专业成长。",
+      "source_journal": "上海理工大学学报(社会科学版)",
+      "year": 2025,
+      "volume": "47",
+      "issue": "5",
+      "pages": "446-454",
+      "raw_citation": "高瑞阔. 最近发展区理论在外语教学中的应用研究30年述评[J]. 上海理工大学学报(社会科学版), 2025, 47 (5): 446-454.",
+      "abstract": "尽管“最近发展区”（ZPD）理论已被广泛运用于二语习得和外语教学研究，但误解和争议不断。为进一步廓清相关概念，梳理研究发现及存在的问题，采用范围综述的研究方法，检索并筛选出1994年以来SSCI和A&HCI相关研究文献107篇，国内核心文献近10篇，进行内容和方法分析。研究发现：已有研究存在对ZPD解读差异大、与相关概念界限不明、理论与实践联系不够紧密、研究方法和研究手段有待进一步优化等问题。进而提出，未来应加强ZPD理论的本体研究、ZPD内二语发展的影响因素研究和基于ZPD的动态评估应用研究。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-高瑞阔-最近发展区理论在外语教学中的应用研究30年述评-2025.pdf",
+      "original_filename": "理论-高瑞阔-最近发展区理论在外语教学中的应用研究30年述评-2025.pdf"
+    },
+    {
+      "doc_id": "T-010",
+      "batch": "supplementary",
+      "title": "输出假设理论视角下高中英语读写教学的AI应用",
+      "authors": [
+        "赵若英"
+      ],
+      "theory_tags": [
+        "output_hypothesis",
+        "Swain"
+      ],
+      "source_pdf_dir": "0729",
+      "raw_entry_index": 10,
+      "theory_name": "输出假设理论（Output Hypothesis）",
+      "theorist_and_year": "Swain，基于20世纪80年代对加拿大法语沉浸式教学的观察",
+      "core_content": "仅靠语言输入不足以实现语言的高水平习得，输出在语言学习进程中同样占据关键地位。输出能促使学习者更加主动地关注语言形式与意义，从而提升语言加工的深度与准确性，有效促进语言表达的准确性、流利性和复杂性。输出假设引发学习者对问题处理的假设尝试，并依据反馈来修改输出；以输出性活动促进对输入材料的吸收与运用。",
+      "application": "在AI赋能的高中英语读写教学中，构建\"输入—加工—输出—反馈\"学习系统，从四个维度展开：（1）借助AI整合多模态语料库，对教材同主题语篇进行纵深重组；（2）利用AI实现教学目标分层设定与活动立体化设计；（3）通过AI创设跨文化对比、跨学科项目式写作等生成性任务情境；（4）借助AI工具（如Coh-Metrix）对输出文本进行多维度量化评价。该模式以体育主题语篇为例进行了实践探讨。",
+      "source_journal": "现代基础教育研究",
+      "year": 2026,
+      "volume": "16",
+      "issue": "2",
+      "pages": "219-223",
+      "raw_citation": "赵若英. 输出假设理论视角下高中英语读写教学的AI应用[J]. 现代基础教育研究, 2026, 16 (2): 219-223.",
+      "abstract": "高中英语读写教学通过整合阅读与写作活动，实现语言输入与输出的动态循环，从而提升学生英语核心素养。从输出假设理论的视角出发，研究构建了AI赋能的英语读写“输入—加工—输出—反馈”学习系统。以体育主题语篇为例，从语料库智能整合、教学精准优化、生成任务情境创设及数据驱动评价四个维度，探讨AI技术与读写教学深度融合的实践路径，旨在提升学生的语言输出质量和核心素养。",
+      "file_path": "C:\\Users\\ht\\Documents\\outeye3.0\\seed-materials\\数据收集（0729）\\理论\\理论-赵若英-输出假设理论视角下高中英语读写教学的AI应用-2026.pdf",
+      "original_filename": "理论-赵若英-输出假设理论视角下高中英语读写教学的AI应用-2026.pdf"
+    },
+    {
+      "doc_id": "T-101",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论1-Tim Johns-DDL-1991.pdf",
+      "original_filename": "理论1-Tim Johns-DDL-1991.pdf",
+      "title": "基于语料库驱动的对外汉语词汇教学模式研究",
+      "authors": [
+        "张栋",
+        "蔡亚薇"
+      ],
+      "source_journal": "（未在文件名中标明，从内容推断期刊名待补）",
+      "year": 2022,
+      "issue": "3",
+      "pages": "136-140",
+      "article_number": "2095-8978(2022)03-0136-05",
+      "theory_tags": [
+        "DDL",
+        "corpus",
+        "vocabulary"
+      ],
+      "theory_name": "数据驱动学习（Data-Driven Learning, DDL）",
+      "theorist_and_year": "Tim Johns, 1991（原版提出者）；本篇为中文应用研究",
+      "core_content": "以建构主义为理论基础，汉语教师利用母语者真实语料构建微型文本，提供多样化语境、辨析近义词、呈现归纳词语搭配规则，支撑学习者建构汉语词汇知识。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-102",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论2-Tim Johns-DDL-1991.pdf",
+      "original_filename": "理论2-Tim Johns-DDL-1991.pdf",
+      "title": "语料库数据驱动的外语学习：思想、方法和技术",
+      "authors": [
+        "甄凤超"
+      ],
+      "source_journal": "（待补，从内容看是外语教学类期刊）",
+      "year": null,
+      "theory_tags": [
+        "DDL",
+        "corpus",
+        "autonomous_learning"
+      ],
+      "theory_name": "数据驱动学习（DDL）",
+      "theorist_and_year": "Tim Johns, 20世纪90年代初（原版提出者）；本篇为中文综述",
+      "core_content": "DDL 四大特征：以学生为中心、提供真实语言材料、强调自我探索与发现、自下而上的归纳式学习。实现方法包括：KWIC 检索、分析搭配、类联接和扩展语境、使用主题词和制作课件。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-103",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论3-Fairclough-CDA-1989.pdf",
+      "original_filename": "理论3-Fairclough-CDA-1989.pdf",
+      "title": "批评话语分析: 目标、方法与动态",
+      "authors": [
+        "辛斌",
+        "高小丽"
+      ],
+      "source_journal": "外国语文",
+      "year": 2013,
+      "theory_tags": [
+        "CDA",
+        "critical_discourse",
+        "Fairclough"
+      ],
+      "theory_name": "批判话语分析（Critical Discourse Analysis, CDA）",
+      "theorist_and_year": "Fairclough, 1989（原版提出者）；本篇为中文综述",
+      "core_content": "CDA 与批判社会学的目的一致，旨在改变或消除被认为导致不真实或扭曲的意识条件，开启反省过程。本篇分析 CDA 的目标、方法与动态。",
+      "_pending_verification": false,
+      "_verification_note": "PyMuPDF 验证通过；标题原为'批评话语分析：目标、语类与态势'，实测为'批评话语分析: 目标、方法与动态'；作者补全为辛斌、高小丽（南京师范大学外国语学院）；ISSN 1004-6038 即《外国语文》；文章编号 1004-6038(2013)04-0001-05 -> 2013年第4期 1-5页",
+      "batch": "core",
+      "source_pdf_dir": "0811",
+      "doi": "10.13458/j.cnki.flatt.003923",
+      "raw_citation": "辛斌, 高小丽. 批评话语分析: 目标、方法与动态[J]. 外国语文, 2013 (04): 1-5.",
+      "_reader_used": "fitz",
+      "issue": "04",
+      "pages": "1-5",
+      "article_number": "1004-6038(2013)04-0001-05",
+      "reader_used": "fitz"
+    },
+    {
+      "doc_id": "T-104",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论4-Hardt-Mautner-DHA-1995.pdf",
+      "original_filename": "理论4-Hardt-Mautner-DHA-1995.pdf",
+      "title": "基于语料库的“历史语篇分析”（DHA）的过程与价值——以美国主流媒体对希拉里电子邮件门的话语建构为例",
+      "authors": [
+        "杨敏",
+        "符小丽"
+      ],
+      "source_journal": "外国语",
+      "year": 2018,
+      "issue": "2",
+      "pages": "77-85",
+      "article_number": "1004-5139(2018)02-0077-09",
+      "theory_tags": [
+        "DHA",
+        "discourse_historical",
+        "Wodak",
+        "corpus"
+      ],
+      "theory_name": "历史语篇分析法（Discourse-Historical Approach, DHA）",
+      "theorist_and_year": "Ruth Wodak, 1995（原版提出者）；本篇为中文应用研究",
+      "core_content": "DHA 聚焦政治领域话语，包括政治演讲、政治辩论、答记者问及媒体对政治事件的报道。本研究以美国主流媒体对希拉里电子邮件门的话语建构为案例。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-105",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论5-Fairclough-CDA-1989.pdf",
+      "original_filename": "理论5-Fairclough-CDA-1989.pdf",
+      "title": "基于语料库的批评话语分析",
+      "authors": [
+        "郭松"
+      ],
+      "source_journal": "（待补，从作者机构看是天津商业大学）",
+      "year": null,
+      "theory_tags": [
+        "CDA",
+        "corpus",
+        "qualitative",
+        "quantitative"
+      ],
+      "theory_name": "批评话语分析（CDA）+ 语料库方法",
+      "theorist_and_year": "Fairclough, 1989（CDA 原版提出者）；本篇为方法论研究",
+      "core_content": "CDA 长期以定性研究为主，拘泥于单个文本的解读。语料库语言学定量研究与 CDA 定性研究有机结合，可提供数据基础，减少研究者偏见。Stubbs、Widdowson 等的代表性质疑推动了基于语料库的 CDA 新模式。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-106",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论6-Jerome Bruner-支架+STEM-1976.pdf",
+      "original_filename": "理论6-Jerome Bruner-支架+STEM-1976.pdf",
+      "title": "\"支架+\"STEM教学模式设计及实践研究——面向高阶思维能力培养",
+      "authors": [
+        "潘星竹",
+        "姜强",
+        "黄丽",
+        "赵蔚",
+        "王利思"
+      ],
+      "source_journal": "现代远距离教育",
+      "year": 2019,
+      "issue": "03",
+      "pages": "56-64",
+      "theory_tags": [
+        "scaffolding",
+        "STEM",
+        "emotion_mining",
+        "Bruner"
+      ],
+      "theory_name": "支架式教学 + STEM 教育",
+      "theorist_and_year": "Jerome Bruner, 1976（支架理论原版提出者）；本篇为 STEM 教育应用",
+      "core_content": "大数据时代在线学习者情感挖掘与干预研究。涉及教育部人文社科青年基金、东北师范大学教师教育研究基金、吉林省十三五社科规划基金。",
+      "_pending_verification": false,
+      "_verification_note": "PyMuPDF 验证通过；标题原为'大数据时代在线学习者情感挖掘与干预研究（STEM+支架视角）'，实测标题与理论6 文件名不符（这是该 PDF 的真实标题）；作者 5 人潘星竹、姜强、黄丽、赵蔚、王利思，东北师范大学等；文章编号 1001-8700(2019)03-0056-09 -> 2019年第3期（总第183期）56-64页",
+      "batch": "core",
+      "source_pdf_dir": "0811",
+      "volume": "183",
+      "doi": "10.13927/j.cnki.yuan.2019.0028",
+      "raw_citation": "潘星竹, 姜强, 黄丽, 赵蔚, 王利思. \"支架+\"STEM教学模式设计及实践研究——面向高阶思维能力培养[J]. 现代远距离教育, 2019, 183 (03): 56-64.",
+      "_reader_used": "fitz",
+      "article_number": "1001-8700(2019)03-0056-09",
+      "reader_used": "fitz"
+    },
+    {
+      "doc_id": "T-107",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论7-Jerome Bruner-支架-1976.pdf",
+      "original_filename": "理论7-Jerome Bruner-支架-1976.pdf",
+      "title": "支架式教学及其在中职英语教学中的应用研究",
+      "authors": [
+        "吴冬梅",
+        "吴晶晶"
+      ],
+      "source_journal": "中国职业技术教育",
+      "year": 2015,
+      "issue": "11",
+      "theory_tags": [
+        "scaffolding",
+        "constructivism",
+        "Bruner"
+      ],
+      "theory_name": "支架式教学",
+      "theorist_and_year": "布鲁纳、伍德等学者首次提出（原版）；1996年北京师范大学张建伟、陈琦教授首次介绍到中国",
+      "core_content": "随着教学理论的发展，强调教师引起、维持、促进学生学习的建构主义教学观受到重视。支架式教学源自建筑业概念，指为学习者建构知识提供一种概念框架。20世纪90年代末伴随建构主义被介绍到中国。",
+      "_pending_verification": false,
+      "_verification_note": "PyMuPDF 验证通过；标题原为'支架式教学理论与实践'，实测为'支架式教学及其在中职英语教学中的应用研究'；作者 2 人吴冬梅、吴晶晶；ISSN 1004-9290 即《中国职业技术教育》；文章编号 1004-9290(2015)0011-0074-09 -> 2015年第11期 74-82页",
+      "batch": "core",
+      "source_pdf_dir": "0811",
+      "pages": "74-82",
+      "article_number": "1004-9290(2015)0011-0074-09",
+      "raw_citation": "吴冬梅, 吴晶晶. 支架式教学及其在中职英语教学中的应用研究[J]. 中国职业技术教育, 2015 (11): 74-82.",
+      "_reader_used": "fitz",
+      "reader_used": "fitz",
+      "_auto_extracted_article_number": "1004-9290（2015）0011-0074-09"
+    },
+    {
+      "doc_id": "T-108",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论8-Vygotsky-社会文化理论-1922.pdf",
+      "original_filename": "理论8-Vygotsky-社会文化理论-1922.pdf",
+      "title": "从Vygotsky 理论视角看翻译在二语习得中的作用",
+      "authors": [
+        "徐敏慧"
+      ],
+      "source_journal": "中国海洋大学学报（社会科学版）",
+      "year": 2006,
+      "issue": "06",
+      "theory_tags": [
+        "sociocultural",
+        "Vygotsky",
+        "ZPD",
+        "scaffolding",
+        "internalization"
+      ],
+      "theory_name": "社会文化理论（Sociocultural Theory）",
+      "theorist_and_year": "Vygotsky, 20世纪30年代（原版提出者，非1922）；本篇为外语教学应用研究",
+      "core_content": "社会文化理论强调中介作用与心理工具。最近发展区是重要概念，区分自发发展与系统教学。外语习得与母语习得的区别在于中介作用的对象（word meaning）。",
+      "_pending_verification": false,
+      "_verification_note": "PyMuPDF 验证通过；标题原为'Vygotsky 心理理论对二语教学的启发'，实测为'从Vygotsky 理论视角看翻译在二语习得中的作用'；作者徐敏慧（中国海洋大学外国语学院）；ISSN 1672-335X 即《中国海洋大学学报（社会科学版）》；文章编号 1672-335X(2006)06-0083-04 -> 2006年第6期 83-86页",
+      "batch": "core",
+      "source_pdf_dir": "0811",
+      "pages": "83-86",
+      "article_number": "1672-335X(2006)06-0083-04",
+      "raw_citation": "徐敏慧. 从Vygotsky 理论视角看翻译在二语习得中的作用[J]. 中国海洋大学学报（社会科学版）, 2006 (06): 83-86.",
+      "_reader_used": "fitz",
+      "reader_used": "fitz",
+      "_auto_extracted_article_number": "1672-335X（2006）06-0083-04"
+    },
+    {
+      "doc_id": "T-109",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论9-最近发展区，支架理论.pdf",
+      "original_filename": "理论9-最近发展区，支架理论.pdf",
+      "title": "最近发展区中的词块习得实证研究——基于支架式教学的实验报告",
+      "authors": [
+        "盖淑华"
+      ],
+      "source_journal": "（待补，作者单位：北京外国语大学中国外语教育研究中心 + 装甲兵工程学院）",
+      "year": null,
+      "theory_tags": [
+        "ZPD",
+        "scaffolding",
+        "lexical_chunks",
+        "Vygotsky"
+      ],
+      "theory_name": "最近发展区理论 + 支架式教学",
+      "theorist_and_year": "Vygotsky 最近发展区理论 + 支架式教学（实证研究报告）",
+      "core_content": "以 Vygotsky 最近发展区理论为指导，通过为期一年的教学实验，采用支架式词块教学方法，探讨二语词块习得能力及其与语言能力的关系。71名非英语专业大学生参加实验。词块习得能力对写作能力提高起直接作用。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-110",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论10-董玉琦-CTCL 研究范式-2010.pdf",
+      "original_filename": "理论10-董玉琦-CTCL 研究范式-2010.pdf",
+      "title": "促进偏差认知转变的教学策略构建与应用研究",
+      "authors": [
+        "王靖",
+        "董玉琦"
+      ],
+      "source_journal": "电化教育研究",
+      "year": 2016,
+      "issue": "12",
+      "pages": "（总第284期）",
+      "theory_tags": [
+        "CTCL",
+        "biased_cognition",
+        "educational_technology"
+      ],
+      "theory_name": "CTCL 研究范式（Culture-Technology-Content-Learning）",
+      "theorist_and_year": "董玉琦, 2010（CTCL 范式原版提出者）；本篇为应用研究（2016年）",
+      "core_content": "依据 CTCL 研究范式，针对高中信息技术学科五个学习单元，依据学生偏差认知形成机制，设计转变学生偏差认知的教学策略，并检验其转变效果。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-111",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论11-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "original_filename": "理论11-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "title": "“产出导向法”在对外汉语教学中的应用：产出目标达成性考察",
+      "authors": [
+        "朱勇",
+        "白雪"
+      ],
+      "source_journal": "（待补，作者单位：北京外国语大学中文学院）",
+      "year": null,
+      "theory_tags": [
+        "POA",
+        "production_oriented",
+        "文秋芳",
+        "TSCA"
+      ],
+      "theory_name": "产出导向法（Production-Oriented Approach, POA）",
+      "theorist_and_year": "文秋芳, 2015（POA 实际提出者）；本篇为对外汉语教学应用研究。注意：文件名标为“弗雷德里克·泰勒-20世纪初”是事实性错误，POA 实际由文秋芳 2015 年提出。",
+      "core_content": "基于 POA 教学材料使用与评价理论框架，考察 POA 教学实施后产出目标的达成性。通过对 50 名在华为来西亚大二留学生产出文本的分析，以及对任课教师和部分学生的深度访谈，发现 POA 汉语教学的产出目标达成效果较好。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-112",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论12-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "original_filename": "理论12-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "title": "“产出导向法”在对外汉语教学中的应用：教材改编",
+      "authors": [
+        "桂靖",
+        "季陶"
+      ],
+      "source_journal": "（待补，作者单位：北京外国语大学中文学院）",
+      "year": null,
+      "theory_tags": [
+        "POA",
+        "textbook_adaptation",
+        "文秋芳"
+      ],
+      "theory_name": "产出导向法（POA）- 教材改编应用",
+      "theorist_and_year": "文秋芳, 2015（POA 提出者）；本篇为教材改编应用研究。注意：文件名标“泰勒-20世纪初”是事实性错误。",
+      "core_content": "团队借鉴 POA 理论指导下大学英语教材《新一代》的编写经验，对汉语综合教材中的一课进行了 POA 化处理，并在对外汉语课堂进行了 4 课时实验。聚焦教材改编环节，从单元结构、生词、语言点以及练习设计等方面讨论改编过程。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-113",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论13-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "original_filename": "理论13-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "title": "基于 CiteSpace 的产出导向法在对外汉语教学中的可视化分析",
+      "authors": [
+        "（待补）"
+      ],
+      "source_journal": "国际中文教育",
+      "year": 2024,
+      "issue": "18",
+      "pages": "98-（总第367期）",
+      "theory_tags": [
+        "POA",
+        "CiteSpace",
+        "bibliometric",
+        "对外汉语"
+      ],
+      "theory_name": "产出导向法（POA）- 文献计量分析",
+      "theorist_and_year": "文秋芳, 2015（POA 提出者）；2017年5月文秋芳及团队在首届创新外语教育在中国国际论坛上交流。本篇为可视化分析。注意：文件名标“泰勒-20世纪初”是事实性错误。",
+      "core_content": "以中国知网、万方和维普三个数据库为研究对象，基于主题“产出导向法”并含“对外汉语教学”，对 2016-2023 年间相关文献进行可视化分析。研究主题主要有教学设计、线上教学、口语教学、驱动环节等，研究前沿转变为行动研究、偏误分析等。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-114",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论14-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "original_filename": "理论14-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "title": "“产出导向法”促成环节设计标准例析",
+      "authors": [
+        "邱琳"
+      ],
+      "source_journal": "外语教育研究前沿",
+      "year": 2020,
+      "issue": "2",
+      "volume": "3",
+      "pages": "12-19",
+      "theory_tags": [
+        "POA",
+        "facilitation",
+        "precision",
+        "progression",
+        "diversity"
+      ],
+      "theory_name": "产出导向法（POA）- 促成环节设计",
+      "theorist_and_year": "文秋芳, 2015（POA 提出者，2018a 为引用版本）；本篇为促成环节设计研究。注意：文件名标“泰勒-20世纪初”是事实性错误。",
+      "core_content": "促成有效性三大标准：精准性、渐进性、多样性。展示如何应用这些标准。促成不等同于课后练习，也不等同于几个活动的简单叠加。学用一体：学生学一点用一点，边学边用，输入与输出对接。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-115",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论15-文秋芳-师生合作评价-2016.pdf",
+      "original_filename": "理论15-文秋芳-师生合作评价-2016.pdf",
+      "title": "“师生合作评价”：“产出导向法”创设的新评价形式",
+      "authors": [
+        "文秋芳"
+      ],
+      "source_journal": "（待补，从内容看是 2016 年发表）",
+      "year": 2016,
+      "theory_tags": [
+        "TSCA",
+        "POA",
+        "assessment",
+        "文秋芳"
+      ],
+      "theory_name": "师生合作评价（Teacher-Student Collaborative Assessment, TSCA）",
+      "theorist_and_year": "文秋芳, 2016（TSCA 提出者）；POA 评价环节的核心创新",
+      "core_content": "POA 始于产出、止于产出，特别重视对学生产出结果的有效评价。我国大学英语班级大、教师工作负担重，对每个产出任务给予及时有效评价是极大挑战。TSCA 是 POA 提出的新评价设想，以组织、平衡教师评价与其他评价方式。包括课前、课内和课后 3 个阶段。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-116",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论16-文秋芳-师生合作评价-2016.pdf",
+      "original_filename": "理论16-文秋芳-师生合作评价-2016.pdf",
+      "title": "师生合作评价（TSCA）在 POA 单元产品评价中的应用",
+      "authors": [
+        "（待补，从内容看作者非文秋芳本人，是 TSCA 应用研究者）"
+      ],
+      "source_journal": "现代外语",
+      "year": 2017,
+      "issue": "3",
+      "volume": "40",
+      "theory_tags": [
+        "TSCA",
+        "POA",
+        "application_research"
+      ],
+      "theory_name": "师生合作评价（TSCA）- 应用研究",
+      "theorist_and_year": "文秋芳, 2016（TSCA 提出者）；本篇为应用研究。基金项目：教育部人文社科重点研究基地重大项目 16JJD740002 子课题",
+      "core_content": "TSCA 是 POA 团队提出的新评价形式，旨在解决评价效率低和效果差的问题。课前教师对典型样本进行详批，课内学生之间合作、教师与学生合作共同评价。本研究在一所211大学英语专业二年级开展，24 名学生，研究历时 16 周。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    },
+    {
+      "doc_id": "T-117",
+      "file_path": "C:/Users/ht/Documents/outeye3.0/seed-materials/数据收集0811/教学理论/理论17-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "original_filename": "理论17-弗雷德里克·泰勒-产出导向法-20世纪初.pdf",
+      "title": "“产出导向法”中师生合作评价原则例析",
+      "authors": [
+        "孙曙光"
+      ],
+      "source_journal": "外语教育研究前沿",
+      "year": 2020,
+      "issue": "2",
+      "volume": "3",
+      "pages": "20-27",
+      "theory_tags": [
+        "TSCA",
+        "POA",
+        "principles",
+        "孙曙光"
+      ],
+      "theory_name": "师生合作评价（TSCA）- 实施原则",
+      "theorist_and_year": "孙曙光, 2020（实施原则提出者）；TSCA 原型由文秋芳 2016 提出。注意：文件名标“泰勒-20世纪初”是事实性错误。",
+      "core_content": "TSCA 实施原则：课前目标导向、重点突出，课中问题驱动、支架渐进，课后过程监控、推优示范。通过辩证研究（文秋芳 2018a）摸索出 POA 中应用 TSCA 的实施原则。以一个单元案例解析评价的具体实施。",
+      "_pending_verification": false,
+      "batch": "core",
+      "source_pdf_dir": "0811"
+    }
+  ],
+  "notes": [
+    "doc_id 编号规则：core 批次 T-101~T-117（0811 目录原文件名序号），supplementary 批次 T-001~T-010（0729 目录 docx 顺序）",
+    "0811 目录的 PDF 文件名（如“理论11-弗雷德里克·泰勒-产出导向法-20世纪初.pdf”）只是理论标签，实际内容是引用该理论的中文论文，真实作者/标题/年份以本清单为准",
+    "标注 _pending_verification=true 的条目为 PyPDF2 解析乱码（GBK-EUC-H 编码），现有元数据从乱码中可识别字符推断，需在服务器装 PyMuPDF 后重新解析验证",
+    "0811 目录中“弗雷德里克·泰勒-产出导向法-20世纪初”是事实性错误：POA 实际由文秋芳 2015 年提出，不是泰勒",
+    "Vygotsky 社会文化理论实际提出于 20世纪30年代，文件名标 1922 是误导性标记",
+    "scope 字段在 seed 脚本写入时统一为 system，owner_id 为 null"
+  ]
+}

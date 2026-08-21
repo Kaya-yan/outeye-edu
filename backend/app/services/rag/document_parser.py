@@ -130,7 +130,35 @@ class DocumentParser:
         )
 
     def _parse_pdf(self, path: Path) -> Tuple[str, Dict]:
-        """解析PDF文件"""
+        """解析PDF文件
+
+        解析顺序：PyMuPDF (fitz) → PyPDF2
+        PyMuPDF 对 CJK 字体编码（GBK-EUC-H 等）兼容性最好，作为首选；
+        PyPDF2 作为兜底（CJK 可能乱码，但对原生英文 PDF 足够）。
+        """
+        # 1. PyMuPDF (fitz) - CJK 兼容性最好
+        try:
+            import fitz
+            content_parts: List[str] = []
+            metadata: Dict[str, Any] = {}
+            with fitz.open(path) as doc:
+                if doc.metadata:
+                    metadata = {
+                        'title': doc.metadata.get('title', '') or '',
+                        'author': doc.metadata.get('author', '') or '',
+                        'subject': doc.metadata.get('subject', '') or '',
+                    }
+                for page in doc:
+                    page_text = page.get_text()
+                    if page_text:
+                        content_parts.append(page_text)
+            text = "\n\n".join(content_parts).strip()
+            if text:
+                return text, metadata
+        except ImportError:
+            pass
+
+        # 2. PyPDF2 - 兜底（CJK 可能乱码）
         try:
             import PyPDF2
 
@@ -155,20 +183,7 @@ class DocumentParser:
             return content.strip(), metadata
 
         except ImportError:
-            # 如果没有PyPDF2，尝试使用pdfplumber
-            try:
-                import pdfplumber
-
-                content = ""
-                with pdfplumber.open(path) as pdf:
-                    for page in pdf.pages:
-                        text = page.extract_text()
-                        if text:
-                            content += text + "\n"
-
-                return content.strip(), {}
-            except ImportError:
-                raise ImportError("需要安装PyPDF2或pdfplumber来解析PDF文件")
+            raise ImportError("需要安装 PyMuPDF 或 PyPDF2 来解析 PDF 文件")
 
     def _parse_docx(self, path: Path) -> Tuple[str, Dict]:
         """解析Word文档"""
