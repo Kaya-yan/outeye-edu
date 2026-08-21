@@ -48,8 +48,8 @@ EXISTING_SYSTEM_SOURCE_TAG = "system_seed"
 class SeedRecord:
     """单条 seed 数据条目（从 manifest.json 反序列化）"""
     doc_id: str
-    title: str
     file_path: str
+    title: Optional[str] = None
     authors: List[str] = field(default_factory=list)
     year: Optional[int] = None
     source: Optional[str] = None          # 期刊/出版社
@@ -237,6 +237,28 @@ def _split_long_paragraph(text: str, size_limit: int, min_size: int) -> List[str
     return chunks
 
 
+def resolve_title(record: SeedRecord) -> str:
+    """返回记录的有效展示标题（幂等、非空）
+
+    theory 清单有显式 title；interview/lesson 清单无 title 字段，
+    从 extra_metadata 派生：
+    - interview: interview_topic / topic
+    - lesson: course + unit / course
+    - 兜底: original_filename / doc_id
+    """
+    if record.title:
+        return record.title
+    meta = record.extra_metadata or {}
+    topic = meta.get("interview_topic") or meta.get("topic")
+    if topic:
+        return topic
+    course = meta.get("course")
+    unit = meta.get("unit")
+    if course:
+        return f"{course} {unit}".strip() if unit else course
+    return meta.get("original_filename") or record.doc_id
+
+
 def build_payload(
     record: SeedRecord,
     chunk: Dict[str, Any],
@@ -246,7 +268,7 @@ def build_payload(
     """构造 Qdrant payload（参照 knowledge_seed.py:97-108 字段集）"""
     return {
         "doc_id": record.doc_id,
-        "title": record.title,
+        "title": resolve_title(record),
         "content": chunk["content"],
         "metadata": {
             "authors": record.authors,
@@ -302,15 +324,16 @@ def seed_one_record(
     existing_titles: set,
 ) -> SeedResult:
     """处理单条 seed 记录：解析 -> 分块 -> 向量化 -> 入库"""
+    title = resolve_title(record)
     result = SeedResult(
         doc_id=record.doc_id,
-        title=record.title,
+        title=title,
         file_path=record.file_path,
         success=False,
     )
 
     # 幂等检查
-    if record.title in existing_titles:
+    if title in existing_titles:
         result.skipped = True
         result.success = True
         return result
@@ -365,7 +388,7 @@ def seed_one_record(
 
     result.success = True
     result.chunks_written = len(records_to_upsert)
-    existing_titles.add(record.title)  # 避免同批次内重复处理
+    existing_titles.add(title)  # 避免同批次内重复处理
     return result
 
 
@@ -395,15 +418,16 @@ def seed_batch(
 
     total = len(records)
     for i, record in enumerate(records, 1):
-        title_preview = record.title[:40] if record.title else record.doc_id
+        title = resolve_title(record)
+        title_preview = title[:40] if title else record.doc_id
 
         if dry_run:
             result = SeedResult(
                 doc_id=record.doc_id,
-                title=record.title,
+                title=title,
                 file_path=record.file_path,
                 success=True,
-                skipped=record.title in existing_titles,
+                skipped=title in existing_titles,
                 chunks_written=0,
             )
             try:
@@ -415,7 +439,7 @@ def seed_batch(
                 result.error = f"解析预览失败: {e}"
                 failures.append({
                     "doc_id": record.doc_id,
-                    "title": record.title,
+                    "title": title,
                     "file_path": record.file_path,
                     "reason": str(e),
                 })
@@ -442,7 +466,7 @@ def seed_batch(
             status = f"ERR: {result.error}"
             failures.append({
                 "doc_id": record.doc_id,
-                "title": record.title,
+                "title": title,
                 "file_path": record.file_path,
                 "reason": result.error or "unknown",
             })
