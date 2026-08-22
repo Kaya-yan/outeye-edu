@@ -524,6 +524,26 @@ class WhiteboxAnalyzer:
     LEVEL_ORDER = {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5, "C2": 6}
     LEVEL_NAMES = {1: "A1", 2: "A2", 3: "B1", 4: "B2", 5: "C1", 6: "C2"}
 
+    # 英语不规则复数/变形（CEFR词表只收基础形，这里做形→基映射）
+    IRREGULAR_FORMS = {
+        "children": "child", "men": "man", "women": "woman", "people": "person",
+        "feet": "foot", "teeth": "tooth", "geese": "goose", "mice": "mouse",
+        "oxen": "ox", "brethren": "brother", "lice": "louse",
+        "was": "be", "were": "be", "been": "be", "being": "be",
+        "am": "be", "is": "be", "are": "be",
+        "had": "have", "has": "have", "did": "do", "does": "do",
+        "went": "go", "gone": "go", "made": "make", "took": "take",
+        "taken": "take", "gave": "give", "given": "give", "got": "get",
+        "came": "come", "became": "become", "spoke": "speak", "spoken": "speak",
+        "wrote": "write", "written": "write", "knew": "know", "known": "know",
+        "saw": "see", "seen": "see", "found": "find", "told": "tell",
+        "thought": "think", "brought": "bring", "bought": "buy", "taught": "teach",
+        "caught": "catch", "fought": "fight", "sought": "seek",
+        "better": "good", "best": "good", "worse": "bad", "worst": "bad",
+        "more": "much", "most": "much", "further": "far", "farthest": "far",
+        "older": "old", "oldest": "old", "elder": "old", "eldest": "old",
+    }
+
     def __init__(self):
         self.cefr_vocab = _load_cefr_wordlist()
         self.awl_vocab = _load_awl_wordlist()
@@ -601,15 +621,19 @@ class WhiteboxAnalyzer:
         return re.findall(r"[a-zA-Z]+(?:'[a-zA-Z]+)?", text.lower())
 
     def _lemmatize(self, word: str, tokenizer=None) -> str:
-        """词形还原（委托给语言专用分词器）"""
-        if tokenizer:
-            return tokenizer.lemmatize(word)
+        """词形还原（不委托给分词器——分词器的简单后缀剥离会把 mother→moth、
+        families→famili 等切过头。这里用词表校验 + 不规则表 + 形态规则）。"""
         w = word.lower().strip()
         if len(w) <= 3:
             return w
         # 先查词表，命中则直接返回
         if w in self.cefr_vocab:
             return w
+        # 不规则变形表（children→child, went→go, was→be 等）
+        if w in self.IRREGULAR_FORMS:
+            base = self.IRREGULAR_FORMS[w]
+            if base in self.cefr_vocab:
+                return base
 
         # 辅助：尝试候选词是否在词表中
         def _try(candidates):
@@ -721,8 +745,8 @@ class WhiteboxAnalyzer:
     def _analyze_vocabulary(self, text: str, student_level: str = "B1", tokenizer=None, is_european: bool = True, lang: str = "en") -> VocabAnalysis:
         """词汇分析（支持多语言）"""
         raw_words = self._tokenize(text, tokenizer)
-        # 词形还原：inflected → base form
-        words = [self._lemmatize(w, tokenizer) for w in raw_words]
+        # 词形还原：inflected → base form；过滤单字符 token（'s 切出的裸 s 等）
+        words = [self._lemmatize(w, tokenizer) for w in raw_words if len(w) >= 2]
         total = len(words)
         unique = len(set(words))
         word_counts = Counter(words)
@@ -1055,6 +1079,23 @@ class WhiteboxAnalyzer:
 
         return points
 
+    # 文化元素解释模板：按类别给出可操作的教学建议，不重复套话
+    CULTURAL_EXPLANATION_TEMPLATES = {
+        "习俗": "课文出现「{kw}」，属于文化习俗类。教学时可补充该习俗的起源、当代形态与中外交互差异，并设计情境对话让学生在角色扮演中体验。",
+        "历史": "课文出现「{kw}」，属于历史背景类。教学时可补充该历史事件的时间线、因果关系与当代影响，并引导学生做中外同期对照阅读。",
+        "社会": "课文出现「{kw}」，属于社会现象类。教学时可补充该现象在目标语国家的现状、统计数据或新闻报道摘录，并组织小组讨论中外差异。",
+        "价值观": "课文出现「{kw}」，属于价值观类。教学时可补充该价值观在目标语文化中的具体表现，引导学生反思本国文化中的对应或对照观念。",
+        "地理": "课文出现「{kw}」，属于地理文化类。教学时可补充地图、地标图片或气候特征，并设计基于地理位置的描述性语言练习。",
+        "文学": "课文出现「{kw}」，属于文学文化类。教学时可补充作者背景、文体特征与经典选段，并引导学生做片段对比阅读或仿写。",
+    }
+
+    def _render_cultural_explanation(self, category: str, keyword: str, lang: str = "en") -> str:
+        """生成按类别分类的文化元素教学建议（非套话）"""
+        template = self.CULTURAL_EXPLANATION_TEMPLATES.get(category)
+        if template:
+            return template.format(kw=keyword)
+        return f"课文出现「{keyword}」，可结合课文语境补充相关文化背景。"
+
     def _analyze_cultural_elements(self, text: str, lang: str = "en") -> List[CulturalElement]:
         """识别文本中的文化元素"""
         elements = []
@@ -1127,7 +1168,7 @@ class WhiteboxAnalyzer:
                         category=category,
                         keyword=keyword,
                         context=f"...{context}...",
-                        explanation=f"涉及{category}元素「{keyword}」，建议补充文化背景知识",
+                        explanation=self._render_cultural_explanation(category, keyword, lang),
                     ))
 
         # 去重（同一关键词只保留第一个）

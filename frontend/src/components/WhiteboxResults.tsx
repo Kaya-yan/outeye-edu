@@ -4,6 +4,7 @@ import RadarChart from "./charts/RadarChart";
 import CefrBarChart from "./charts/CefrBarChart";
 import ReadabilityGauge from "./charts/ReadabilityGauge";
 import DifficultWordsChart from "./charts/DifficultWordsChart";
+import TermTooltip from "./TermTooltip";
 
 interface DifficultWord {
   word: string;
@@ -143,18 +144,18 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:w-[420px]">
-            <VerdictCard label="体裁判断" value={d.genre_hint} note={d.text_structure || "等待结构分析"} />
-            <VerdictCard label="可读性" value={s.flesch_reading_ease} note={s.flesch_reading_ease > 60 ? "较易进入课堂" : "需增加引导"} />
+            <VerdictCard label="体裁判断" value={d.genre_hint} note={d.text_structure || "等待结构分析"} term="体裁" />
+            <VerdictCard label="可读性" value={s.flesch_reading_ease} note={s.flesch_reading_ease > 60 ? "较易进入课堂" : "需增加引导"} term="可读性" />
             <VerdictCard label="重点出口" value="生成课件" note={readinessTone.summary} />
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="总词数" value={v.total_words} note="词汇规模" />
-        <MetricCard label="平均句长" value={`${s.avg_sentence_length} 词`} note="句法负荷" />
-        <MetricCard label="连接密度" value={`${d.connective_density}/百词`} note="语篇衔接" />
-        <MetricCard label="AWL 占比" value={`${(v.awl_ratio * 100).toFixed(1)}%`} note="学术词汇" />
+        <MetricCard label="总词数" value={v.total_words} note="词汇规模" term="总词数" />
+        <MetricCard label="平均句长" value={`${s.avg_sentence_length} 词`} note="句法负荷" term="平均句长" />
+        <MetricCard label="连接密度" value={`${d.connective_density}/百词`} note="语篇衔接" term="连接密度" />
+        <MetricCard label="AWL 占比" value={`${(v.awl_ratio * 100).toFixed(1)}%`} note="学术词汇" term="AWL 占比" />
       </div>
 
       <div className="archive-surface p-5 sm:p-6">
@@ -187,16 +188,16 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartPanel title="六维分析雷达" caption="用于快速判断课文在哪些维度会拉高课堂组织成本。">
+        <ChartPanel title="六维分析雷达" caption="用于快速判断课文在哪些维度会拉高课堂组织成本。" term="六维分析雷达">
           <RadarChart vocabulary={v} syntax={s} discourse={d} />
         </ChartPanel>
-        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词与未分级词是否集中。">
+        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词与未分级词是否集中。" term="CEFR 词汇分布">
           <CefrBarChart distribution={v.cefr_distribution} totalWords={v.total_words} />
         </ChartPanel>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartPanel title="可读性指数" caption="可读性越低，越需要提前设计支架与解释密度。">
+        <ChartPanel title="可读性指数" caption="可读性越低，越需要提前设计支架与解释密度。" term="可读性指数">
           <ReadabilityGauge fleschScore={s.flesch_reading_ease} />
         </ChartPanel>
         <ChartPanel title="难词 Top 10" caption="重点看超纲词是否会直接影响课堂目标与任务推进。">
@@ -211,19 +212,19 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <EvidencePanel title="词汇证据" subtitle="Vocabulary">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="不重复词" value={v.unique_words} note="词汇分布" />
-            <MetricCard label="词汇丰富度" value={v.vocabulary_richness.toFixed(2)} note="TTR 近似" />
-            <MetricCard label="AWL 学术词" value={v.awl_count} note="高阶词项" />
-            <MetricCard label="难词数" value={v.difficult_words.length} note="超纲负荷" />
+            <MetricCard label="不重复词" value={v.unique_words} note="词汇分布" term="不重复词" />
+            <MetricCard label="词汇丰富度" value={v.vocabulary_richness.toFixed(2)} note="TTR 近似" term="词汇丰富度" />
+            <MetricCard label="AWL 学术词" value={v.awl_count} note="高阶词项" term="AWL 学术词" />
+            <MetricCard label="难词数" value={v.difficult_words.length} note="超纲负荷" term="难词数" />
           </div>
         </EvidencePanel>
 
         <EvidencePanel title="句法证据" subtitle="Syntax">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="句子数" value={s.total_sentences} note="文本切分" />
-            <MetricCard label="Flesch" value={s.flesch_reading_ease} note="可读性" />
-            <MetricCard label="长句" value={s.long_sentences_count} note="> 30 词" />
-            <MetricCard label="超长句" value={s.very_long_sentences_count} note="> 40 词" />
+            <MetricCard label="句子数" value={s.total_sentences} note="文本切分" term="句子数" />
+            <MetricCard label="Flesch" value={s.flesch_reading_ease} note="可读性" term="Flesch" />
+            <MetricCard label="长句" value={s.long_sentences_count} note="> 30 词" term="长句" />
+            <MetricCard label="超长句" value={s.very_long_sentences_count} note="> 40 词" term="超长句" />
           </div>
           <div className="mt-4 rounded-2xl bg-canvas-100/80 border border-black/5 px-4 py-3">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">最长句</div>
@@ -233,10 +234,10 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
 
         <EvidencePanel title="语篇证据" subtitle="Discourse">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="段落数" value={d.paragraph_count} note="结构密度" />
-            <MetricCard label="连接密度" value={`${d.connective_density}`} note="每百词" />
-            <MetricCard label="体裁" value={d.genre_hint} note="文本类型" />
-            <MetricCard label="文本结构" value={d.text_structure || "待定"} note="结构判断" />
+            <MetricCard label="段落数" value={d.paragraph_count} note="结构密度" term="段落数" />
+            <MetricCard label="连接密度" value={`${d.connective_density}`} note="每百词" term="连接密度" />
+            <MetricCard label="体裁" value={d.genre_hint} note="文本类型" term="体裁" />
+            <MetricCard label="文本结构" value={d.text_structure || "待定"} note="结构判断" term="文本结构" />
           </div>
         </EvidencePanel>
       </div>
@@ -309,11 +310,13 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
   );
 }
 
-function ChartPanel({ title, caption, children }: { title: string; caption: string; children: React.ReactNode }) {
+function ChartPanel({ title, caption, children, term }: { title: string; caption: string; children: React.ReactNode; term?: string }) {
   return (
     <div className="archive-surface p-5">
       <div className="section-title mb-2">Evidence View</div>
-      <h3 className="text-lg font-semibold text-ink-900">{title}</h3>
+      <h3 className="text-lg font-semibold text-ink-900">
+        {term ? <TermTooltip term={term}>{title}</TermTooltip> : title}
+      </h3>
       <p className="mt-2 text-sm text-ink-500 leading-6">{caption}</p>
       <div className="mt-5">{children}</div>
     </div>
@@ -330,20 +333,24 @@ function EvidencePanel({ title, subtitle, children }: { title: string; subtitle:
   );
 }
 
-function VerdictCard({ label, value, note }: { label: string; value: string | number; note: string }) {
+function VerdictCard({ label, value, note, term }: { label: string; value: string | number; note: string; term?: string }) {
   return (
     <div className="data-card p-4 bg-white/90">
-      <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">{label}</div>
+      <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
+        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+      </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <p className="mt-1 text-xs text-ink-500 leading-5">{note}</p>
     </div>
   );
 }
 
-function MetricCard({ label, value, note }: { label: string; value: string | number; note: string }) {
+function MetricCard({ label, value, note, term }: { label: string; value: string | number; note: string; term?: string }) {
   return (
     <div className="data-card p-4 bg-white/92">
-      <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">{label}</div>
+      <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
+        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+      </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <div className="mt-1 text-xs text-ink-500">{note}</div>
     </div>

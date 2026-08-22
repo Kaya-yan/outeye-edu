@@ -98,7 +98,7 @@ export default function CoursewareListPage() {
             <div className="section-title mb-2">Courseware Workbench</div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">教学课件工作台</h1>
             <p className="text-sm sm:text-base text-ink-500 mt-3 leading-7">
-              这里承接分析页生成的教学方案，并把它变成可编辑、可展示的 HTML 课件项目。
+              承接分析页的教案，生成可编辑、可展示的 HTML 课件。
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {['分析页生成', '课件项目管理', '编辑器继续工作', '课堂展示'].map((label) => (
@@ -132,9 +132,6 @@ export default function CoursewareListPage() {
             <div>
               <div className="section-title mb-2">Primary Flow</div>
               <h2 className="text-2xl font-semibold text-ink-900">先从教案生成，再进入课件编辑与课堂展示</h2>
-              <p className="mt-3 text-sm text-ink-500 leading-7 max-w-2xl">
-                主流程：分析 → 课件 → 展示。这里是课件项目的入口与继续点。
-              </p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[420px]">
               <div className="data-card p-4 text-center bg-white/90">
@@ -215,7 +212,7 @@ export default function CoursewareListPage() {
                 </div>
               </>
             ) : (
-              <p className="mt-3 text-sm text-ink-500 leading-6">当前还没有课件项目。建议从分析页先生成第一份课件，再回到这里继续编辑与归档。</p>
+              <p className="mt-3 text-sm text-ink-500 leading-6">当前还没有课件项目。建议从分析页先生成第一份课件。</p>
             )}
           </div>
         </section>
@@ -287,7 +284,7 @@ export default function CoursewareListPage() {
                           {project.title}
                         </Link>
                         <p className="mt-2 text-sm text-ink-500 leading-6">
-                          项目已进入你的教学工作台，可继续编辑、调整展示配置、提取组件，并推进到课堂展示终态。
+                          可继续编辑、调整展示配置、提取组件。
                         </p>
                       </div>
                       <div className="flex items-center gap-2 self-start">

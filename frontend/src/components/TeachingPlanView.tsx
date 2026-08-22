@@ -50,6 +50,9 @@ export default function TeachingPlanView({
   title,
   studentLevel,
   language,
+  planConfirmed,
+  onConfirmPlan,
+  onUnconfirmPlan,
 }: {
   plan: TeachingPlanData;
   sources: Source[];
@@ -63,6 +66,9 @@ export default function TeachingPlanView({
   title?: string;
   studentLevel?: string;
   language?: string;
+  planConfirmed?: boolean;
+  onConfirmPlan?: () => void;
+  onUnconfirmPlan?: () => void;
 }) {
   const [revisionTarget, setRevisionTarget] = useState<SectionKey | null>(null);
   const [revisionText, setRevisionText] = useState("");
@@ -286,40 +292,82 @@ export default function TeachingPlanView({
         </Section>
       )}
 
-      {/* Export Buttons */}
-      {onExport && (
-        <div className="flex gap-3 pt-4 border-t border-gray-100">
-          <button
-            onClick={() => onExport("pptx")}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {exporting ? "导出中..." : "导出 PPT"}
-          </button>
-          <button
-            onClick={() => onExport("docx")}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {exporting ? "导出中..." : "导出 Word"}
-          </button>
-          <button
-            onClick={() => onExport("html")}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-            </svg>
-            {exporting ? "导出中..." : "导出 HTML"}
-          </button>
+      {/* 教案确认闸门：未确认时显示"确认教案" CTA；已确认时显示导出按钮 + 返回修订 */}
+      {planConfirmed ? (
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1 rounded-full bg-sage-100 px-2.5 py-1 text-sage-700 border border-sage-200">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+              教案已确认
+            </span>
+            {onUnconfirmPlan && (
+              <button
+                onClick={onUnconfirmPlan}
+                className="text-xs text-ink-500 hover:text-ink-700 underline-offset-2 hover:underline"
+              >
+                返回修订
+              </button>
+            )}
+          </div>
+          {onExport && (
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => onExport("pptx")}
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {exporting ? "生成中..." : "生成 PPT 课件"}
+              </button>
+              <button
+                onClick={() => onExport("docx")}
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {exporting ? "生成中..." : "生成 Word 课件"}
+              </button>
+              <button
+                onClick={() => onExport("html")}
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                {exporting ? "生成中..." : "生成 HTML 课件"}
+              </button>
+            </div>
+          )}
         </div>
+      ) : (
+        onConfirmPlan && (
+          <div className="pt-4 border-t border-gray-100">
+            <div className="rounded-xl bg-primary-50 border border-primary-200 p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary-500 text-white flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-ink-900 mb-1">确认教案后进入课件生成</div>
+                  <p className="text-xs text-ink-600 leading-5 mb-3">
+                    教案确认后即可生成 PPT / Word / HTML 课件。如有需要修改的地方，请先用上方"修改"按钮调整。
+                  </p>
+                  <button
+                    onClick={onConfirmPlan}
+                    className="btn-primary rounded-full px-5 py-2 text-sm"
+                  >
+                    确认教案，进入课件生成
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       )}
 
       {/* Footer */}
@@ -427,6 +475,36 @@ function SuggestionItem({ index, text }: { index: number; text: string }) {
     mainText = mainText.replace(/^\*?\*?建议\d*\*?\*?\s*[：:]\s*/, "").trim();
   }
 
+  // 依据预览长度阈值：超过 200 字才折叠
+  const PREVIEW_THRESHOLD = 200;
+
+  const renderEvidenceBlock = (
+    label: string,
+    color: "blue" | "green",
+    content: string
+  ) => {
+    const isLong = content.length > PREVIEW_THRESHOLD;
+    const preview = isLong && !expanded ? content.slice(0, PREVIEW_THRESHOLD) + "…" : content;
+    return (
+      <div className={`p-2 rounded border ${
+        color === "blue" ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200"
+      }`}>
+        <div className={`text-[10px] font-semibold mb-1 ${color === "blue" ? "text-blue-600" : "text-green-600"}`}>
+          {label}
+        </div>
+        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{preview}</p>
+        {isLong && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1 text-[11px] text-primary-700 hover:text-primary-600 link-underline"
+          >
+            {expanded ? "收起" : "展开全部"}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <li className="flex items-start gap-3">
       <span className="w-6 h-6 rounded-full bg-accent/20 text-accent flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -435,31 +513,10 @@ function SuggestionItem({ index, text }: { index: number; text: string }) {
       <div className="flex-1">
         <p className="text-sm text-gray-700 leading-relaxed">{mainText}</p>
         {hasChain && (
-          <>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-xs text-primary-700 hover:text-primary-600 flex items-center gap-1"
-            >
-              <span className={`transition-transform ${expanded ? "rotate-90" : ""}`}>▶</span>
-              {expanded ? "收起依据" : "查看依据"}
-            </button>
-            {expanded && (
-              <div className="mt-2 space-y-2">
-                {dataMatch && (
-                  <div className="p-2 bg-blue-50 rounded border border-blue-200">
-                    <div className="text-[10px] font-semibold text-blue-600 mb-1">数据依据</div>
-                    <p className="text-xs text-gray-700">{dataMatch[1].trim()}</p>
-                  </div>
-                )}
-                {theoryMatch && (
-                  <div className="p-2 bg-green-50 rounded border border-green-200">
-                    <div className="text-[10px] font-semibold text-green-600 mb-1">理论依据</div>
-                    <p className="text-xs text-gray-700">{theoryMatch[1].trim()}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
+          <div className="mt-2 space-y-2">
+            {dataMatch && renderEvidenceBlock("数据依据", "blue", dataMatch[1].trim())}
+            {theoryMatch && renderEvidenceBlock("理论依据", "green", theoryMatch[1].trim())}
+          </div>
         )}
       </div>
     </li>

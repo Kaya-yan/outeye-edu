@@ -112,7 +112,7 @@ export default function ResourcesPage() {
             <div className="section-title mb-2">Archive Resources</div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">资源库</h1>
             <p className="text-sm sm:text-base text-ink-500 mt-3 max-w-2xl leading-7">
-              在档案式资源系统中搜索、上传与整理教学资料，让检索问答、文档入库和常见问题都能被快速定位。
+              搜索、上传与整理教学资料。
             </p>
           </div>
           <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft self-start lg:self-auto">
@@ -161,7 +161,6 @@ export default function ResourcesPage() {
               <div>
                 <div className="section-title mb-2">Drawer 01</div>
                 <h2 className="text-xl font-semibold text-ink-900">检索问答抽屉</h2>
-                <p className="mt-1 text-sm text-ink-500 leading-6">以当前问题为中心，查看答案、置信度与引用来源。</p>
               </div>
               <span className={`text-ink-400 transition-transform ${openDrawers.query ? "rotate-90" : ""}`}>▶</span>
             </button>
@@ -292,7 +291,6 @@ export default function ResourcesPage() {
               <div>
                 <div className="section-title mb-2">Drawer 03</div>
                 <h2 className="text-xl font-semibold text-ink-900">使用说明抽屉</h2>
-                <p className="mt-1 text-sm text-ink-500 leading-6">查看资源库的工作方式：问答、混合检索与 Wiki 协同。</p>
               </div>
               <span className={`text-ink-400 transition-transform ${openDrawers.guide ? "rotate-90" : ""}`}>▶</span>
             </button>
@@ -319,7 +317,7 @@ export default function ResourcesPage() {
               <div>
                 <div className="section-title mb-2">Drawer 04</div>
                 <h2 className="text-xl font-semibold text-ink-900">热门问题抽屉</h2>
-                <p className="mt-1 text-sm text-ink-500 leading-6">快速把常见问题塞入检索问答抽屉，减少第一次上手成本。</p>
+                <p className="mt-1 text-sm text-ink-500 leading-6">点击即可填入检索框。</p>
               </div>
               <span className={`text-ink-400 transition-transform ${openDrawers.samples ? "rotate-90" : ""}`}>▶</span>
             </button>

@@ -85,6 +85,11 @@ def export_pptx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
             _add_slide_header(slide, f"教学建议 ({i+1}-{min(i+4, len(suggestions))}/{len(suggestions)})")
             y_offset = Inches(1.8)
             for j, sug in enumerate(suggestions[i:i+4]):
+                # 支持 dict 或 str
+                if isinstance(sug, dict):
+                    sug_text = sug.get("text", "")
+                else:
+                    sug_text = str(sug)
                 # Number badge
                 badge = slide.shapes.add_textbox(Inches(0.8), y_offset, Inches(0.5), Inches(0.4))
                 tf = badge.text_frame
@@ -98,7 +103,7 @@ def export_pptx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
                 tf2 = txt.text_frame
                 tf2.word_wrap = True
                 p2 = tf2.paragraphs[0]
-                p2.text = sug
+                p2.text = sug_text
                 p2.font.size = Pt(16)
                 p2.font.color.rgb = GRAY
                 y_offset += Inches(1.2)
@@ -112,26 +117,31 @@ def export_pptx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
             slide = prs.slides.add_slide(prs.slide_layouts[6])
             _add_slide_header(slide, f"活动 {i+1}: {act.get('name', '课堂活动')}")
             y_offset = Inches(1.8)
-            for key, label in [("objective", "目标"), ("steps", "步骤"), ("duration", "时间")]:
+            for key, label in [("objective", "目标"), ("teacher_script", "教师指令"), ("steps", "步骤"), ("duration", "时间")]:
                 val = act.get(key, "")
-                if val:
-                    # Label
-                    lbl = slide.shapes.add_textbox(Inches(0.8), y_offset, Inches(1.5), Inches(0.4))
-                    tf = lbl.text_frame
-                    p = tf.paragraphs[0]
-                    p.text = label
-                    p.font.size = Pt(14)
-                    p.font.bold = True
-                    p.font.color.rgb = ACCENT
-                    # Value
-                    txt = slide.shapes.add_textbox(Inches(2.5), y_offset, Inches(9.5), Inches(0.8))
-                    tf2 = txt.text_frame
-                    tf2.word_wrap = True
-                    p2 = tf2.paragraphs[0]
-                    p2.text = val
-                    p2.font.size = Pt(14)
-                    p2.font.color.rgb = GRAY
-                    y_offset += Inches(0.8)
+                if not val:
+                    continue
+                if isinstance(val, list):
+                    val = "\n".join(str(v) for v in val)
+                else:
+                    val = str(val)
+                # Label
+                lbl = slide.shapes.add_textbox(Inches(0.8), y_offset, Inches(1.5), Inches(0.4))
+                tf = lbl.text_frame
+                p = tf.paragraphs[0]
+                p.text = label
+                p.font.size = Pt(14)
+                p.font.bold = True
+                p.font.color.rgb = ACCENT
+                # Value
+                txt = slide.shapes.add_textbox(Inches(2.5), y_offset, Inches(9.5), Inches(0.8))
+                tf2 = txt.text_frame
+                tf2.word_wrap = True
+                p2 = tf2.paragraphs[0]
+                p2.text = val[:200]  # 截断超长文本
+                p2.font.size = Pt(14)
+                p2.font.color.rgb = GRAY
+                y_offset += Inches(0.8)
 
     def add_theory_slide():
         """理论依据"""
@@ -191,10 +201,10 @@ def export_pptx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
 
 def export_docx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
     """
-    导出教学方案为 Word 文档
+    导出教学方案为 Word 文档（结构化：概述/建议/活动含教师指令与rubric/分层/理论/词汇附录/文化附录）
 
     Args:
-        plan: 教学方案数据
+        plan: 教学方案数据（可附带 difficult_words、cultural_elements、differentiation）
         title: 文档标题
 
     Returns:
@@ -203,60 +213,201 @@ def export_docx(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
     from docx import Document
     from docx.shared import Pt, RGBColor, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_ALIGN_VERTICAL
 
     doc = Document()
 
-    # Styles
+    # 样式
     style = doc.styles["Normal"]
     style.font.size = Pt(11)
     style.font.name = "Microsoft YaHei"
 
-    # Title
+    PRIMARY = RGBColor(0x1E, 0x3A, 0x5F)
+    ACCENT = RGBColor(0xD4, 0x8B, 0x2C)
+    MUTED = RGBColor(0x66, 0x66, 0x66)
+
+    # 标题
     heading = doc.add_heading(title, level=0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Gap info
+    # 副标题：等级 / 语言
     gap = plan.get("learner_gap", {})
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(f"课文等级: {gap.get('text_level', '?')} | 学生水平: {gap.get('student_level', '?')} | 差距: {gap.get('gap', '?')}")
+    gap_line = f"课文等级 {gap.get('text_level', '?')} · 学生水平 {gap.get('student_level', '?')} · 差距 {gap.get('gap', '?')}"
+    if plan.get("language_name"):
+        gap_line += f" · 语言 {plan['language_name']}"
+    run = p.add_run(gap_line)
     run.font.size = Pt(10)
-    run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+    run.font.color.rgb = MUTED
 
-    doc.add_paragraph()  # spacer
+    doc.add_paragraph()
 
-    # Section 1: Difficulty Overview
+    # 一、课文难度概述
     doc.add_heading("一、课文难度概述", level=1)
-    doc.add_paragraph(plan.get("difficulty_overview", "暂无概述"))
+    overview = plan.get("difficulty_overview", "暂无概述")
+    for line in str(overview).split("\n"):
+        if line.strip():
+            doc.add_paragraph(line.strip())
 
-    # Section 2: Teaching Suggestions
-    doc.add_heading("二、教学建议", level=1)
+    # 二、教学建议
     suggestions = plan.get("teaching_suggestions", [])
-    for i, sug in enumerate(suggestions, 1):
-        p = doc.add_paragraph(style="List Number")
-        p.text = sug
+    if suggestions:
+        doc.add_heading("二、教学建议", level=1)
+        for i, sug in enumerate(suggestions, 1):
+            text = sug.get("text", "") if isinstance(sug, dict) else str(sug)
+            hint = sug.get("data_hint", "") if isinstance(sug, dict) else ""
+            p = doc.add_paragraph(style="List Number")
+            p.add_run(text)
+            if hint:
+                run = p.add_run(f"  （{hint}）")
+                run.font.size = Pt(9)
+                run.font.color.rgb = MUTED
 
-    # Section 3: Activity Designs
+    # 三、课堂活动设计
     activities = plan.get("activity_designs", [])
     if activities:
         doc.add_heading("三、课堂活动设计", level=1)
         for i, act in enumerate(activities, 1):
-            doc.add_heading(f"活动 {i}: {act.get('name', '课堂活动')}", level=2)
-            for key, label in [("objective", "目标"), ("steps", "步骤"), ("duration", "时间")]:
-                val = act.get(key, "")
-                if val:
-                    p = doc.add_paragraph()
-                    run = p.add_run(f"{label}：")
-                    run.bold = True
-                    p.add_run(val)
+            if not isinstance(act, dict):
+                continue
+            doc.add_heading(f"活动 {i}：{act.get('name', '课堂活动')}", level=2)
 
-    # Section 4: Theoretical Basis
+            # 元信息行：时长 + 形式
+            meta_parts = []
+            if act.get("duration"):
+                meta_parts.append(f"时长 {act['duration']}")
+            if act.get("interaction"):
+                meta_parts.append(f"形式 {act['interaction']}")
+            if meta_parts:
+                p = doc.add_paragraph()
+                run = p.add_run(" · ".join(meta_parts))
+                run.italic = True
+                run.font.size = Pt(10)
+                run.font.color.rgb = MUTED
+
+            # 目标
+            obj = act.get("objective", "")
+            if obj:
+                p = doc.add_paragraph()
+                r = p.add_run("目标：")
+                r.bold = True
+                r.font.color.rgb = ACCENT
+                p.add_run(obj)
+
+            # 教师指令原文（可直接念）
+            teacher_script = act.get("teacher_script") or act.get("teacher_command") or ""
+            if teacher_script:
+                p = doc.add_paragraph()
+                r = p.add_run("教师指令（可直接念）：")
+                r.bold = True
+                r.font.color.rgb = ACCENT
+                p2 = doc.add_paragraph()
+                p2.paragraph_format.left_indent = Inches(0.3)
+                p2.add_run(teacher_script).italic = True
+
+            # 步骤
+            steps = act.get("steps", "")
+            if steps:
+                p = doc.add_paragraph()
+                r = p.add_run("步骤：")
+                r.bold = True
+                r.font.color.rgb = ACCENT
+                if isinstance(steps, str):
+                    step_lines = [s.strip() for s in steps.split("\n") if s.strip()]
+                else:
+                    step_lines = [str(s) for s in steps if s]
+                for j, step in enumerate(step_lines, 1):
+                    sp = doc.add_paragraph(style="List Number")
+                    sp.add_run(step)
+
+            # 评估 rubric 表格
+            rubric = act.get("rubric") or act.get("assessment_rubric")
+            if rubric and isinstance(rubric, list):
+                doc.add_paragraph().add_run("评估 Rubric：").bold = True
+                # 表格：等级 / 描述 / 分值
+                table = doc.add_table(rows=1 + len(rubric), cols=3)
+                table.style = "Light Grid Accent 1"
+                hdr = table.rows[0].cells
+                hdr[0].text = "等级"
+                hdr[1].text = "描述"
+                hdr[2].text = "分值"
+                for c in hdr:
+                    for para in c.paragraphs:
+                        for run in para.runs:
+                            run.font.bold = True
+                for r_idx, item in enumerate(rubric, 1):
+                    if not isinstance(item, dict):
+                        continue
+                    row = table.rows[r_idx].cells
+                    row[0].text = str(item.get("level", item.get("grade", "")))
+                    row[1].text = str(item.get("description", item.get("desc", "")))
+                    row[2].text = str(item.get("score", item.get("points", "")))
+
+    # 四、分层教学（differentiation）
+    diff = plan.get("differentiation", {})
+    if diff and isinstance(diff, dict) and any(diff.values()):
+        doc.add_heading("四、分层教学", level=1)
+        for level_key, label in [("support", "基础层（需支持）"), ("core", "核心层（达标）"), ("challenge", "挑战层（拓展）")]:
+            content = diff.get(level_key)
+            if content:
+                p = doc.add_paragraph()
+                r = p.add_run(f"{label}：")
+                r.bold = True
+                r.font.color.rgb = ACCENT
+                if isinstance(content, list):
+                    for c in content:
+                        doc.add_paragraph(str(c), style="List Bullet")
+                else:
+                    p.add_run(str(content))
+
+    # 五、理论依据
     theory = plan.get("theoretical_basis", "")
     if theory:
-        doc.add_heading("四、理论依据", level=1)
-        doc.add_paragraph(theory)
+        doc.add_heading("五、理论依据", level=1)
+        for line in str(theory).split("\n"):
+            if line.strip():
+                doc.add_paragraph(line.strip())
 
-    # Save to buffer
+    # 附录 A：词汇表
+    difficult_words = plan.get("difficult_words", [])
+    if difficult_words:
+        doc.add_heading("附录 A：词汇表", level=1)
+        table = doc.add_table(rows=1 + len(difficult_words), cols=4)
+        table.style = "Light Grid Accent 1"
+        hdr = table.rows[0].cells
+        hdr[0].text = "词"
+        hdr[1].text = "等级"
+        hdr[2].text = "出现次数"
+        hdr[3].text = "AWL"
+        for c in hdr:
+            for para in c.paragraphs:
+                for run in para.runs:
+                    run.font.bold = True
+        for r_idx, w in enumerate(difficult_words, 1):
+            if not isinstance(w, dict):
+                continue
+            row = table.rows[r_idx].cells
+            row[0].text = str(w.get("word", ""))
+            row[1].text = str(w.get("level", "—"))
+            row[2].text = str(w.get("count", ""))
+            row[3].text = "✓" if w.get("in_awl") else ""
+
+    # 附录 B：文化元素
+    cultural = plan.get("cultural_elements", [])
+    if cultural:
+        doc.add_heading("附录 B：文化元素", level=1)
+        for i, e in enumerate(cultural, 1):
+            if not isinstance(e, dict):
+                continue
+            p = doc.add_paragraph()
+            r = p.add_run(f"{i}. [{e.get('category', '—')}] {e.get('keyword', '')}")
+            r.bold = True
+            r.font.color.rgb = ACCENT
+            explanation = e.get("explanation", "")
+            if explanation:
+                doc.add_paragraph(explanation)
+
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -277,7 +428,7 @@ def export_html(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
     """
     # Load template
     template_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "templates", "html", "classroom_default.html"
+        os.path.dirname(__file__), "..", "..", "..", "templates", "html", "classroom_default.html"
     )
     template_path = os.path.normpath(template_path)
 

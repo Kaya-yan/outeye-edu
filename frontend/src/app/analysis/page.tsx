@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import dynamic from "next/dynamic";
@@ -148,6 +148,17 @@ export default function AnalysisPage() {
   const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
 
+  // 结果出来后自动平滑滚回页面顶部，避免用户拖动半天
+  // 用 prevRef 记录上一次的"是否有结果"，只在 null→有值 的转换瞬间触发，避免用户滚动后再被弹回
+  const prevHadResultRef = useRef(false);
+  useEffect(() => {
+    const hasResult = analysis !== null || versions.basic !== undefined || versions.enhanced !== undefined;
+    if (hasResult && !prevHadResultRef.current) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    prevHadResultRef.current = hasResult;
+  }, [analysis, versions]);
+
   // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
   const wordCount = (() => {
     const cleaned = text.replace(/<[^>]*>/g, "").trim();
@@ -244,7 +255,7 @@ export default function AnalysisPage() {
               <div className="section-title mb-2">Academic Analysis Workbench</div>
               <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">课文智能分析</h1>
               <p className="text-sm sm:text-base text-ink-500 mt-3 max-w-2xl leading-7">
-                在柔和、克制的工作台中完成课文输入、白盒分析、双源检索与教学方案生成，并把结果自然推进到 HTML 课件编辑与课堂展示链路。
+                课文输入、白盒分析、双源检索与教学方案生成，结果可推进到 HTML 课件编辑与课堂展示。
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:w-[360px]">
@@ -675,10 +686,17 @@ function PlanStep({
   const [revisionError, setRevisionError] = useState("");
   const [creatingCourseware, setCreatingCourseware] = useState(false);
   const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
+  const [planConfirmed, setPlanConfirmed] = useState(false);
 
   const availableVersions = (["basic", "enhanced"] as const).filter(
     (v) => versions[v]
   );
+
+  // 切换版本时重置确认状态：新版本需要重新审阅
+  const handleSwitchVersion = (v: "basic" | "enhanced") => {
+    onSwitchVersion(v);
+    setPlanConfirmed(false);
+  };
 
   const handleCreateCourseware = async () => {
     setCreatingCourseware(true);
@@ -728,6 +746,8 @@ function PlanStep({
           model: resp.model,
         });
       }
+      // 教案内容已变化，需要重新确认
+      setPlanConfirmed(false);
     } catch (e) {
       setRevisionError(e instanceof Error ? e.message : "修订失败，请稍后重试");
     } finally {
@@ -753,6 +773,10 @@ function PlanStep({
             plan: {
               ...result.teaching_plan,
               learner_gap: result.learner_gap,
+              difficult_words: result.vocabulary?.difficult_words || [],
+              cultural_elements: result.cultural_elements || [],
+              text_level: result.text_level,
+              language_name: result.language_name,
             },
             format,
             title: result.text_title || "教学方案",
@@ -800,7 +824,7 @@ function PlanStep({
           {availableVersions.map((v) => (
             <button
               key={v}
-              onClick={() => onSwitchVersion(v)}
+              onClick={() => handleSwitchVersion(v)}
               className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
                 activeVersion === v
                   ? "bg-primary-500 text-ink-900"
@@ -826,14 +850,25 @@ function PlanStep({
         <div className="archive-surface p-4 mb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="section-title mb-2">Ready for Courseware</div>
+              <div className="section-title mb-2">{planConfirmed ? "Courseware Ready" : "Plan Review"}</div>
               <p className="text-sm text-ink-600 leading-6">
-                教学方案已经完成。你可以继续导出传统格式，也可以直接把它推进到教学课件工作台，进入可编辑、可展示的课件阶段。
+                {planConfirmed
+                  ? "教案已确认，可生成课件或进入 HTML 编辑器。"
+                  : "审阅教案，必要时修订，确认后进入课件生成。"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-ink-500">
-              <span className="drawer-handle bg-white border border-black/5 text-ink-500">保留 PPT / Word / HTML 导出</span>
-              <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">生成后自动进入编辑器</span>
+              {planConfirmed ? (
+                <>
+                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">PPT / Word / HTML</span>
+                  <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">HTML 路径进入编辑器</span>
+                </>
+              ) : (
+                <>
+                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">修改后确认</span>
+                  <span className="drawer-handle bg-canvas-200 border border-black/5 text-ink-500">教案是中转点</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -861,7 +896,7 @@ function PlanStep({
             sources={result.sources}
             model={result.model}
             duration={result.generation_duration}
-            onExport={handleExport}
+            onExport={planConfirmed ? handleExport : undefined}
             exporting={exporting}
             onRevise={handleRevise}
             revising={revising}
@@ -869,6 +904,9 @@ function PlanStep({
             title={title}
             studentLevel={studentLevel}
             language={language}
+            planConfirmed={planConfirmed}
+            onConfirmPlan={() => setPlanConfirmed(true)}
+            onUnconfirmPlan={() => setPlanConfirmed(false)}
           />
         )}
 
@@ -884,7 +922,8 @@ function PlanStep({
         )}
       </div>
 
-      {/* Courseware entry */}
+      {/* Courseware entry — 仅在教案确认后显示 */}
+      {planConfirmed && (
       <div className="archive-surface p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4">
@@ -894,10 +933,10 @@ function PlanStep({
               </svg>
             </div>
             <div className="flex-1 max-w-2xl">
-              <div className="section-title mb-2">Courseware</div>
-              <h3 className="text-lg font-semibold text-ink-900">把教学方案推进到课件工作台</h3>
+              <div className="section-title mb-2">HTML Editor Path</div>
+              <h3 className="text-lg font-semibold text-ink-900">进入 HTML 课件编辑器</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                当前这份方案已经具备进入课件生产链路的条件。生成后会自动创建课件项目，并直接进入编辑器继续工作。
+                确认教案后可直接进入 HTML 编辑器，继续做页面与组件调整。
               </p>
             </div>
           </div>
@@ -907,7 +946,7 @@ function PlanStep({
               disabled={creatingCourseware}
               className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creatingCourseware ? "生成中..." : "生成教学课件"}
+              {creatingCourseware ? "创建中..." : "进入 HTML 编辑器"}
             </button>
             <button
               onClick={() => router.push('/courseware')}
@@ -931,10 +970,11 @@ function PlanStep({
           <div className="data-card p-4 bg-white/90">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Present</div>
             <div className="mt-2 text-sm font-semibold text-ink-900">进入课堂展示</div>
-            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内继续进入课堂展示模式，完成从分析到课堂的完整流程。</p>
+            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内进入课堂展示模式。</p>
           </div>
         </div>
       </div>
+      )}
 
       <PlanEvaluationForm chosenVersion={activeVersion} />
 

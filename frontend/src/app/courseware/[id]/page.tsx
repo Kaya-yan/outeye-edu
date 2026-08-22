@@ -182,7 +182,6 @@ export default function CoursewareDetailPage() {
           <div className="archive-surface p-6 hover-lift">
             <div className="section-title mb-2">Next Action</div>
             <h2 className="text-xl font-semibold text-ink-900">继续生产</h2>
-            <p className="mt-2 text-sm text-ink-500 leading-6">从这里进入编辑器继续修改，或直接切换到课堂展示模式。</p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link href={`/courseware/${projectId}/edit`} className="btn-primary rounded-full px-4 py-2 text-xs">
                 去编辑
@@ -196,7 +195,6 @@ export default function CoursewareDetailPage() {
           <div className="archive-surface p-6 hover-lift">
             <div className="section-title mb-2">Current Version</div>
             <h2 className="text-xl font-semibold text-ink-900">版本栈</h2>
-            <p className="mt-2 text-sm text-ink-500 leading-6">当前版本与历史快照共同构成可回滚的课件资产。</p>
             <div className="mt-5 flex items-end justify-between gap-4">
               <div>
                 <div className="text-3xl font-semibold text-ink-900">v{latestVersion?.version_number || 1}</div>
@@ -209,7 +207,6 @@ export default function CoursewareDetailPage() {
           <div className="archive-surface p-6 hover-lift">
             <div className="section-title mb-2">Presentation</div>
             <h2 className="text-xl font-semibold text-ink-900">展示配置</h2>
-            <p className="mt-2 text-sm text-ink-500 leading-6">课堂展示配置决定了这份课件是更适合 slides 还是 longform。</p>
             <div className="mt-5 flex flex-wrap gap-2">
               <span className="drawer-handle bg-white border border-black/5 text-ink-500">{latestProfile?.name || "默认展示配置"}</span>
               <span className="drawer-handle">{getModeLabel(latestProfile?.mode || project.mode)}</span>

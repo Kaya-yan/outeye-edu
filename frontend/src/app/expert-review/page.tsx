@@ -105,7 +105,7 @@ export default function ExpertReviewPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">专家评审系统</h1>
           <p className="text-sm text-gray-500 mt-1">
-            五维度专家评分，验证教案质量与平台可信度
+            五维度专家评分，评估教案质量。
           </p>
         </div>
 

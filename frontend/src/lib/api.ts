@@ -2,6 +2,15 @@
 
 const API_BASE = "/api/v1";
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
@@ -30,11 +39,9 @@ export async function apiRequest(
     ...options,
   });
 
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/login";
-    throw new Error("未授权，请重新登录");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(err.detail || `请求失败: ${res.status}`, res.status);
   }
 
   return res;
@@ -42,31 +49,21 @@ export async function apiRequest(
 
 export async function apiGet<T = unknown>(path: string): Promise<T> {
   const res = await apiRequest("GET", path);
-  if (!res.ok) throw new Error(`请求失败: ${res.status}`);
   return res.json();
 }
 
 export async function apiPost<T = unknown>(path: string, data?: unknown): Promise<T> {
   const res = await apiRequest("POST", path, data);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `请求失败: ${res.status}`);
-  }
   return res.json();
 }
 
 export async function apiPut<T = unknown>(path: string, data?: unknown): Promise<T> {
   const res = await apiRequest("PUT", path, data);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `请求失败: ${res.status}`);
-  }
   return res.json();
 }
 
 export async function apiDelete<T = unknown>(path: string): Promise<T> {
   const res = await apiRequest("DELETE", path);
-  if (!res.ok) throw new Error(`请求失败: ${res.status}`);
   return res.json();
 }
 
@@ -76,7 +73,6 @@ export async function apiUpload<T = unknown>(path: string, formData: FormData): 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  // 不设置 Content-Type，让浏览器自动设置 multipart/form-data boundary
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -84,16 +80,9 @@ export async function apiUpload<T = unknown>(path: string, formData: FormData): 
     body: formData,
   });
 
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/login";
-    throw new Error("未授权，请重新登录");
-  }
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `请求失败: ${res.status}`);
+    throw new ApiError(err.detail || `请求失败: ${res.status}`, res.status);
   }
 
   return res.json();

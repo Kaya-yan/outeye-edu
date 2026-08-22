@@ -96,7 +96,7 @@ export default function ProjectsPage() {
   const getDrawerSummary = (status: Exclude<StatusKey, "all">) => {
     switch (status) {
       case "processing":
-        return "当前正在推进中的分析任务与衔接课件项目。";
+        return "正在分析中的任务。";
       case "pending":
         return "等待进入分析或等待后续教学设计的档案。";
       case "completed":
@@ -116,7 +116,7 @@ export default function ProjectsPage() {
             <div className="section-title mb-2">Archive Project Center</div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">项目管理</h1>
             <p className="text-sm sm:text-base text-ink-500 mt-3 max-w-2xl leading-7">
-              以档案抽屉的方式管理你的课文分析、教学方案与教学课件项目，让每个任务都能被定位、筛选与继续推进。
+              管理课文分析、教案与课件项目，可定位、筛选与继续。
             </p>
           </div>
           <Link href="/analysis" className="btn-archive self-start sm:self-auto">
@@ -190,7 +190,7 @@ export default function ProjectsPage() {
             <div className="section-title mb-2">No archive yet</div>
             <h2 className="text-2xl font-semibold text-ink-900 mb-2">暂无项目</h2>
             <p className="text-ink-500 mb-8 max-w-sm mx-auto leading-7">
-              从你的第一个课文分析开始，把项目、方案与课件逐步归档进新的教学工作系统。
+              从第一个课文分析开始，项目、方案与课件会自然积累在这里。
             </p>
             <Link href="/analysis" className="btn-archive">
               开始分析
@@ -245,7 +245,7 @@ export default function ProjectsPage() {
                                   <div className="min-w-0 flex-1">
                                     <h2 className="text-lg font-semibold text-ink-900 truncate">{project.title}</h2>
                                     <p className="mt-2 text-sm text-ink-500 leading-6">
-                                      该项目已被归档到你的教学工作台中，可继续进入分析、课件或后续教学设计流程。
+                                      已收入你的工作台，可继续进入分析、课件或教学设计。
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2 self-start">

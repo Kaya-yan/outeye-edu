@@ -8,13 +8,30 @@ export const metadata: Metadata = {
   description: '面向外国语言文学一流学科建设的智能教研操作系统',
 }
 
+// 防 FOUC：在 hydration 前根据 localStorage 或 prefers-color-scheme 设置主题
+const themeInitScript = `
+(function() {
+  try {
+    var saved = localStorage.getItem('theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var theme = saved || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+`
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans text-ink-900">
         <ClientProviders>
           <div className="app-shell desk-wash">
@@ -29,7 +46,7 @@ export default function RootLayout({
               {children}
             </main>
 
-            <footer className="mt-16 border-t border-black/5 bg-white/70 backdrop-blur-sm">
+            <footer className="mt-16 footer-surface">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="flex flex-col gap-3 text-center sm:text-left sm:flex-row sm:items-end sm:justify-between">
                   <div>

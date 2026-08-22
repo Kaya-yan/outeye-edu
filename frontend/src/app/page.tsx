@@ -139,9 +139,6 @@ export default function Home() {
             <p className="mt-4 text-xl sm:text-2xl font-medium text-ink-700 leading-snug">
               把课文分析、教案生成与 HTML 课件展示收进同一处
             </p>
-            <p className="mt-5 max-w-2xl text-base sm:text-lg text-ink-500 leading-8">
-              从课文输入到课堂展示，分析、教案与课件在同一张桌面连续推进，不再停在一份方案。
-            </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {['课文输入与白盒分析', '双源检索与教学方案', 'HTML 课件编辑与课堂展示'].map((label) => (
                 <span key={label} className="drawer-handle bg-white/85 border border-black/5 text-ink-600">
@@ -160,9 +157,6 @@ export default function Home() {
                 </svg>
               </Link>
             </div>
-            <p className="mt-4 text-sm text-ink-400">
-              推荐路径：分析 → 教学方案 → 生成课件 → 编辑器 → 课堂展示
-            </p>
           </div>
 
           <div className="relative lg:h-[400px]">
@@ -172,7 +166,7 @@ export default function Home() {
                 <div className="rounded-[24px] bg-canvas-200 p-5 h-full flex flex-col justify-between">
                   <div>
                     <div className="text-lg font-semibold text-ink-900">分析结果台</div>
-                    <p className="mt-2 text-sm text-ink-500 leading-6">先有证据，再做教案与课件，让 AI 输出真正进入课堂。</p>
+                    <p className="mt-2 text-sm text-ink-500 leading-6">先有证据，再做教案与课件。</p>
                   </div>
                   <div className="mt-6 rounded-2xl bg-white/80 p-4 shadow-soft space-y-2.5">
                     <div className="flex items-center justify-between text-xs text-ink-500">
@@ -200,7 +194,7 @@ export default function Home() {
                   <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Presentation</div>
                   <div className="rounded-2xl bg-sage-100/80 p-4 shadow-soft">
                     <div className="text-base font-semibold text-ink-900">课堂展示</div>
-                    <p className="mt-2 text-sm text-ink-500">从教案到 HTML 课件，形成真正可演示、可上课的终点。</p>
+                    <p className="mt-2 text-sm text-ink-500">从教案到 HTML 课件，进入可演示、可上课的形态。</p>
                   </div>
                 </div>
               </div>
@@ -233,9 +227,6 @@ export default function Home() {
             <div className="max-w-2xl">
               <div className="section-title mb-2">Primary Flow</div>
               <h2 className="text-2xl sm:text-3xl font-semibold text-ink-900">主流程：从分析到课堂展示</h2>
-              <p className="mt-3 text-sm sm:text-base text-ink-500 leading-7">
-                分析结果可直接生成课件项目，进入编辑与课堂展示，不再停在一份方案。
-              </p>
             </div>
             <Link href="/courseware" className="btn-secondary rounded-full px-5 py-3 text-sm self-start hover-icon-shift">
               打开课件工作台
@@ -314,9 +305,6 @@ export default function Home() {
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
             基于 12 大语言学理论的工程化实现
           </h2>
-          <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-500">
-            从理论到实践，为外语教研提供全方位智能支持
-          </p>
         </div>
 
         <div className="mt-16 grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
