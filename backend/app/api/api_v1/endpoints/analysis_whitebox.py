@@ -600,8 +600,11 @@ async def generate_teaching_plan(
         response = {
             "text_title": request.title or "Untitled",
             "text_level": analysis_result.text_level,
+            "language_name": analysis_result.language_name,
             "student_level": request.student_level,
             "learner_gap": analysis_dict["learner_gap"],
+            "vocabulary": analysis_dict["vocabulary"],
+            "cultural_elements": analysis_dict["cultural_elements"],
             "enhancement_tags": analysis_result.enhancement_tags,
             "tag_labels": analysis_result.tag_labels,
             "teaching_blueprint": blueprint,

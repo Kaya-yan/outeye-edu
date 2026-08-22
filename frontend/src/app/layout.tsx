@@ -63,7 +63,7 @@ export default function RootLayout({
                   </div>
                   <div className="text-xs text-ink-300 space-y-1">
                     <p>&copy; 2026 OutEye Edu 1.0</p>
-                    <p>{`挑战杯"揭榜挂帅"专项赛`}</p>
+                    <p>挑战杯“揭榜挂帅”专项赛</p>
                   </div>
                 </div>
                 <a

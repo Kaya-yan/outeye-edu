@@ -355,7 +355,7 @@ export default function TeachingPlanView({
                 <div className="flex-1">
                   <div className="text-sm font-semibold text-ink-900 mb-1">确认教案后进入课件生成</div>
                   <p className="text-xs text-ink-600 leading-5 mb-3">
-                    教案确认后即可生成 PPT / Word / HTML 课件。如有需要修改的地方，请先用上方"修改"按钮调整。
+                    教案确认后即可生成 PPT / Word / HTML 课件。如有需要修改的地方，请先用上方“修改”按钮调整。
                   </p>
                   <button
                     onClick={onConfirmPlan}

@@ -96,11 +96,36 @@ interface TeachingPlan {
   theoretical_basis: string;
 }
 
+interface DifficultWord {
+  word: string;
+  level: string;
+  count: number;
+  in_awl: boolean;
+}
+
+interface CulturalElement {
+  category: string;
+  keyword: string;
+  context: string;
+  explanation: string;
+}
+
 interface GeneratePlanResult {
   text_title: string;
   text_level: string;
+  language_name?: string;
   student_level: string;
   learner_gap: { gap: string; gap_description: string };
+  vocabulary?: {
+    total_words: number;
+    unique_words: number;
+    cefr_distribution: Record<string, number>;
+    awl_count: number;
+    awl_ratio: number;
+    difficult_words: DifficultWord[];
+    vocabulary_richness: number;
+  };
+  cultural_elements?: CulturalElement[];
   enhancement_tags: string[];
   tag_labels?: Record<string, string>;
   teaching_blueprint: Blueprint | null;

@@ -289,7 +289,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex items-center justify-between py-2 border-b border-black/5">
             <dt className="text-ink-500">建设方</dt>
-            <dd className="text-ink-900">挑战杯"揭榜挂帅"专项赛</dd>
+            <dd className="text-ink-900">挑战杯“揭榜挂帅”专项赛</dd>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-black/5">
             <dt className="text-ink-500">ICP 备案号</dt>
