@@ -6,7 +6,7 @@
 
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
@@ -27,8 +27,8 @@ async def initialize_admin(db: AsyncSession) -> dict:
 
     email_lower = ADMIN_EMAIL.lower()
 
-    # 1. 查找管理员用户
-    result = await db.execute(select(User).where(User.email == email_lower))
+    # 1. 查找管理员用户（大小写不敏感，兼容历史混合大小写数据）
+    result = await db.execute(select(User).where(func.lower(User.email) == email_lower))
     admin_user = result.scalar_one_or_none()
 
     created = False
@@ -57,7 +57,7 @@ async def initialize_admin(db: AsyncSession) -> dict:
     # 3. 降级其他管理员（保证唯一管理员）
     await db.execute(
         update(User)
-        .where(User.email != email_lower, User.is_admin == True)  # noqa: E712
+        .where(func.lower(User.email) != email_lower, User.is_admin == True)  # noqa: E712
         .values(is_admin=False)
     )
 

@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
@@ -71,7 +71,7 @@ class TokenResponse(BaseModel):
 async def login(user_login: UserLogin, db: AsyncSession = Depends(get_async_db)):
     """用户登录"""
     email_lower = user_login.email.lower()
-    result = await db.execute(select(User).where(User.email == email_lower))
+    result = await db.execute(select(User).where(func.lower(User.email) == email_lower))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(user_login.password, user.hashed_password):
@@ -194,8 +194,8 @@ async def create_user(
 ):
     """创建用户"""
     email_lower = user.email.lower()
-    # 检查邮箱是否已存在
-    result = await db.execute(select(User).where(User.email == email_lower))
+    # 检查邮箱是否已存在（大小写不敏感，防止历史混合大小写数据被重复注册）
+    result = await db.execute(select(User).where(func.lower(User.email) == email_lower))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

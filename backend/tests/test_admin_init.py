@@ -31,8 +31,9 @@ class TestInitializeAdmin:
         assert result["created"] is True
         assert result["email"] == admin_email
 
+        # 新逻辑统一以小写存储邮箱
         user = (await test_db_session.execute(
-            select(User).where(User.email == admin_email)
+            select(User).where(User.email == admin_email.lower())
         )).scalar_one_or_none()
         assert user is not None
         assert user.is_admin is True
@@ -96,7 +97,8 @@ class TestInitializeAdmin:
 
         await initialize_admin(test_db_session)
 
+        # 新逻辑统一以小写存储邮箱
         user = (await test_db_session.execute(
-            select(User).where(User.email == admin_email)
+            select(User).where(User.email == admin_email.lower())
         )).scalar_one_or_none()
         assert user.is_active is True
