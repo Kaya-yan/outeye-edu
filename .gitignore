@@ -101,3 +101,6 @@ docs/superpowers/*
 findings.md
 progress.md
 task_plan.md
+
+# 提示词回归产物（含课文全文，不入库）
+backend/regression_runs/

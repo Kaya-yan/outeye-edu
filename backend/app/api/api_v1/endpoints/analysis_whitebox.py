@@ -455,6 +455,7 @@ class GeneratePlanRequest(BaseModel):
 async def generate_teaching_plan(
     request: GeneratePlanRequest,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     融合生成端点（完整流水线）
@@ -581,6 +582,10 @@ async def generate_teaching_plan(
             wiki_results=wiki_results,
             rag_results=rag_results,
             mode=request.mode,
+            duration_minutes=request.duration_minutes,
+            course_type=request.course_type,
+            class_size=request.class_size,
+            native_language=request.native_language,
         )
 
         # 教学蓝图（仅增强模式单独展示）
@@ -612,11 +617,15 @@ async def generate_teaching_plan(
             "tag_labels": analysis_result.tag_labels,
             "teaching_blueprint": blueprint,
             "teaching_plan": {
+                "framework": plan.framework,
+                "objectives": plan.objectives,
                 "difficulty_overview": plan.difficulty_overview,
                 "teaching_suggestions": plan.teaching_suggestions,
                 "activity_designs": plan.activity_designs,
+                "assessment": plan.assessment,
                 "differentiation": plan.differentiation,
                 "theoretical_basis": plan.theoretical_basis,
+                "self_check": plan.self_check,
             },
             "evidence_annotations": evidence_annotations,
             "sources": plan.sources,
@@ -628,7 +637,29 @@ async def generate_teaching_plan(
             "generation_duration": plan.generation_duration,
             "total_duration": round(total_duration, 2),
             "model": plan.model,
+            "prompt_version": plan.prompt_version,
+            "fallback": plan.fallback,
         }
+
+        # 生成记录落库：self_check 随产物保存，质量可追溯
+        try:
+            from app.models.generation import GenerationLog
+
+            db.add(GenerationLog(
+                id=str(uuid.uuid4()),
+                user_id=current_user["user_id"],
+                analysis_id=None,
+                stage="lesson_plan",
+                prompt_name="lesson_plan_v2",
+                prompt_version=plan.prompt_version,
+                model=plan.model,
+                fallback="yes" if plan.fallback else "no",
+                generation_duration=plan.generation_duration,
+                self_check=plan.self_check or None,
+            ))
+            await db.commit()
+        except Exception as log_err:
+            logger.warning(f"生成记录落库失败（不影响返回）: {log_err}")
 
         logger.info(f"教学方案生成完成: 总耗时{total_duration:.2f}s")
         return response

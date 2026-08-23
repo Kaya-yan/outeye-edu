@@ -9,16 +9,27 @@ interface Activity {
   objective?: string;
   steps?: string;
   duration?: string;
+  assessment?: string;
   evidence?: Evidence[];
   degraded?: boolean;
 }
 
+interface Objective {
+  text: string;
+  bloom?: string;
+  assessment?: string;
+}
+
 interface TeachingPlanData {
+  framework?: string;
+  objectives?: Objective[];
   difficulty_overview: string;
   teaching_suggestions: string[];
   activity_designs: Activity[];
+  assessment?: { formative?: string[]; summative?: string[] };
   differentiation: string;
   theoretical_basis: string;
+  self_check?: Record<string, unknown>;
 }
 
 interface Source {
@@ -81,8 +92,83 @@ export default function TeachingPlanView({
     setRevisionTarget(null);
   };
 
+  // 自检结果：未过项黄条提示；降级生成灰条明示
+  const sc = plan.self_check as Record<string, unknown> | undefined;
+  const scFailed: string[] = [];
+  if (sc) {
+    if (!sc.objectives_count) scFailed.push("缺少教学目标");
+    if (sc.objectives_measurable === false) scFailed.push("目标可测量性未通过");
+    if (!sc.stage_count) scFailed.push("缺少课堂环节");
+    if (sc.time_matches_duration === false)
+      scFailed.push(`环节时间总和 ${String(sc.time_sum_minutes ?? "?")} 分钟与课时不符`);
+    if (Number(sc.formative_checks ?? 9) < 2) scFailed.push("形成性评估点不足 2 个");
+    if (Number(sc.summative_checks ?? 9) < 2) scFailed.push("终结性评估点不足 2 个");
+    if (sc.no_copy_paste === false) scFailed.push("疑似照抄课文");
+  }
+  const isFallback =
+    model === "template-fallback" || sc?.prompt_version === "fallback";
+
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <div className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <span className="text-sm">⚠️</span>
+          <p className="text-xs leading-5 text-gray-600">
+            简化版生成：AI 服务暂不可用，本教案由模板生成，教学目标与时间分配为默认值，请人工核对后再使用。
+          </p>
+        </div>
+      )}
+      {sc && scFailed.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <span className="text-sm">📋</span>
+          <div className="text-xs leading-5 text-amber-800">
+            <span className="font-semibold">教案自检提示：</span>
+            {scFailed.join("；")}。
+            {typeof sc.notes === "string" && sc.notes && `（${sc.notes}）`}
+          </div>
+        </div>
+      )}
+
+      {/* Framework */}
+      {plan.framework && (
+        <Section title="教学设计框架" icon="🧭">
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+            {plan.framework}
+          </p>
+        </Section>
+      )}
+
+      {/* Objectives */}
+      {plan.objectives && plan.objectives.length > 0 && (
+        <Section title="教学目标" icon="🎯">
+          <div className="space-y-3">
+            {plan.objectives.map((obj, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded bg-primary-100 text-primary-700">
+                  目标 {i + 1}
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {obj.text}
+                    {obj.bloom && (
+                      <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-50 text-green-700 border border-green-200">
+                        Bloom·{obj.bloom}
+                      </span>
+                    )}
+                  </p>
+                  {obj.assessment && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      <span className="font-medium">评估方式：</span>
+                      {obj.assessment}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Difficulty Overview */}
       <Section
         title="课文难度概述"
@@ -165,6 +251,11 @@ export default function TeachingPlanView({
                     <span className="font-medium">步骤：</span>{act.steps}
                   </div>
                 )}
+                {act.assessment && (
+                  <div className="text-xs text-gray-500 mb-1">
+                    <span className="font-medium">评估点：</span>{act.assessment}
+                  </div>
+                )}
                 {act.duration && (
                   <div className="text-xs text-gray-500">
                     <span className="font-medium">时间：</span>{act.duration}
@@ -208,6 +299,40 @@ export default function TeachingPlanView({
           )}
         </Section>
       )}
+
+      {/* Assessment Design */}
+      {plan.assessment &&
+        ((plan.assessment.formative?.length ?? 0) > 0 ||
+          (plan.assessment.summative?.length ?? 0) > 0) && (
+          <Section title="评估设计" icon="✅">
+            <div className="space-y-3">
+              {(plan.assessment.formative?.length ?? 0) > 0 && (
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="text-xs font-semibold text-blue-700 mb-1.5">形成性评估（课中）</div>
+                  <ul className="space-y-1">
+                    {plan.assessment.formative!.map((item, i) => (
+                      <li key={i} className="text-xs text-gray-700 leading-relaxed flex gap-1.5">
+                        <span className="text-blue-400">•</span>{item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(plan.assessment.summative?.length ?? 0) > 0 && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                  <div className="text-xs font-semibold text-green-700 mb-1.5">终结性评估（课后）</div>
+                  <ul className="space-y-1">
+                    {plan.assessment.summative!.map((item, i) => (
+                      <li key={i} className="text-xs text-gray-700 leading-relaxed flex gap-1.5">
+                        <span className="text-green-400">•</span>{item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </Section>
+        )}
 
       {/* Differentiation */}
       {plan.differentiation && (

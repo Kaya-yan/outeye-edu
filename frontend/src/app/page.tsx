@@ -82,6 +82,8 @@ interface WhiteboxAnalysis {
 }
 
 interface TeachingPlan {
+  framework?: string;
+  objectives?: Array<{ text: string; bloom?: string; assessment?: string }>;
   difficulty_overview: string;
   teaching_suggestions: string[];
   activity_designs: Array<{
@@ -89,11 +91,14 @@ interface TeachingPlan {
     objective?: string;
     steps?: string;
     duration?: string;
+    assessment?: string;
     evidence?: { source_type: "wiki" | "rag"; title: string; relevance: number; content: string }[];
     degraded?: boolean;
   }>;
+  assessment?: { formative?: string[]; summative?: string[] };
   differentiation: string;
   theoretical_basis: string;
+  self_check?: Record<string, unknown>;
 }
 
 interface DifficultWord {
@@ -136,6 +141,8 @@ interface GeneratePlanResult {
   generation_duration: number;
   total_duration: number;
   model: string;
+  prompt_version?: string;
+  fallback?: boolean;
 }
 
 type Step = "input" | "analysis" | "plan";

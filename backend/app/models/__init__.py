@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.analysis import AnalysisRecord, LessonPlan
 from app.models.learning import LearningRecord, UserFeedback, UserBehavior
 from app.models.document import Document, DocumentChunk
+from app.models.generation import GenerationLog
 from app.models.courseware import (
     CoursewareProject,
     CoursewareVersion,
@@ -23,6 +24,7 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "UserBehavior",
+    "GenerationLog",
     "CoursewareProject",
     "CoursewareVersion",
     "PresentationProfile",
