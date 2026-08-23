@@ -178,6 +178,17 @@ def _load_cefr_wordlist() -> Dict[str, str]:
         # 如果词表文件不存在，使用内置基础词表
         word_map = _builtin_cefr_fallback()
 
+    # F4.1 频段补充词表：只填主词表缺口（scripts/generate_cefr_freq_bands.py 生成）
+    freq_path = os.path.join(data_dir, "cefr_freq_bands.json")
+    try:
+        with open(freq_path, "r", encoding="utf-8") as f:
+            for entry in json.load(f):
+                word = entry["word"].lower().strip()
+                if word not in word_map:
+                    word_map[word] = entry["level"]
+    except FileNotFoundError:
+        pass
+
     return word_map
 
 
@@ -624,6 +635,11 @@ class WhiteboxAnalyzer:
         """词形还原（不委托给分词器——分词器的简单后缀剥离会把 mother→moth、
         families→famili 等切过头。这里用词表校验 + 不规则表 + 形态规则）。"""
         w = word.lower().strip()
+        # 不规则变形先查（are/is/was 等短词也要还原），再做短词早退
+        if w in self.IRREGULAR_FORMS:
+            base = self.IRREGULAR_FORMS[w]
+            if base in self.cefr_vocab:
+                return base
         if len(w) <= 3:
             return w
         # 先查词表，命中则直接返回
@@ -735,6 +751,25 @@ class WhiteboxAnalyzer:
 
         return w
 
+    def _proper_noun_lowers(self, text: str) -> set:
+        """专有名词小写集合（近似检测）：非句首位置的大写开头词 + 全大写缩写（USA/NATO）。
+        句首词天然大写故跳过；词频复现（如 Lincoln 出现多次）天然加权命中。"""
+        proper = set()
+        # 头衔缩写的句点会伪切句界（Dr. Nakamura → Nakamura 成"句首词"），先消解
+        prepped = re.sub(
+            r"\b(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|St|vs|etc|Inc|Ltd|No|Vol|Fig|Rev|Hon|Sen|Rep|Gov|Gen|Col|Maj|Capt|Lt|Sgt)\.",
+            r"\1",
+            text,
+        )
+        for sent in re.split(r'(?<=[.!?])\s+|\n+', prepped):
+            toks = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sent)
+            for i, t in enumerate(toks):
+                if i == 0 or len(t) < 2:
+                    continue
+                if t.isupper() or (t[0].isupper() and t[1:].islower()):
+                    proper.add(t.lower())
+        return proper
+
     def _split_sentences(self, text: str, tokenizer=None) -> List[str]:
         """分句（委托给语言专用分词器）"""
         if tokenizer:
@@ -751,8 +786,9 @@ class WhiteboxAnalyzer:
         unique = len(set(words))
         word_counts = Counter(words)
 
-        # CEFR分布 - 按大类分组
-        cefr_dist = {"A1-A2": 0, "B1-B2": 0, "C1-C2": 0, "未分级": 0}
+        # CEFR分布 - 按大类分组（F4.2：专有名词单列，不算未分级也不算难词）
+        cefr_dist = {"A1-A2": 0, "B1-B2": 0, "C1-C2": 0, "专有名词": 0, "未分级": 0}
+        proper_lowers = self._proper_noun_lowers(text)
         difficult_words: List[DifficultWord] = []
 
         # 选择词表：日语用JLPT，韩语用TOPIK，欧洲语言用CEFR
@@ -785,11 +821,14 @@ class WhiteboxAnalyzer:
             if vocab_map:
                 level = vocab_map.get(word)
                 if level is None:
-                    cefr_dist["未分级"] += count
-                    if count >= 1 and not self._is_stopword(word, tokenizer):
-                        difficult_words.append(DifficultWord(
-                            word=word, level="unknown", count=count, in_awl=word in self.awl_vocab if lang == "en" else False
-                        ))
+                    if word in proper_lowers:
+                        cefr_dist["专有名词"] += count
+                    else:
+                        cefr_dist["未分级"] += count
+                        if count >= 1 and not self._is_stopword(word, tokenizer):
+                            difficult_words.append(DifficultWord(
+                                word=word, level="unknown", count=count, in_awl=word in self.awl_vocab if lang == "en" else False
+                            ))
                 else:
                     grouped = False
                     for group_name, group_levels in level_groups.items():

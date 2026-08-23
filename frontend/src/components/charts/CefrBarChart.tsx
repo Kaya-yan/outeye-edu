@@ -9,9 +9,9 @@ interface CefrBarChartProps {
   totalWords: number;
 }
 
-const LEVELS = ["A1-A2", "B1-B2", "C1-C2", "未分级"];
-const COLORS = ["#cbd6c5", "#d8c46a", "#c7d3d4", "#dccfc8"];
-const BORDER_COLORS = ["#96a790", "#c4b257", "#7f8b8d", "#a99893"];
+const LEVELS = ["A1-A2", "B1-B2", "C1-C2", "专有名词", "未分级"];
+const COLORS = ["#cbd6c5", "#d8c46a", "#c7d3d4", "#c9b8a8", "#dccfc8"];
+const BORDER_COLORS = ["#96a790", "#c4b257", "#7f8b8d", "#a5876f", "#a99893"];
 
 export default function CefrBarChart({ distribution, totalWords }: CefrBarChartProps) {
   const counts = LEVELS.map((l) => distribution[l] || 0);

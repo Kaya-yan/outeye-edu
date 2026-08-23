@@ -255,7 +255,7 @@ export default function ComparePage() {
                         <div className="mb-3">
                           <div className="text-xs text-gray-500 mb-1">CEFR 分布</div>
                           <div className="flex gap-1 h-4 rounded overflow-hidden">
-                            {["A1-A2", "B1-B2", "C1-C2", "未分级"].map((level) => {
+                            {["A1-A2", "B1-B2", "C1-C2", "专有名词", "未分级"].map((level) => {
                               const total = r.metrics?.total_words || 1;
                               const count = r.cefr_distribution?.[level] || 0;
                               const pct = (count / total) * 100;
@@ -263,6 +263,7 @@ export default function ComparePage() {
                                 "A1-A2": "bg-green-400",
                                 "B1-B2": "bg-blue-400",
                                 "C1-C2": "bg-orange-400",
+                                "专有名词": "bg-amber-300",
                                 "未分级": "bg-gray-300",
                               };
                               return pct > 0 ? (
