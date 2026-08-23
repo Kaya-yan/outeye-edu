@@ -78,7 +78,7 @@ export default function HtmlWorkbenchPage() {
     try {
       sessionStorage.setItem(key, JSON.stringify({ html: content, title: title.trim() || "未命名课件", mode: "slides" }));
     } catch {
-      setError("内容太大，无法中转，请精简后重试");
+      setError("内容过大，请精简后重试");
       return;
     }
     window.location.href = `/editor/index.html#import=${encodeURIComponent(key)}`;

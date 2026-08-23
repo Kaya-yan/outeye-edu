@@ -21,7 +21,7 @@ export default function TiptapEditor({
 }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ underline: false }),
       Placeholder.configure({ placeholder }),
       Highlight,
       Underline,

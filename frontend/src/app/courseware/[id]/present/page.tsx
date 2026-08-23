@@ -298,7 +298,7 @@ export default function CoursewarePresentPage() {
               className="w-full h-full border-0 bg-white"
               style={{ maxWidth: 1280, margin: "0 auto" }}
               title="课堂展示"
-              sandbox="allow-same-origin allow-scripts"
+              sandbox="allow-same-origin allow-scripts allow-downloads allow-forms allow-modals"
               onLoad={() => extractSections()}
             />
           ) : (

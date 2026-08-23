@@ -68,6 +68,8 @@ export default function HistoryPage() {
           source_text: p.source_text || "",
           student_level: p.student_level,
           course_type: p.course_type,
+          duration_minutes: p.duration_minutes,
+          auto_analyze: p.analysis_status === "completed",
         })
       );
     } catch {

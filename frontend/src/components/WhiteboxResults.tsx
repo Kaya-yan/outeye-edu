@@ -338,7 +338,7 @@ function VerdictCard({ label, value, note, term }: { label: string; value: strin
   return (
     <div className="data-card p-4 bg-white/90">
       <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
-        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+        {term ? <TermTooltip term={term} block>{label}</TermTooltip> : label}
       </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <p className="mt-1 text-xs text-ink-500 leading-5">{note}</p>
@@ -350,7 +350,7 @@ function MetricCard({ label, value, note, term }: { label: string; value: string
   return (
     <div className="data-card p-4 bg-white/92">
       <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
-        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+        {term ? <TermTooltip term={term} block>{label}</TermTooltip> : label}
       </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <div className="mt-1 text-xs text-ink-500">{note}</div>

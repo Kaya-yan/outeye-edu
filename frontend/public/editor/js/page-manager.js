@@ -1,14 +1,23 @@
+// 页面管理只维护页面状态（标题 + HTML 字符串），渲染统一委托给
+// iframeManager 的唯一 editor-iframe。此前本模块自建一套平行 iframe，
+// 导致点击监听（selection.js 只绑 editor-iframe）失效与视觉错位。
 window.pageManager = {
   pages: [],
   current: 0,
 
   init() {
-    // Create initial blank page
     if (this.pages.length === 0) {
-      this.addPage({ title: '第 1 页' }, true);
+      // 已有渲染内容（平台载入的课件）时收编为第 1 页，避免被空白页覆盖
+      var rendered = window.iframeManager ? window.iframeManager.getHTML() : '';
+      var hasContent = rendered && rendered.replace(/<[^>]*>/g, '').trim().length > 0;
+      this.addPage({ title: '第 1 页', html: hasContent ? rendered : '' }, true);
     }
     this.switchTo(0);
     window.events.emit('page:changed', 0);
+  },
+
+  blankHTML(title) {
+    return '<div style="padding:40px;text-align:center;color:#9ca3af;font-family:system-ui,sans-serif"><h2 style="font-size:24px;margin-bottom:8px">' + title + '</h2><p style="font-size:14px">在此添加内容</p></div>';
   },
 
   addPage(opts, silent) {
@@ -20,19 +29,6 @@ window.pageManager = {
       html: opts.html || '',
     };
     this.pages.push(page);
-
-    // Create iframe in wrapper
-    var wrapper = document.getElementById('iframeWrapper');
-    if (wrapper) {
-      var ifr = document.createElement('iframe');
-      ifr.id = id;
-      ifr.setAttribute('sandbox', 'allow-same-origin allow-scripts');
-      ifr.style.cssText = 'width:100%;min-height:600px;border:0;display:none;position:absolute;top:0;left:0';
-      ifr.srcdoc = page.html || '<div style="padding:40px;text-align:center;color:#9ca3af;font-family:system-ui,sans-serif"><h2 style="font-size:24px;margin-bottom:8px">' + page.title + '</h2><p style="font-size:14px">在此添加内容</p></div>';
-      wrapper.style.position = 'relative';
-      wrapper.appendChild(ifr);
-    }
-
     if (!silent) {
       this.switchTo(this.pages.length - 1);
       window.events.emit('pages:changed');
@@ -42,9 +38,6 @@ window.pageManager = {
 
   removePage(idx) {
     if (this.pages.length <= 1) return false;
-    var page = this.pages[idx];
-    var ifr = document.getElementById(page.id);
-    if (ifr) ifr.remove();
     this.pages.splice(idx, 1);
     var newIdx = Math.min(idx, this.pages.length - 1);
     this.switchTo(newIdx);
@@ -54,47 +47,31 @@ window.pageManager = {
 
   switchTo(idx) {
     if (idx < 0 || idx >= this.pages.length) return;
-    // Save current page HTML before switching
     this.saveCurrentHTML();
-    // Hide all, show target
     this.current = idx;
-    this.pages.forEach(function (p) {
-      var f = document.getElementById(p.id);
-      if (f) f.style.display = 'none';
-    });
-    var target = document.getElementById(this.pages[idx].id);
-    if (target) {
-      target.style.display = 'block';
-      target.style.position = 'static';
+    var page = this.pages[idx];
+    if (window.iframeManager) {
+      window.iframeManager.setHTML(page.html || this.blankHTML(page.title));
     }
     window.events.emit('page:changed', idx);
   },
 
   saveCurrentHTML() {
     var cur = this.pages[this.current];
-    if (!cur) return;
-    var ifr = document.getElementById(cur.id);
-    if (!ifr) return;
+    if (!cur || !window.iframeManager || !window.iframeManager.iframe) return;
     try {
-      var doc = ifr.contentDocument || ifr.contentWindow.document;
-      cur.html = doc.documentElement.outerHTML;
+      var doc = window.iframeManager.getDoc();
+      if (doc && doc.documentElement) cur.html = doc.documentElement.outerHTML;
     } catch (e) { /* cross-origin */ }
   },
 
   getCurrentHTML() {
+    this.saveCurrentHTML();
     var cur = this.pages[this.current];
-    if (!cur) return '';
-    var ifr = document.getElementById(cur.id);
-    if (!ifr) return cur.html || '';
-    try {
-      return (ifr.contentDocument || ifr.contentWindow.document).documentElement.outerHTML;
-    } catch (e) {
-      return cur.html || '';
-    }
+    return cur ? (cur.html || '') : '';
   },
 
   getAllHTML() {
-    var self = this;
     this.saveCurrentHTML();
     return this.pages.map(function (p) {
       return p.html || '<div></div>';
@@ -102,7 +79,7 @@ window.pageManager = {
   },
 
   getCurrentIframe() {
-    return document.getElementById(this.pages[this.current] ? this.pages[this.current].id : '');
+    return window.iframeManager ? window.iframeManager.iframe : null;
   },
 
   listPages: function () { return this.pages; },

@@ -234,17 +234,17 @@ export default function CoursewareEditPage() {
         <div className="h-full max-w-[1600px] mx-auto rounded-[28px] border border-white/50 bg-white/55 backdrop-blur-sm shadow-card overflow-hidden">
           <div className="h-10 border-b border-black/5 bg-white/75 px-4 flex items-center justify-between text-xs text-ink-500">
             <div className="flex items-center gap-2">
-              <span className="section-title mb-0">Workbench Shell</span>
-              <span className="drawer-handle bg-canvas-100 border border-black/5 text-ink-500">iframe 编辑器已接入平台工作区</span>
+              <span className="section-title mb-0">课件精修</span>
+              <span className="drawer-handle bg-canvas-100 border border-black/5 text-ink-500">修改可保存为新版本</span>
             </div>
-            <span>{project.mode === "slides" ? "Slides editing" : "Longform editing"}</span>
+            <span>{project.mode === "slides" ? "幻灯片编辑" : "长页编辑"}</span>
           </div>
           <iframe
             ref={iframeRef}
             src="/editor/index.html"
             className="w-full h-[calc(100%-2.5rem)] border-0 bg-transparent"
             title="课件编辑器"
-            sandbox="allow-same-origin allow-scripts"
+            sandbox="allow-same-origin allow-scripts allow-downloads allow-forms allow-modals"
           />
         </div>
       </div>

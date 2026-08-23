@@ -174,7 +174,9 @@ export default function AnalysisPage() {
   const [activeVersion, setActiveVersion] = useState<"basic" | "enhanced">("enhanced");
   const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
 
-  // 从历史记录点"继续"进入：恢复上次的课文与设置
+  // 从历史记录点"继续"进入：恢复上次的课文与设置；
+  // 已完成过分析的记录自动重析（白盒为确定性计算，秒级），直接回到结果视图
+  const [autoAnalyzeQueued, setAutoAnalyzeQueued] = useState(false);
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("outeye:resume-project");
@@ -185,11 +187,15 @@ export default function AnalysisPage() {
         source_text?: string;
         student_level?: string;
         course_type?: string;
+        duration_minutes?: number;
+        auto_analyze?: boolean;
       };
       if (p.title) setTitle(p.title);
       if (p.source_text) setText(p.source_text);
       if (p.student_level) setStudentLevel(p.student_level);
       if (p.course_type) setCourseType(p.course_type);
+      if (p.duration_minutes) setDurationInput(String(p.duration_minutes));
+      if (p.auto_analyze && p.source_text) setAutoAnalyzeQueued(true);
     } catch {
       // 恢复失败不阻塞正常使用
     }
@@ -232,6 +238,7 @@ export default function AnalysisPage() {
         native_language: nativeLanguage || undefined,
         course_type: courseType || undefined,
         class_size: classSize ? parseInt(classSize) : undefined,
+        duration_minutes: parseInt(durationInput, 10) || undefined,
       });
       setAnalysis(result);
       setStep("analysis");
@@ -241,6 +248,14 @@ export default function AnalysisPage() {
       setLoading(false);
     }
   };
+
+  // 历史恢复后的一次性自动分析（在上方恢复 useEffect 写入状态之后触发）
+  useEffect(() => {
+    if (!autoAnalyzeQueued) return;
+    setAutoAnalyzeQueued(false);
+    void handleAnalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAnalyzeQueued]);
 
   // Step 2: Generate Teaching Plan（含双源检索，内部完成）
   const generateVersion = async (context: TeachingContext, mode: "basic" | "enhanced") => {
@@ -996,7 +1011,7 @@ function PlanStep({
         <div className="archive-surface p-4 mb-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="section-title mb-2">{planConfirmed ? "Courseware Ready" : "Plan Review"}</div>
+              <div className="section-title mb-2">{planConfirmed ? "课件就绪" : "教案审阅"}</div>
               <p className="text-sm text-ink-600 leading-6">
                 {planConfirmed
                   ? "教案已确认，可生成课件或进入 HTML 编辑器。"
@@ -1007,12 +1022,12 @@ function PlanStep({
               {planConfirmed ? (
                 <>
                   <span className="drawer-handle bg-white border border-black/5 text-ink-500">PPT / Word / HTML</span>
-                  <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">HTML 路径进入编辑器</span>
+                  <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">HTML 可继续精修</span>
                 </>
               ) : (
                 <>
-                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">修改后确认</span>
-                  <span className="drawer-handle bg-canvas-200 border border-black/5 text-ink-500">教案是中转点</span>
+                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">可修订教案</span>
+                  <span className="drawer-handle bg-canvas-200 border border-black/5 text-ink-500">确认后生成课件</span>
                 </>
               )}
             </div>

@@ -32,6 +32,7 @@ class WhiteboxAnalysisRequest(BaseModel):
     native_language: Optional[str] = Field(None, description="学生母语代码（如zh/ja/ko等）", pattern=r"^[a-z]{2}$")
     course_type: Optional[str] = Field(None, description="课程类型：精读/泛读/听说/写作/综合")
     class_size: Optional[int] = Field(None, description="班级人数", ge=1, le=200)
+    duration_minutes: Optional[int] = Field(None, description="课时时长（分钟）", ge=5, le=180)
 
 
 class DifficultWordResponse(BaseModel):
@@ -163,6 +164,8 @@ async def whitebox_analyze(
             text_content=request.text,
             text_word_count=result.vocabulary.total_words,
             student_level=request.student_level,
+            course_type=request.course_type,
+            duration_minutes=request.duration_minutes,
             analysis_status="completed",
             lexical_result={
                 "total_words": result.vocabulary.total_words,
