@@ -406,8 +406,16 @@ def _parse_plan(
 
     self_check = _extract_self_check(answer)
 
+    in_fence = False
     for line in answer.split("\n"):
         line_stripped = line.strip()
+        # 跳过 ``` 代码块（self_check JSON 由 _extract_self_check 单独提取，
+        # 不能混入最后一个章节的正文）
+        if line_stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if not line_stripped or _SEP_RE.match(line_stripped):
             continue
         matched = False

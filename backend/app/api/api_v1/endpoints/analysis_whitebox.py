@@ -805,6 +805,9 @@ async def revise_plan(
             "revision_note": revised.revision_note,
             "generation_duration": revised.generation_duration,
             "model": revised.model,
+            "self_check": revised.self_check,
+            "prompt_version": revised.prompt_version,
+            "fallback": revised.fallback,
         }
 
         logger.info(f"教案修订完成: 耗时{revised.generation_duration:.2f}s")

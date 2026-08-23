@@ -57,7 +57,7 @@ def prompt_dir() -> Path:
 
 
 if __name__ == "__main__":
-    # 模板自检：渲染一份样例，检查占位符是否齐全
+    # 模板自检：渲染样例，检查占位符是否齐全
     demo = dict(
         title="T", language_name="英语", text_level="B1", student_level="B1",
         gap_line="适度挑战", duration_minutes=90, course_type="精读", class_size=30,
@@ -68,9 +68,16 @@ if __name__ == "__main__":
         connective_density=4.2, genre_hint="说明文", cultural_section="",
         wiki_context="（无）", rag_context="（无）",
     )
-    sys_p, user_p = render_prompt("lesson_plan_v2", **demo)
-    leftover = [ln for ln in user_p.splitlines() if "${" in ln]
-    if leftover:
-        logger.error(f"模板存在未替换占位符: {leftover}")
-        raise SystemExit(1)
-    print("模板自检通过:", prompt_version("lesson_plan_v2"))
+    demo_revision = dict(
+        title="T", student_level="B1", language_line="；语种：英语",
+        duration_line="各环节时间总和应为 90 分钟，修订后保持不变",
+        original_plan="### 一、课文难度概述\n...", revision_instruction="换成视频导入",
+        section_hint="",
+    )
+    for name, variables in (("lesson_plan_v2", demo), ("plan_revision_v1", demo_revision)):
+        sys_p, user_p = render_prompt(name, **variables)
+        leftover = [ln for ln in user_p.splitlines() if "${" in ln]
+        if leftover:
+            logger.error(f"模板 {name} 存在未替换占位符: {leftover}")
+            raise SystemExit(1)
+        print("模板自检通过:", name, prompt_version(name))
