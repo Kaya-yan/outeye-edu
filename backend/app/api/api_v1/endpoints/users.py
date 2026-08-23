@@ -56,6 +56,11 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = None
 
 
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -115,6 +120,46 @@ async def get_current_user_info(
             detail="User not found"
         )
     return user
+
+
+@router.put("/me/password")
+async def change_password(
+    password_change: PasswordChange,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """修改当前用户密码（需验证旧密码）"""
+    result = await db.execute(select(User).where(User.id == current_user["user_id"]))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if not verify_password(password_change.old_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="原密码不正确"
+        )
+
+    if len(password_change.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新密码长度至少 8 位"
+        )
+
+    if password_change.new_password == password_change.old_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新密码不能与原密码相同"
+        )
+
+    user.hashed_password = get_password_hash(password_change.new_password)
+    await db.commit()
+
+    return {"message": "密码修改成功"}
 
 
 @router.get("/{user_id}", response_model=UserResponse)

@@ -444,7 +444,11 @@ def export_html(plan: Dict[str, Any], title: str = "教学方案") -> BytesIO:
     json_data = _build_html_json(plan, title, gap)
 
     # Replace placeholders (HTML-escape title to prevent injection)
-    html = template.replace("{{data.json}}", json.dumps(json_data, ensure_ascii=False, indent=2))
+    # JSON 块同样必须转义：json.dumps 不转义 /，含 </script> 的字段值会闭合
+    # <script type="application/json"> 块导致 XSS。< 等转义对 JSON.parse 等价。
+    payload = json.dumps(json_data, ensure_ascii=False, indent=2)
+    payload = payload.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    html = template.replace("{{data.json}}", payload)
     html = html.replace("{{data.title}}", html_escape(title))
 
     # Write to buffer
