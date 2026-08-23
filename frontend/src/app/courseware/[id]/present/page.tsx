@@ -205,7 +205,7 @@ export default function CoursewarePresentPage() {
       <div className="min-h-screen bg-ink-900 flex items-center justify-center">
         <div className="text-center text-white/70">
           <p className="mb-4">{loadError || "课件未找到"}</p>
-          <Link href="/courseware" className="text-white/80 hover:underline text-sm">返回课件列表</Link>
+          <Link href="/history" className="text-white/80 hover:underline text-sm">返回历史记录</Link>
         </div>
       </div>
     );

@@ -273,5 +273,26 @@
 <script src="/editor/js/outline-panel.js?v=1"></script>
 <script src="/editor/js/js-prerenderer.js?v=1"></script>
 <script src="/editor/js/main.js?v=1"></script>
+<script>
+// 平台中转协议（引擎无关）：#import=<key> -> sessionStorage 取内容，经现有 editor:load 消息通道载入
+(function () {
+  var m = /#import=([\w:-]+)/.exec(location.hash);
+  if (!m) return;
+  var key = decodeURIComponent(m[1]);
+  history.replaceState(null, '', location.pathname);
+  var payload;
+  try {
+    var raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    sessionStorage.removeItem(key);
+    payload = JSON.parse(raw);
+  } catch (err) { console.warn('[Editor] import failed', err); return; }
+  window.addEventListener('message', function (e) {
+    if (e.source === window && e.data && e.data.type === 'editor:ready') {
+      window.postMessage({ type: 'editor:load', payload: payload }, window.location.origin);
+    }
+  });
+})();
+</script>
 </body>
 </html>

@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.toLowerCase(), password);
       router.push("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "登录失败，请检查邮箱和密码");

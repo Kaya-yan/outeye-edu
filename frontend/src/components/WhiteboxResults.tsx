@@ -1,6 +1,7 @@
 "use client";
 
 import RadarChart from "./charts/RadarChart";
+import { cefrLabel } from "@/lib/cefr";
 import CefrBarChart from "./charts/CefrBarChart";
 import ReadabilityGauge from "./charts/ReadabilityGauge";
 import DifficultWordsChart from "./charts/DifficultWordsChart";
@@ -133,10 +134,10 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
                 </span>
               )}
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${LEVEL_COLORS[data.text_level] || "bg-canvas-200 text-ink-800"}`}>
-                课文等级 {data.text_level}
+                课文等级 {cefrLabel(data.text_level)}
               </span>
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${LEVEL_COLORS[g.student_level] || "bg-canvas-200 text-ink-800"}`}>
-                学生水平 {g.student_level}
+                学生水平 {cefrLabel(g.student_level)}
               </span>
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${readinessTone.badge}`}>
                 学习者差距 {g.gap}

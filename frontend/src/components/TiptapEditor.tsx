@@ -10,12 +10,14 @@ interface TiptapEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
+  frameless?: boolean;
 }
 
 export default function TiptapEditor({
   content,
   onChange,
   placeholder = "在此粘贴或输入课文内容...",
+  frameless = false,
 }: TiptapEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -30,11 +32,16 @@ export default function TiptapEditor({
     },
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm sm:prose-base max-w-none focus:outline-none min-h-[200px] px-4 py-3",
+        class: `prose prose-sm sm:prose-base max-w-none focus:outline-none px-4 py-3 ${
+          frameless ? "min-h-[240px]" : "min-h-[200px]"
+        }`,
       },
     },
   });
+
+  if (frameless) {
+    return <EditorContent editor={editor} />;
+  }
 
   return (
     <div className="border border-gray-300 rounded-lg bg-white overflow-hidden">

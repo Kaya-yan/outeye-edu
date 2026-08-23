@@ -70,7 +70,8 @@ class TokenResponse(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(user_login: UserLogin, db: AsyncSession = Depends(get_async_db)):
     """用户登录"""
-    result = await db.execute(select(User).where(User.email == user_login.email))
+    email_lower = user_login.email.lower()
+    result = await db.execute(select(User).where(User.email == email_lower))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(user_login.password, user.hashed_password):
@@ -150,6 +151,12 @@ async def change_password(
             detail="新密码长度至少 8 位"
         )
 
+    if len(password_change.new_password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新密码长度不能超过 72 字节"
+        )
+
     if password_change.new_password == password_change.old_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,8 +193,9 @@ async def create_user(
     db: AsyncSession = Depends(get_async_db)
 ):
     """创建用户"""
+    email_lower = user.email.lower()
     # 检查邮箱是否已存在
-    result = await db.execute(select(User).where(User.email == user.email))
+    result = await db.execute(select(User).where(User.email == email_lower))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -200,10 +208,15 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 8 characters long"
         )
+    if len(user.password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must not exceed 72 bytes"
+        )
 
     new_user = User(
         id=str(uuid.uuid4()),
-        email=user.email,
+        email=email_lower,
         hashed_password=get_password_hash(user.password),
         full_name=user.full_name,
         institution=user.institution,

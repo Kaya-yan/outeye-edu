@@ -16,6 +16,25 @@ function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
+// 按状态码把错误归为三类，给老师可理解的提示
+async function toApiError(res: Response, path?: string): Promise<ApiError> {
+  const body = await res.json().catch(() => ({}));
+  const rawDetail = body?.detail ?? body?.message;
+  const detail = typeof rawDetail === "string" ? rawDetail : undefined;
+
+  if (res.status === 401 || res.status === 403) {
+    // 登录接口的 401 是"邮箱或密码错误"，不是登录态过期
+    if (path === "/users/login") {
+      return new ApiError("邮箱或密码错误", res.status);
+    }
+    return new ApiError("登录已过期，请重新登录", res.status);
+  }
+  if (res.status >= 500) {
+    return new ApiError("服务暂时不可用，请稍后重试", res.status);
+  }
+  return new ApiError(detail || `请求失败（${res.status}）`, res.status);
+}
+
 export async function apiRequest(
   method: string,
   path: string,
@@ -32,16 +51,20 @@ export async function apiRequest(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      ...options,
+    });
+  } catch {
+    throw new ApiError("网络连接失败，请检查网络后重试", 0);
+  }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(err.detail || `请求失败: ${res.status}`, res.status);
+    throw await toApiError(res, path);
   }
 
   return res;
@@ -74,15 +97,19 @@ export async function apiUpload<T = unknown>(path: string, formData: FormData): 
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+  } catch {
+    throw new ApiError("网络连接失败，请检查网络后重试", 0);
+  }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(err.detail || `请求失败: ${res.status}`, res.status);
+    throw await toApiError(res, path);
   }
 
   return res.json();

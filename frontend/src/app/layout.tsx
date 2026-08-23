@@ -4,8 +4,8 @@ import ClientProviders from '@/components/ClientProviders'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'OutEye Edu - 学术桌面操作系统',
-  description: '面向外国语言文学一流学科建设的智能教研操作系统',
+  title: 'OutEye Edu - AI 备课助手',
+  description: '粘贴或上传英文课文，自动完成词汇、文化与教学分析，一键生成课件',
 }
 
 // 防 FOUC：在 hydration 前根据 localStorage 或 prefers-color-scheme 设置主题
@@ -58,7 +58,7 @@ export default function RootLayout({
                       <span className="text-sm font-semibold tracking-tight">OutEye Edu</span>
                     </div>
                     <p className="text-xs text-ink-400 max-w-xl">
-                      Academic Desktop OS · 面向外国语言文学一流学科建设的智能教研操作系统
+                      AI 备课助手 · 把课文变成一堂好课
                     </p>
                   </div>
                   <div className="text-xs text-ink-300 space-y-1">

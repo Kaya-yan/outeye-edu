@@ -7,12 +7,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-context";
 
 const navLinks = [
-  { href: "/", label: "首页" },
-  { href: "/projects", label: "项目管理" },
-  { href: "/analysis", label: "智能分析" },
-  { href: "/courseware", label: "教学课件" },
-  { href: "/resources", label: "资源库" },
-  { href: "/knowledge", label: "知识库" },
+  { href: "/", label: "工作台" },
+  { href: "/html-workbench", label: "HTML 工作台" },
+  { href: "/materials", label: "我的资料" },
+  { href: "/history", label: "历史记录" },
 ];
 
 export default function Navbar() {
@@ -59,7 +57,7 @@ export default function Navbar() {
         aria-expanded={menuOpen}
         aria-haspopup="menu"
       >
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-200 to-sage-200 flex items-center justify-center text-ink-800 font-semibold text-sm flex-shrink-0">
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center text-primary-800 font-semibold text-sm flex-shrink-0">
           {userInitial}
         </div>
         <div className="hidden sm:block max-w-[120px] text-left">
@@ -118,19 +116,6 @@ export default function Navbar() {
               </span>
               <span className="text-[10px] text-ink-400 uppercase tracking-wider">{theme === "light" ? "Light" : "Dark"}</span>
             </button>
-
-            <a
-              href="https://beian.miit.gov.cn/"
-              target="_blank"
-              rel="noreferrer"
-              role="menuitem"
-              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-700 hover:bg-canvas-100 transition-colors"
-            >
-              <svg className="w-4 h-4 text-ink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              ICP 备案信息
-            </a>
           </div>
 
           <div className="border-t border-black/5 pt-1">
@@ -152,21 +137,21 @@ export default function Navbar() {
 
   return (
     <>
-      <div className="h-[2px] bg-gradient-to-r from-primary-300 via-sage-300 to-rose-300" />
+      <div className="h-[2px] bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300" />
 
       <nav className="sticky top-0 z-40 navbar-surface">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-8">
               <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-                <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary-200 via-canvas-100 to-sage-200 ring-1 ring-black/5 shadow-soft flex items-center justify-center text-ink-700">
+                <div className="h-9 w-9 rounded-2xl bg-primary-600 ring-1 ring-black/5 shadow-soft flex items-center justify-center text-white">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
                 </div>
                 <div className="leading-none">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-ink-400">Academic Desktop OS</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-ink-400">AI 备课助手</div>
                   <div className="text-lg font-semibold tracking-tight text-ink-900">OutEye Edu</div>
                 </div>
               </Link>
@@ -180,7 +165,7 @@ export default function Navbar() {
                       href={link.href}
                       className={`relative inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
                         isActive
-                          ? "bg-canvas-500 text-ink-900 shadow-sm"
+                          ? "bg-primary-600 text-white shadow-sm"
                           : "text-ink-500 hover:text-ink-800 hover:bg-canvas-100"
                       }`}
                     >

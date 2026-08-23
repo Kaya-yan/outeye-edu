@@ -30,7 +30,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(email, password, fullName);
+      await register(email.toLowerCase(), password, fullName);
       router.push("/");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "注册失败，请稍后再试");

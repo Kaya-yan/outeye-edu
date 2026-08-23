@@ -256,20 +256,20 @@ export default function ProfilePage() {
           <h2 className="text-lg font-semibold text-ink-900">我的内容</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link href="/projects" className="archive-card p-5 hover-lift card-glow block">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Projects</div>
-            <div className="text-base font-semibold text-ink-900">我的项目</div>
-            <p className="mt-1 text-xs text-ink-500">课文分析、教学方案与课件归档。</p>
+          <Link href="/history" className="archive-card p-5 hover-lift card-glow block">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">History</div>
+            <div className="text-base font-semibold text-ink-900">历史记录</div>
+            <p className="mt-1 text-xs text-ink-500">课文分析、教学方案与课件记录。</p>
           </Link>
-          <Link href="/courseware" className="archive-card p-5 hover-lift card-glow block">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Courseware</div>
-            <div className="text-base font-semibold text-ink-900">我的课件</div>
-            <p className="mt-1 text-xs text-ink-500">HTML 课件项目与编辑历史。</p>
+          <Link href="/materials" className="archive-card p-5 hover-lift card-glow block">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Materials</div>
+            <div className="text-base font-semibold text-ink-900">我的资料</div>
+            <p className="mt-1 text-xs text-ink-500">上传的教学大纲、词表与背景资料。</p>
           </Link>
-          <Link href="/analysis" className="archive-card p-5 hover-lift card-glow block">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Analysis</div>
-            <div className="text-base font-semibold text-ink-900">我的分析</div>
-            <p className="mt-1 text-xs text-ink-500">白盒分析与教学洞察记录。</p>
+          <Link href="/html-workbench" className="archive-card p-5 hover-lift card-glow block">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Workbench</div>
+            <div className="text-base font-semibold text-ink-900">HTML 工作台</div>
+            <p className="mt-1 text-xs text-ink-500">上传 HTML 课件，可视化修改细节。</p>
           </Link>
         </div>
       </section>
@@ -282,7 +282,33 @@ export default function ProfilePage() {
           </svg>
           <h2 className="text-lg font-semibold text-ink-900">关于</h2>
         </div>
-        <dl className="space-y-3 text-sm">
+
+        <p className="text-sm leading-7 text-ink-700">
+          OutEye Edu 是面向大学英语教师的 AI 备课助手，帮你把一篇课文变成一堂好课。
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="data-card p-4">
+            <div className="text-sm font-semibold text-ink-900">课文分析</div>
+            <p className="mt-1 text-xs leading-5 text-ink-500">词汇难度、句法与文化背景一目了然。</p>
+          </div>
+          <div className="data-card p-4">
+            <div className="text-sm font-semibold text-ink-900">教案生成</div>
+            <p className="mt-1 text-xs leading-5 text-ink-500">确认教学设置后，一键生成可编辑的教案。</p>
+          </div>
+          <div className="data-card p-4">
+            <div className="text-sm font-semibold text-ink-900">课件制作</div>
+            <p className="mt-1 text-xs leading-5 text-ink-500">教案直接生成网页课件，像改 PPT 一样精修。</p>
+          </div>
+        </div>
+
+        <blockquote className="mt-4 border-l-2 border-primary-300 bg-canvas-100/60 px-4 py-3 text-sm leading-6 text-ink-600">
+          教学设计以二语习得研究与欧洲语言共同参考框架（CEFR）为依据，结合教学理论库与百科知识检索生成，关键建议附来源可查。
+        </blockquote>
+
+        <p className="mt-3 text-xs text-ink-400">技术架构：Next.js 前端 + FastAPI 后端，内置大语言模型与知识检索。</p>
+
+        <dl className="mt-5 space-y-3 border-t border-black/5 pt-4 text-sm">
           <div className="flex items-center justify-between py-2 border-b border-black/5">
             <dt className="text-ink-500">平台版本</dt>
             <dd className="text-ink-900 font-mono">OutEye Edu 1.0</dd>
@@ -291,7 +317,7 @@ export default function ProfilePage() {
             <dt className="text-ink-500">建设方</dt>
             <dd className="text-ink-900">挑战杯“揭榜挂帅”专项赛</dd>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-black/5">
+          <div className="flex items-center justify-between py-2">
             <dt className="text-ink-500">ICP 备案号</dt>
             <dd>
               <a
@@ -301,19 +327,6 @@ export default function ProfilePage() {
                 className="text-primary-600 hover:text-primary-700 link-underline"
               >
                 鲁ICP备2026044330号-1
-              </a>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <dt className="text-ink-500">备案查询</dt>
-            <dd>
-              <a
-                href="https://beian.miit.gov.cn/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary-600 hover:text-primary-700 link-underline"
-              >
-                工业和信息化部 ICP/IP 地址/域名信息备案管理系统
               </a>
             </dd>
           </div>

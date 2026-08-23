@@ -142,8 +142,8 @@ export default function CoursewareDetailPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error || "课件项目未找到"}</p>
-          <Link href="/courseware" className="text-ink-700 hover:underline text-sm">
-            返回课件列表
+          <Link href="/history" className="text-ink-700 hover:underline text-sm">
+            返回历史记录
           </Link>
         </div>
       </div>
@@ -153,8 +153,8 @@ export default function CoursewareDetailPage() {
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <header className="max-w-7xl mx-auto brand-surface px-6 py-7 sm:px-8 sm:py-8 mb-6">
-        <Link href="/courseware" className="text-sm text-ink-500 hover:text-ink-700 mb-2 inline-block">
-          &larr; 返回课件列表
+        <Link href="/history" className="text-sm text-ink-500 hover:text-ink-700 mb-2 inline-block">
+          &larr; 返回历史记录
         </Link>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between mt-2">
           <div>

@@ -1,427 +1,1135 @@
-"use client"
+"use client";
 
-import Link from 'next/link'
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { apiPost } from "@/lib/api";
+import dynamic from "next/dynamic";
+import WhiteboxResults from "@/components/WhiteboxResults";
+import TeachingPlanView from "@/components/TeachingPlanView";
+import FileUploadZone from "@/components/FileUploadZone";
+import BlueprintOverview from "@/components/BlueprintOverview";
+import PlanEvaluationForm from "@/components/PlanEvaluationForm";
+import { Blueprint, TeachingContext } from "@/lib/analysis";
+import { CEFR_LEVELS, cefrLabel } from "@/lib/cefr";
 
-const featureCards = [
-  {
-    title: '智能分析',
-    desc: '六维分析报告：词汇、句法、语篇、认知负荷、学习者适配、教学建议',
-    href: '/analysis',
-    color: 'bg-blue-50 text-primary-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
-      </svg>
-    ),
-  },
-  {
-    title: '资源检索',
-    desc: 'RAG 驱动的教学资源推荐，支持对立观点和交叉引用检索',
-    href: '/resources',
-    color: 'bg-emerald-50 text-emerald-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-      </svg>
-    ),
-  },
-  {
-    title: '知识库',
-    desc: '12 大语言学理论的结构化知识图谱，可计算、可执行、可验证',
-    href: '/knowledge',
-    color: 'bg-violet-50 text-violet-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-      </svg>
-    ),
-  },
-  {
-    title: '项目管理',
-    desc: '围绕教学任务、课件版本与研修资产形成连续归档与管理视图',
-    href: '/projects',
-    color: 'bg-amber-50 text-amber-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
-      </svg>
-    ),
-  },
-  {
-    title: '教材对比',
-    desc: '多篇课文难度对比，帮助教师选择最适合学生水平的教材',
-    href: '/compare',
-    color: 'bg-cyan-50 text-cyan-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-      </svg>
-    ),
-  },
-  {
-    title: '专家评审',
-    desc: '五维度专家评分系统，验证教案质量与活动可实施性',
-    href: '/expert-review',
-    color: 'bg-rose-50 text-rose-600',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-      </svg>
-    ),
-  },
-]
+const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-[240px] flex items-center justify-center text-sm text-ink-400">
+      加载编辑器...
+    </div>
+  ),
+});
 
-const architectureLayers = [
-  {
-    layer: 'Layer 1',
-    title: 'LLM Wiki',
-    desc: '知识编译层\n12 大理论实体页\n结构化知识图谱',
-    color: 'from-primary-500 to-primary-600',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-      </svg>
-    ),
-  },
-  {
-    layer: 'Layer 2',
-    title: 'RAG',
-    desc: '灵活检索层\nQdrant 向量库\n实时语义检索',
-    color: 'from-emerald-500 to-emerald-600',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-      </svg>
-    ),
-  },
-  {
-    layer: 'Layer 3',
-    title: '应用层',
-    desc: '智能教研应用\n课文分析引擎\n教案生成系统',
-    color: 'from-violet-500 to-violet-600',
-    icon: (
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-      </svg>
-    ),
-  },
-]
+// ============ Types ============
 
-const theories = [
-  { name: 'Lexile Framework', desc: '阅读能力量化' },
-  { name: 'Flesch-Kincaid', desc: '可读性评估' },
-  { name: 'CEFR', desc: '语言能力分级' },
-  { name: 'Krashen i+1', desc: '输入假说' },
-  { name: '认知负荷理论', desc: '认知负荷管理' },
-  { name: 'Noticing 假说', desc: '注意假说' },
-  { name: 'Bloom 分类学', desc: '认知层级' },
-  { name: 'ZPD/支架理论', desc: '最近发展区' },
-  { name: '体裁分析', desc: 'CARS 模型' },
-  { name: 'RST 修辞结构', desc: '核-卫星关系' },
-  { name: '主位推进理论', desc: '信息流动' },
-  { name: '批判性思维', desc: 'Paul & Elder' },
-]
+interface WhiteboxAnalysis {
+  text_id: string;
+  title: string;
+  text_level: string;
+  language: string;
+  language_name: string;
+  vocabulary: {
+    total_words: number;
+    unique_words: number;
+    cefr_distribution: Record<string, number>;
+    awl_count: number;
+    awl_ratio: number;
+    difficult_words: Array<{ word: string; level: string; count: number; in_awl: boolean }>;
+    vocabulary_richness: number;
+  };
+  syntax: {
+    total_sentences: number;
+    avg_sentence_length: number;
+    max_sentence: { preview: string; word_count: number; index: number };
+    long_sentences_count: number;
+    very_long_sentences_count: number;
+    flesch_reading_ease: number;
+  };
+  discourse: {
+    paragraph_count: number;
+    connective_density: number;
+    genre_hint: string;
+    text_structure?: string;
+    teaching_points?: string[];
+  };
+  learner_gap: {
+    text_level: string;
+    student_level: string;
+    gap: string;
+    gap_description: string;
+  };
+  enhancement_tags: string[];
+  tag_labels?: Record<string, string>;
+  teaching_insights?: Array<{
+    metric_name: string;
+    metric_value: string;
+    teaching_implication: string;
+    suggested_action: string;
+    confidence: string;
+  }>;
+  cultural_elements?: Array<{
+    category: string;
+    keyword: string;
+    context: string;
+    explanation: string;
+  }>;
+  tag_details: Record<string, unknown>;
+  wiki_tags: string[];
+  rag_tags: string[];
+  teaching_tips: string[];
+  analysis_duration: number;
+}
 
-export default function Home() {
-  return (
-    <div className="px-4 pb-24 pt-8 sm:px-6 lg:px-8">
-      <section className="relative max-w-7xl mx-auto overflow-hidden rounded-[36px] brand-surface px-6 py-10 sm:px-10 sm:py-14 lg:px-12 lg:py-16">
-        <div className="absolute -left-8 top-10 h-40 w-40 rounded-full bg-rose-200/30 blur-3xl" />
-        <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-primary-200/30 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-sage-200/25 blur-3xl" />
+interface TeachingPlan {
+  difficulty_overview: string;
+  teaching_suggestions: string[];
+  activity_designs: Array<{
+    name?: string;
+    objective?: string;
+    steps?: string;
+    duration?: string;
+    evidence?: { source_type: "wiki" | "rag"; title: string; relevance: number; content: string }[];
+    degraded?: boolean;
+  }>;
+  differentiation: string;
+  theoretical_basis: string;
+}
 
-        <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <div>
-            <div className="section-title mb-3">Academic Desktop OS</div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-ink-900 text-balance leading-[1.15]">
-              一张学术桌面，承载课文到课堂
+interface DifficultWord {
+  word: string;
+  level: string;
+  count: number;
+  in_awl: boolean;
+}
+
+interface CulturalElement {
+  category: string;
+  keyword: string;
+  context: string;
+  explanation: string;
+}
+
+interface GeneratePlanResult {
+  text_title: string;
+  text_level: string;
+  language_name?: string;
+  student_level: string;
+  learner_gap: { gap: string; gap_description: string };
+  vocabulary?: {
+    total_words: number;
+    unique_words: number;
+    cefr_distribution: Record<string, number>;
+    awl_count: number;
+    awl_ratio: number;
+    difficult_words: DifficultWord[];
+    vocabulary_richness: number;
+  };
+  cultural_elements?: CulturalElement[];
+  enhancement_tags: string[];
+  tag_labels?: Record<string, string>;
+  teaching_blueprint: Blueprint | null;
+  teaching_plan: TeachingPlan;
+  evidence_annotations: Record<string, unknown> | null;
+  sources: Array<{ type: string; title?: string; score?: number }>;
+  retrieval_info: { wiki_count: number; rag_count: number; retrieval_duration: number };
+  generation_duration: number;
+  total_duration: number;
+  model: string;
+}
+
+type Step = "input" | "analysis" | "plan";
+
+const COURSE_TYPES = ["精读", "泛读", "听说", "读写", "翻译", "写作", "综合"];
+
+const LANGUAGES = [
+  { code: "", label: "自动检测" },
+  { code: "en", label: "英语 English" },
+  { code: "ja", label: "日语 日本語" },
+  { code: "fr", label: "法语 Français" },
+  { code: "de", label: "德语 Deutsch" },
+  { code: "es", label: "西班牙语 Español" },
+  { code: "ko", label: "韩语 한국어" },
+];
+
+// ============ Page ============
+
+export default function AnalysisPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<Step>("input");
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [studentLevel, setStudentLevel] = useState("B1");
+  const [language, setLanguage] = useState("");
+  const [nativeLanguage, setNativeLanguage] = useState("");
+  const [courseType, setCourseType] = useState("");
+  const [classSize, setClassSize] = useState("");
+  const [durationInput, setDurationInput] = useState("90");
+  const [planMode, setPlanMode] = useState<"basic" | "enhanced">("enhanced");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [analysis, setAnalysis] = useState<WhiteboxAnalysis | null>(null);
+  const [versions, setVersions] = useState<{ basic?: GeneratePlanResult; enhanced?: GeneratePlanResult }>({});
+  const [activeVersion, setActiveVersion] = useState<"basic" | "enhanced">("enhanced");
+  const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
+
+  // 从历史记录点"继续"进入：恢复上次的课文与设置
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("outeye:resume-project");
+      if (!raw) return;
+      sessionStorage.removeItem("outeye:resume-project");
+      const p = JSON.parse(raw) as {
+        title?: string;
+        source_text?: string;
+        student_level?: string;
+        course_type?: string;
+      };
+      if (p.title) setTitle(p.title);
+      if (p.source_text) setText(p.source_text);
+      if (p.student_level) setStudentLevel(p.student_level);
+      if (p.course_type) setCourseType(p.course_type);
+    } catch {
+      // 恢复失败不阻塞正常使用
+    }
+  }, []);
+
+  // 结果出来后自动平滑滚回页面顶部，避免用户拖动半天
+  // 用 prevRef 记录上一次的"是否有结果"，只在 null→有值 的转换瞬间触发，避免用户滚动后再被弹回
+  const prevHadResultRef = useRef(false);
+  useEffect(() => {
+    const hasResult = analysis !== null || versions.basic !== undefined || versions.enhanced !== undefined;
+    if (hasResult && !prevHadResultRef.current) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    prevHadResultRef.current = hasResult;
+  }, [analysis, versions]);
+
+  // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
+  const wordCount = (() => {
+    const cleaned = text.replace(/<[^>]*>/g, "").trim();
+    if (!cleaned) return 0;
+    const englishWords = cleaned.split(/\s+/).filter(Boolean).length;
+    const chineseChars = (cleaned.match(/[一-鿿]/g) || []).length;
+    return englishWords + Math.ceil(chineseChars * 0.67);
+  })();
+
+  // Step 1: Whitebox Analysis
+  const handleAnalyze = async () => {
+    if (wordCount < 20) {
+      setError("课文内容太短，至少需要20个词");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const result = await apiPost<WhiteboxAnalysis>("/analysis/whitebox", {
+        text,
+        title,
+        student_level: studentLevel,
+        language: language || undefined,
+        native_language: nativeLanguage || undefined,
+        course_type: courseType || undefined,
+        class_size: classSize ? parseInt(classSize) : undefined,
+      });
+      setAnalysis(result);
+      setStep("analysis");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "分析失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Generate Teaching Plan（含双源检索，内部完成）
+  const generateVersion = async (context: TeachingContext, mode: "basic" | "enhanced") => {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await apiPost<GeneratePlanResult>("/analysis/generate-plan", {
+        text,
+        title,
+        student_level: context.studentLevel,
+        language: language || undefined,
+        native_language: nativeLanguage || undefined,
+        course_type: context.courseType || undefined,
+        class_size: context.classSize || undefined,
+        duration_minutes: context.durationMinutes,
+        mode,
+        max_retrieval_results: 3,
+      });
+      setVersions((prev) => ({ ...prev, [mode]: result }));
+      setActiveVersion(mode);
+      setStep("plan");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 分析完成后，直接用首屏"教学设置"里的值生成教案
+  const handleGenerateFromSettings = async () => {
+    const n = parseInt(durationInput, 10);
+    const size = classSize ? parseInt(classSize, 10) : 30;
+    const context: TeachingContext = {
+      courseType: courseType || "精读",
+      durationMinutes: Math.min(180, Math.max(5, Number.isNaN(n) ? 90 : n)),
+      classSize: Number.isNaN(size) ? 30 : size,
+      studentLevel,
+      mode: planMode,
+    };
+    setLastContext(context);
+    await generateVersion(context, context.mode);
+  };
+
+  const handleGenerateOther = async () => {
+    if (!lastContext) return;
+    const other = activeVersion === "basic" ? "enhanced" : "basic";
+    await generateVersion(lastContext, other);
+  };
+
+  // Reset
+  const handleReset = () => {
+    setStep("input");
+    setAnalysis(null);
+    setVersions({});
+    setActiveVersion("enhanced");
+    setLastContext(null);
+    setError("");
+  };
+
+  if (step === "input") {
+    return (
+      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl">
+          <div className="pt-6 pb-2 text-center">
+            <h1 className="text-3xl font-semibold tracking-tight text-ink-900 text-balance sm:text-4xl">
+              把课文变成一堂好课
             </h1>
-            <p className="mt-4 text-xl sm:text-2xl font-medium text-ink-700 leading-snug">
-              把课文分析、教案生成与 HTML 课件展示收进同一处
+            <p className="mt-4 text-sm leading-7 text-ink-500 text-pretty sm:text-base">
+              粘贴或上传英文课文，自动完成词汇、文化与教学分析。
+              <br className="hidden sm:block" />
+              确认教案后，一键生成 PPT、Word 和网页课件。
             </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {['课文输入与白盒分析', '双源检索与教学方案', 'HTML 课件编辑与课堂展示'].map((label) => (
-                <span key={label} className="drawer-handle bg-white/85 border border-black/5 text-ink-600">
-                  {label}
+          </div>
+
+          <InputStep
+            title={title}
+            setTitle={setTitle}
+            text={text}
+            setText={setText}
+            studentLevel={studentLevel}
+            setStudentLevel={setStudentLevel}
+            language={language}
+            setLanguage={setLanguage}
+            nativeLanguage={nativeLanguage}
+            setNativeLanguage={setNativeLanguage}
+            courseType={courseType}
+            setCourseType={setCourseType}
+            classSize={classSize}
+            setClassSize={setClassSize}
+            durationInput={durationInput}
+            setDurationInput={setDurationInput}
+            planMode={planMode}
+            setPlanMode={setPlanMode}
+            wordCount={wordCount}
+            loading={loading}
+            onAnalyze={handleAnalyze}
+          />
+
+          {error && (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        {/* Header */}
+        <div className="brand-surface px-6 py-6 sm:px-8 mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold tracking-tight text-ink-900 sm:text-3xl">
+                {title || "课文分析"}
+              </h1>
+              <p className="mt-2 text-sm text-ink-500">
+                {step === "analysis" ? "查看分析结果，确认后生成教案。" : "审阅教案，确认后可生成课件。"}
+              </p>
+            </div>
+            <button
+              onClick={handleReset}
+              className="btn-secondary self-start sm:self-auto"
+            >
+              换一篇课文
+            </button>
+          </div>
+        </div>
+
+        {/* Stepper */}
+        <div className="page-surface-strong px-4 py-4 sm:px-6 mb-4">
+          <Stepper current={step} />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+
+        {/* Step Content */}
+        <div className="mt-6">
+          {step === "analysis" && analysis && (
+            <AnalysisStep
+              analysis={analysis}
+              loading={loading}
+              onNext={handleGenerateFromSettings}
+              onBack={() => setStep("input")}
+            />
+          )}
+
+          {step === "plan" && versions[activeVersion] && (
+            <PlanStep
+              result={versions[activeVersion]!}
+              versions={versions}
+              activeVersion={activeVersion}
+              onSwitchVersion={setActiveVersion}
+              onGenerateOther={handleGenerateOther}
+              generatingOther={loading}
+              onReset={handleReset}
+              onUpdate={(mode, r) => setVersions((prev) => ({ ...prev, [mode]: r }))}
+              text={text}
+              title={title}
+              studentLevel={studentLevel}
+              language={language}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ Stepper ============
+
+function Stepper({ current }: { current: Step }) {
+  const steps: { key: Step; label: string; icon: string; hint: string }[] = [
+    { key: "input", label: "输入课文", icon: "📝", hint: "准备文本" },
+    { key: "analysis", label: "课文分析", icon: "📊", hint: "形成判断" },
+    { key: "plan", label: "教案", icon: "📋", hint: "进入课件" },
+  ];
+  const currentIdx = steps.findIndex((s) => s.key === current);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {steps.map((s, i) => {
+        const isCurrent = i === currentIdx;
+        const isDone = i < currentIdx;
+        return (
+          <div
+            key={s.key}
+            className={`rounded-2xl border px-4 py-3 transition-colors ${
+              isCurrent
+                ? "bg-primary-100 border-primary-300 shadow-soft"
+                : isDone
+                  ? "bg-sage-100 border-sage-200"
+                  : "bg-canvas-100/80 border-black/5"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                  isCurrent ? "bg-white text-ink-900" : isDone ? "bg-white text-ink-800" : "bg-white/80 text-ink-500"
+                }`}>
+                  {isDone ? "✓" : s.icon}
                 </span>
+                <div>
+                  <div className={`text-sm font-semibold ${isCurrent || isDone ? "text-ink-900" : "text-ink-600"}`}>{s.label}</div>
+                  <div className={`text-xs ${isCurrent ? "text-ink-600" : isDone ? "text-ink-500" : "text-ink-400"}`}>{s.hint}</div>
+                </div>
+              </div>
+              <span className={`text-[10px] uppercase tracking-[0.16em] ${
+                isCurrent ? "text-ink-700" : isDone ? "text-ink-500" : "text-ink-400"
+              }`}>
+                {isCurrent ? "进行中" : isDone ? "完成" : `Step ${i + 1}`}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============ Step 1: Input ============
+
+function InputStep({
+  title,
+  setTitle,
+  text,
+  setText,
+  studentLevel,
+  setStudentLevel,
+  language,
+  setLanguage,
+  nativeLanguage,
+  setNativeLanguage,
+  courseType,
+  setCourseType,
+  classSize,
+  setClassSize,
+  durationInput,
+  setDurationInput,
+  planMode,
+  setPlanMode,
+  wordCount,
+  loading,
+  onAnalyze,
+}: {
+  title: string;
+  setTitle: (v: string) => void;
+  text: string;
+  setText: (v: string) => void;
+  studentLevel: string;
+  setStudentLevel: (v: string) => void;
+  language: string;
+  setLanguage: (v: string) => void;
+  nativeLanguage: string;
+  setNativeLanguage: (v: string) => void;
+  courseType: string;
+  setCourseType: (v: string) => void;
+  classSize: string;
+  setClassSize: (v: string) => void;
+  durationInput: string;
+  setDurationInput: (v: string) => void;
+  planMode: "basic" | "enhanced";
+  setPlanMode: (v: "basic" | "enhanced") => void;
+  wordCount: number;
+  loading: boolean;
+  onAnalyze: () => void;
+}) {
+  const adjustDuration = (delta: number) => {
+    const n = parseInt(durationInput, 10);
+    const base = Number.isNaN(n) ? 90 : n;
+    setDurationInput(String(Math.min(180, Math.max(5, base + delta))));
+  };
+
+  const durationNum = parseInt(durationInput, 10);
+  const durationInvalid =
+    durationInput !== "" && (!Number.isNaN(durationNum) && (durationNum < 5 || durationNum > 180));
+
+  return (
+    <div>
+      {/* 粘贴区大卡片 */}
+      <div className="workbench-panel p-3 sm:p-4 mt-6">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="课文标题（可选，上传文件时自动填入）"
+          className="w-full border-b border-black/5 bg-transparent px-3 py-2.5 text-base font-medium text-ink-900 placeholder:font-normal placeholder:text-ink-400 outline-none"
+        />
+        <TiptapEditor
+          content={text}
+          onChange={setText}
+          frameless
+          placeholder="把课文粘贴到这里，或点左下角上传文件..."
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-2 pt-3">
+          <div className="flex items-center gap-3">
+            <FileUploadZone
+              compact
+              onTextExtracted={(extractedText) => setText(extractedText)}
+              onFilename={(filename) => {
+                if (!title) setTitle(filename.replace(/\.[^.]+$/, ""));
+              }}
+            />
+            <span className="text-xs text-ink-400">
+              {wordCount > 0 && wordCount < 20 ? `${wordCount} 词（至少 20 词才能分析）` : `${wordCount} 词`}
+            </span>
+          </div>
+          <button
+            onClick={onAnalyze}
+            disabled={loading || wordCount < 20}
+            className="btn-primary px-8 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "分析中..." : "开始分析"}
+          </button>
+        </div>
+      </div>
+
+      {/* 教学设置（可选） */}
+      <details className="group page-surface-strong mt-4 px-5">
+        <summary className="-mx-5 flex cursor-pointer select-none list-none items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-ink-600 transition-colors hover:text-ink-800 [&::-webkit-details-marker]:hidden">
+          <svg
+            className="h-4 w-4 text-ink-400 transition-transform duration-200 group-open:rotate-180"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          教学设置（可选）
+        </summary>
+
+        <div className="grid gap-x-6 gap-y-5 border-t border-black/5 py-5 sm:grid-cols-2">
+          {/* 课时长度 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">课时长度（分钟）</label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => adjustDuration(-5)}
+                className="btn-secondary h-9 w-9 !p-0 text-base"
+                aria-label="减少 5 分钟"
+              >
+                −
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={durationInput}
+                onChange={(e) => setDurationInput(e.target.value.replace(/[^0-9]/g, ""))}
+                onBlur={() => {
+                  const n = parseInt(durationInput, 10);
+                  if (durationInput === "" || Number.isNaN(n)) {
+                    setDurationInput("90");
+                  } else {
+                    setDurationInput(String(Math.min(180, Math.max(5, n))));
+                  }
+                }}
+                className="morandi-input w-24 text-center"
+              />
+              <button
+                type="button"
+                onClick={() => adjustDuration(5)}
+                className="btn-secondary h-9 w-9 !p-0 text-base"
+                aria-label="增加 5 分钟"
+              >
+                +
+              </button>
+              <span className="text-xs text-ink-400">5–180 分钟，默认 90</span>
+            </div>
+            {durationInvalid && (
+              <p className="mt-1.5 text-xs text-red-600">请输入 5 到 180 之间的数字</p>
+            )}
+          </div>
+
+          {/* 课型 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">课型</label>
+            <select
+              value={courseType}
+              onChange={(e) => setCourseType(e.target.value)}
+              className="morandi-input"
+            >
+              <option value="">未指定</option>
+              {COURSE_TYPES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 班级人数 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">班级人数</label>
+            <input
+              type="number"
+              value={classSize}
+              onChange={(e) => setClassSize(e.target.value)}
+              placeholder="例：30"
+              min={1}
+              max={200}
+              className="morandi-input"
+            />
+          </div>
+
+          {/* 学生水平 */}
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">学生水平</label>
+            <div className="flex flex-wrap gap-2">
+              {CEFR_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setStudentLevel(level)}
+                  className={`rounded-xl border px-3.5 py-2 text-sm transition-colors ${
+                    studentLevel === level
+                      ? "border-primary-600 bg-primary-600 text-white"
+                      : "border-black/10 bg-white text-ink-600 hover:border-primary-400"
+                  }`}
+                >
+                  {cefrLabel(level)}
+                </button>
               ))}
             </div>
-            <div className="mt-8 flex flex-col sm:flex-row gap-4">
-              <Link href="/analysis" className="btn-primary rounded-full px-7 py-3.5 text-base">
-                进入分析工作台
-              </Link>
-              <Link href="/courseware" className="btn-secondary rounded-full px-7 py-3.5 text-base hover-icon-shift">
-                查看课件工作台
-                <svg className="w-4 h-4 ml-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </Link>
-            </div>
           </div>
 
-          <div className="relative lg:h-[400px]">
-            <div className="grid h-full grid-cols-2 gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-              <div className="archive-surface p-5 hover-lift card-glow">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Workbench</div>
-                <div className="rounded-[24px] bg-canvas-200 p-5 h-full flex flex-col justify-between">
-                  <div>
-                    <div className="text-lg font-semibold text-ink-900">分析结果台</div>
-                    <p className="mt-2 text-sm text-ink-500 leading-6">先有证据，再做教案与课件。</p>
-                  </div>
-                  <div className="mt-6 rounded-2xl bg-white/80 p-4 shadow-soft space-y-2.5">
-                    <div className="flex items-center justify-between text-xs text-ink-500">
-                      <span>白盒分析</span>
-                      <span>完成</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-primary-200" />
-                    <div className="flex items-center justify-between text-xs text-ink-500">
-                      <span>生成课件</span>
-                      <span>下一步</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-sage-200 w-2/3" />
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-4">
-                <div className="archive-surface p-5 hover-lift card-glow">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Archive</div>
-                  <div className="rounded-2xl bg-white p-4 shadow-soft">
-                    <div className="text-base font-semibold text-ink-900">课件项目</div>
-                    <p className="mt-2 text-sm text-ink-500">列表、版本与展示配置，集中管理你的课件资产。</p>
-                  </div>
-                </div>
-                <div className="archive-surface p-5 hover-lift card-glow">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400 mb-2">Presentation</div>
-                  <div className="rounded-2xl bg-sage-100/80 p-4 shadow-soft">
-                    <div className="text-base font-semibold text-ink-900">课堂展示</div>
-                    <p className="mt-2 text-sm text-ink-500">从教案到 HTML 课件，进入可演示、可上课的形态。</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="relative -mt-6 z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="archive-surface px-6 py-8 sm:px-10">
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 sm:gap-8">
-            {[
-              { value: '12', label: '理论基础' },
-              { value: '4', label: '分析步骤' },
-              { value: '2', label: '课件模式' },
-              { value: 'HTML', label: '课堂出口' },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-2xl sm:text-3xl font-extrabold text-primary-600">{stat.value}</div>
-                <div className="mt-1 text-sm text-gray-500">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
-        <div className="page-surface-strong px-6 py-7 sm:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <div className="section-title mb-2">Primary Flow</div>
-              <h2 className="text-2xl sm:text-3xl font-semibold text-ink-900">主流程：从分析到课堂展示</h2>
-            </div>
-            <Link href="/courseware" className="btn-secondary rounded-full px-5 py-3 text-sm self-start hover-icon-shift">
-              打开课件工作台
-              <svg className="w-3.5 h-3.5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-              </svg>
-            </Link>
-          </div>
-          <div className="mt-6 grid gap-4 lg:grid-cols-4">
-            {[
-              {
-                step: '01',
-                title: '输入与分析',
-                desc: '课文输入后得到白盒结果、学习者差距与教学洞察。',
-                href: '/analysis',
-              },
-              {
-                step: '02',
-                title: '方案与出口',
-                desc: '在教学方案区直接决定是否进入课件工作流。',
-                href: '/analysis',
-              },
-              {
-                step: '03',
-                title: '课件项目',
-                desc: '课件列表与详情页承接项目、版本与展示配置。',
-                href: '/courseware',
-              },
-              {
-                step: '04',
-                title: '编辑与展示',
-                desc: '进入编辑器继续生产，并在展示端进入课堂终态。',
-                href: '/courseware',
-              },
-            ].map((item) => (
-              <Link key={item.step} href={item.href} className="archive-card p-5 hover-lift">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Step {item.step}</div>
-                <h3 className="mt-3 text-lg font-semibold text-ink-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-ink-500 leading-6">{item.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200/60 px-6 py-8 sm:px-10">
-          <div className="text-center mb-6">
-            <h2 className="text-lg font-bold text-gray-800">平台验证数据</h2>
-            <p className="text-sm text-gray-500 mt-1">基于专家评审和教学实验的可信度验证</p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-extrabold text-amber-600">4.2<span className="text-sm">/5.0</span></div>
-              <div className="mt-1 text-xs text-gray-500">教案质量评分</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-extrabold text-amber-600">47<span className="text-sm">%</span></div>
-              <div className="mt-1 text-xs text-gray-500">备课时间减少</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-extrabold text-amber-600">4.5<span className="text-sm">/5.0</span></div>
-              <div className="mt-1 text-xs text-gray-500">活动可实施性</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-extrabold text-amber-600">5<span className="text-sm">位</span></div>
-              <div className="mt-1 text-xs text-gray-500">专家参与评审</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-        <div className="text-center">
-          <span className="inline-block text-sm font-semibold text-primary-600 tracking-wide uppercase mb-3">核心功能</span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            基于 12 大语言学理论的工程化实现
-          </h2>
-        </div>
-
-        <div className="mt-16 grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-          {featureCards.slice(0, 4).map((item) => (
-            <Link key={item.title} href={item.href} className="group bg-white rounded-2xl p-7 border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-              <div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center mb-5 transition-colors duration-300`}>
-                {item.icon}
-              </div>
-              <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
-              <p className="mt-2.5 text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-            </Link>
-          ))}
-        </div>
-
-        <div className="mt-6 grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-          {featureCards.slice(4).map((item) => (
-            <Link key={item.title} href={item.href} className="group bg-white rounded-2xl p-7 border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-              <div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center mb-5 transition-colors duration-300`}>
-                {item.icon}
-              </div>
-              <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
-              <p className="mt-2.5 text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="bg-white border-y border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center">
-            <span className="inline-block text-sm font-semibold text-primary-600 tracking-wide uppercase mb-3">技术架构</span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-              RAG + LLM Wiki 双引擎驱动
-            </h2>
-            <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-500">
-              混合架构设计，兼顾知识深度与检索灵活性
-            </p>
+          {/* 课文语种 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">课文语种</label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="morandi-input"
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>{lang.label}</option>
+              ))}
+            </select>
           </div>
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
-            {architectureLayers.map((item) => (
-              <div key={item.layer} className="relative bg-gray-50 rounded-2xl p-8 border border-gray-100 hover:border-gray-200 transition-colors duration-300">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} text-white flex items-center justify-center mb-5`}>
-                  {item.icon}
-                </div>
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{item.layer}</span>
-                <h3 className="mt-1 text-xl font-bold text-gray-900">{item.title}</h3>
-                <p className="mt-3 text-sm text-gray-500 leading-relaxed whitespace-pre-line">{item.desc}</p>
-              </div>
-            ))}
+          {/* 学生母语 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">学生母语</label>
+            <select
+              value={nativeLanguage}
+              onChange={(e) => setNativeLanguage(e.target.value)}
+              className="morandi-input"
+            >
+              <option value="">未指定</option>
+              <option value="zh">中文</option>
+              <option value="ja">日语</option>
+              <option value="ko">韩语</option>
+              <option value="ar">阿拉伯语</option>
+              <option value="ru">俄语</option>
+              <option value="pt">葡萄牙语</option>
+              <option value="other">其他</option>
+            </select>
           </div>
-        </div>
-      </section>
 
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-        <div className="text-center">
-          <span className="inline-block text-sm font-semibold text-primary-600 tracking-wide uppercase mb-3">理论支撑</span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            12 大理论支撑
-          </h2>
-          <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-500">
-            从理论到实践的工程化转化
-          </p>
-        </div>
-
-        <div className="mt-16 grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {theories.map((theory, index) => (
-            <div key={theory.name} className="group bg-white rounded-xl p-5 border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all duration-200 cursor-default">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0 text-primary-600 text-xs font-bold group-hover:bg-primary-100 transition-colors">
-                  {index + 1}
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 text-sm">{theory.name}</h4>
-                  <p className="text-xs text-gray-400 mt-0.5">{theory.desc}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 px-8 py-16 sm:px-16 sm:py-20">
-          <div className="absolute inset-0 opacity-[0.06]" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Ccircle cx='20' cy='20' r='1.5'/%3E%3C/g%3E%3C/svg%3E")`,
-          }} />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary-300/10 rounded-full translate-y-1/3 -translate-x-1/4" />
-
-          <div className="relative text-center">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              从分析直接走到课堂展示
-            </h2>
-            <p className="mt-4 text-lg text-primary-100/80 max-w-xl mx-auto">
-              进入分析工作台，生成方案后即可推进到课件编辑与课堂展示。
-            </p>
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/analysis"
-                className="inline-flex items-center justify-center px-8 py-3.5 rounded-full bg-white text-primary-700 font-semibold shadow-lg shadow-primary-900/20 hover:shadow-xl hover:shadow-primary-900/30 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200"
+          {/* 生成模式 */}
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">生成模式</label>
+            <div className="grid max-w-md grid-cols-2 gap-2">
+              <button
+                onClick={() => setPlanMode("basic")}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  planMode === "basic"
+                    ? "border-primary-600 bg-primary-50"
+                    : "border-black/10 bg-white hover:border-primary-300"
+                }`}
               >
-                进入分析工作台
-              </Link>
-              <Link
-                href="/courseware"
-                className="hover-icon-shift inline-flex items-center justify-center gap-1.5 px-6 py-3.5 rounded-full text-white/90 font-medium hover:text-white hover:bg-white/10 transition-all duration-200"
+                <div className="text-sm font-medium text-ink-900">基础模式</div>
+                <div className="mt-0.5 text-xs text-ink-500">快速生成基础教案</div>
+              </button>
+              <button
+                onClick={() => setPlanMode("enhanced")}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  planMode === "enhanced"
+                    ? "border-primary-600 bg-primary-50"
+                    : "border-black/10 bg-white hover:border-primary-300"
+                }`}
               >
-                查看课件项目
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </Link>
+                <div className="text-sm font-medium text-ink-900">增强模式</div>
+                <div className="mt-0.5 text-xs text-ink-500">含依据引用与更细的教学设计</div>
+              </button>
             </div>
           </div>
         </div>
-      </section>
+      </details>
     </div>
-  )
+  );
+}
+
+// ============ Step 2: Analysis ============
+
+function AnalysisStep({
+  analysis,
+  loading,
+  onNext,
+  onBack,
+}: {
+  analysis: WhiteboxAnalysis;
+  loading: boolean;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="workbench-panel space-y-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="section-title mb-2">Step 2</div>
+            <h2 className="text-2xl font-semibold text-ink-900">课文分析结果</h2>
+          </div>
+          <div className="rounded-full bg-canvas-200 px-4 py-2 text-xs font-medium text-ink-600 shadow-soft">
+            耗时 {analysis.analysis_duration}s
+          </div>
+        </div>
+        <WhiteboxResults data={analysis} />
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onBack}
+          className="px-6 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          返回修改
+        </button>
+        <button
+          onClick={onNext}
+          disabled={loading}
+          className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
+        >
+          {loading ? "生成中..." : "生成教案"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ Step 3: Plan ============
+
+function PlanStep({
+  result,
+  versions,
+  activeVersion,
+  onSwitchVersion,
+  onGenerateOther,
+  generatingOther,
+  onReset,
+  onUpdate,
+  text,
+  title,
+  studentLevel,
+  language,
+}: {
+  result: GeneratePlanResult;
+  versions: { basic?: GeneratePlanResult; enhanced?: GeneratePlanResult };
+  activeVersion: "basic" | "enhanced";
+  onSwitchVersion: (v: "basic" | "enhanced") => void;
+  onGenerateOther: () => void;
+  generatingOther: boolean;
+  onReset: () => void;
+  onUpdate?: (mode: "basic" | "enhanced", r: GeneratePlanResult) => void;
+  text?: string;
+  title?: string;
+  studentLevel?: string;
+  language?: string;
+}) {
+  const router = useRouter();
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [revisionError, setRevisionError] = useState("");
+  const [creatingCourseware, setCreatingCourseware] = useState(false);
+  const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
+  const [planConfirmed, setPlanConfirmed] = useState(false);
+
+  const availableVersions = (["basic", "enhanced"] as const).filter(
+    (v) => versions[v]
+  );
+
+  // 切换版本时重置确认状态：新版本需要重新审阅
+  const handleSwitchVersion = (v: "basic" | "enhanced") => {
+    onSwitchVersion(v);
+    setPlanConfirmed(false);
+  };
+
+  const handleCreateCourseware = async () => {
+    setCreatingCourseware(true);
+    try {
+      const resp = await apiPost<{ project: { id: string } }>("/courseware/from-plan", {
+        title: result.text_title || "教学课件",
+        source_plan_id: undefined,
+        mode: "slides",
+        template_id: "classroom_default",
+        plan: result.teaching_plan,
+        learner_gap: result.learner_gap,
+        enhancement_tags: result.enhancement_tags,
+      });
+      router.push(`/courseware/${resp.project.id}/edit`);
+    } catch (e: unknown) {
+      setRevisionError(e instanceof Error ? e.message : "创建课件失败，请重试");
+    } finally {
+      setCreatingCourseware(false);
+    }
+  };
+
+  const handleRevise = async (instruction: string, section?: string) => {
+    if (!text) return;
+    setRevising(true);
+    setRevisionError("");
+    try {
+      const resp = await apiPost<{
+        teaching_plan: GeneratePlanResult["teaching_plan"];
+        revision_note: string;
+        generation_duration: number;
+        model: string;
+      }>("/analysis/revise-plan", {
+        original_plan: result.teaching_plan,
+        revision_instruction: instruction,
+        text,
+        title: title || "",
+        student_level: studentLevel || "B1",
+        language: language || undefined,
+        section_to_revise: section || undefined,
+      });
+
+      if (onUpdate) {
+        onUpdate(activeVersion, {
+          ...result,
+          teaching_plan: resp.teaching_plan,
+          generation_duration: resp.generation_duration,
+          model: resp.model,
+        });
+      }
+      // 教案内容已变化，需要重新确认
+      setPlanConfirmed(false);
+    } catch (e) {
+      setRevisionError(e instanceof Error ? e.message : "修订失败，请稍后重试");
+    } finally {
+      setRevising(false);
+    }
+  };
+
+  const handleExport = async (format: "pptx" | "docx" | "html") => {
+    setExporting(true);
+    setExportError("");
+    try {
+      const token = localStorage.getItem("token");
+
+      const resp = await fetch(
+        `/api/v1/analysis/export`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            plan: {
+              ...result.teaching_plan,
+              learner_gap: result.learner_gap,
+              difficult_words: result.vocabulary?.difficult_words || [],
+              cultural_elements: result.cultural_elements || [],
+              text_level: result.text_level,
+              language_name: result.language_name,
+            },
+            format,
+            title: result.text_title || "教学方案",
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        const status = resp.status;
+        const errData = await resp.json().catch(() => ({}));
+        const detail = typeof errData.detail === "string" ? errData.detail : undefined;
+        if (status === 401 || status === 403) throw new Error("登录已过期，请重新登录");
+        if (status >= 500) throw new Error("服务暂时不可用，请稍后重试");
+        throw new Error(detail || "导出失败，请稍后重试");
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `教学方案.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(
+        e instanceof TypeError
+          ? "网络连接失败，请检查网络后重试"
+          : e instanceof Error
+            ? e.message
+            : "导出失败"
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="workbench-panel">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-5">
+          <div>
+            <div className="section-title mb-2">Step 3</div>
+            <h2 className="text-2xl font-semibold text-ink-900">教学方案</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-canvas-200 px-3 py-1.5 text-ink-600 shadow-soft">{result.text_level} → {result.student_level}</span>
+            <span className="rounded-full bg-sage-100 px-3 py-1.5 text-ink-700 shadow-soft">总耗时 {result.total_duration}s</span>
+          </div>
+        </div>
+
+        {/* A/B 版本切换 */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {availableVersions.map((v) => (
+            <button
+              key={v}
+              onClick={() => handleSwitchVersion(v)}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                activeVersion === v
+                  ? "bg-primary-500 text-ink-900"
+                  : "border border-black/10 bg-white text-ink-600 hover:bg-canvas-100"
+              }`}
+            >
+              {v === "basic" ? "基础模式" : "增强模式"}
+            </button>
+          ))}
+          {availableVersions.length < 2 && (
+            <button
+              onClick={onGenerateOther}
+              disabled={generatingOther}
+              className="rounded-xl border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generatingOther
+                ? "生成中..."
+                : `生成${activeVersion === "basic" ? "增强" : "基础"}版本`}
+            </button>
+          )}
+        </div>
+
+        <div className="archive-surface p-4 mb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="section-title mb-2">{planConfirmed ? "Courseware Ready" : "Plan Review"}</div>
+              <p className="text-sm text-ink-600 leading-6">
+                {planConfirmed
+                  ? "教案已确认，可生成课件或进入 HTML 编辑器。"
+                  : "审阅教案，必要时修订，确认后进入课件生成。"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-ink-500">
+              {planConfirmed ? (
+                <>
+                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">PPT / Word / HTML</span>
+                  <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-600">HTML 路径进入编辑器</span>
+                </>
+              ) : (
+                <>
+                  <span className="drawer-handle bg-white border border-black/5 text-ink-500">修改后确认</span>
+                  <span className="drawer-handle bg-canvas-200 border border-black/5 text-ink-500">教案是中转点</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {result.enhancement_tags.map((tag) => (
+            <span
+              key={tag}
+              className="px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700"
+            >
+              {result.tag_labels?.[tag] || tag.replace(/_/g, " ")}
+            </span>
+          ))}
+        </div>
+
+        {result.teaching_blueprint && !blueprintConfirmed ? (
+          <BlueprintOverview
+            blueprint={result.teaching_blueprint}
+            onConfirm={() => setBlueprintConfirmed(true)}
+          />
+        ) : (
+          <TeachingPlanView
+            plan={result.teaching_plan}
+            sources={result.sources}
+            model={result.model}
+            duration={result.generation_duration}
+            onExport={planConfirmed ? handleExport : undefined}
+            exporting={exporting}
+            onRevise={handleRevise}
+            revising={revising}
+            text={text}
+            title={title}
+            studentLevel={studentLevel}
+            language={language}
+            planConfirmed={planConfirmed}
+            onConfirmPlan={() => setPlanConfirmed(true)}
+            onUnconfirmPlan={() => setPlanConfirmed(false)}
+          />
+        )}
+
+        {exportError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {exportError}
+          </div>
+        )}
+        {revisionError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {revisionError}
+          </div>
+        )}
+      </div>
+
+      {/* Courseware entry — 仅在教案确认后显示 */}
+      {planConfirmed && (
+      <div className="archive-surface p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-2xl bg-canvas-300 flex items-center justify-center text-ink-700 shadow-soft">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+            </div>
+            <div className="flex-1 max-w-2xl">
+              <div className="section-title mb-2">HTML Editor Path</div>
+              <h3 className="text-lg font-semibold text-ink-900">进入 HTML 课件编辑器</h3>
+              <p className="text-sm text-ink-500 mt-1 leading-6">
+                确认教案后可直接进入 HTML 编辑器，继续做页面与组件调整。
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+            <button
+              onClick={handleCreateCourseware}
+              disabled={creatingCourseware}
+              className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingCourseware ? "创建中..." : "进入 HTML 编辑器"}
+            </button>
+            <button
+              onClick={() => router.push('/history')}
+              className="btn-secondary w-full rounded-xl py-3"
+            >
+              查看历史记录
+            </button>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Create</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">创建课件项目</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">用当前教学方案建立可继续编辑的 HTML 课件。</p>
+          </div>
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Edit</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">进入编辑器</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">生成后自动跳转到编辑器，继续做页面与组件调整。</p>
+          </div>
+          <div className="data-card p-4 bg-white/90">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Present</div>
+            <div className="mt-2 text-sm font-semibold text-ink-900">进入课堂展示</div>
+            <p className="mt-1 text-xs text-ink-500 leading-5">在课件项目内进入课堂展示模式。</p>
+          </div>
+        </div>
+      </div>
+      )}
+
+      <PlanEvaluationForm chosenVersion={activeVersion} />
+
+      <button
+        onClick={onReset}
+        className="btn-secondary w-full rounded-xl py-3"
+      >
+        分析新课文
+      </button>
+    </div>
+  );
 }

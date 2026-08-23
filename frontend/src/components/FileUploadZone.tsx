@@ -22,12 +22,13 @@ interface OCRResult {
 interface FileUploadZoneProps {
   onTextExtracted: (text: string) => void;
   onFilename?: (filename: string) => void;
+  compact?: boolean;
 }
 
 const FILE_ACCEPT = ".pdf,.docx,.txt,.md";
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
 
-export default function FileUploadZone({ onTextExtracted, onFilename }: FileUploadZoneProps) {
+export default function FileUploadZone({ onTextExtracted, onFilename, compact = false }: FileUploadZoneProps) {
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -182,6 +183,26 @@ export default function FileUploadZone({ onTextExtracted, onFilename }: FileUplo
     <div className="space-y-3">
       {/* 拖拽上传区域 */}
       {!fileInfo && !ocrResult && (
+        compact ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
+            >
+              {loading ? "解析中..." : "上传文件"}
+            </button>
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={ocrLoading}
+              className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
+            >
+              {ocrLoading ? "识别中..." : "拍照识别"}
+            </button>
+          </div>
+        ) : (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -213,6 +234,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename }: FileUplo
             📷 上传照片
           </button>
         </div>
+        )
       )}
 
       {/* 隐藏的文件输入 */}

@@ -133,8 +133,8 @@ export default function ComponentLibraryPage() {
     <div className="min-h-screen bg-gray-50/50">
       <header className="relative overflow-hidden bg-gradient-to-r from-amber-50 via-white to-white border-b border-gray-100">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Link href="/courseware" className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block">
-            &larr; 返回教学课件
+          <Link href="/history" className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block">
+            &larr; 返回历史记录
           </Link>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-2">
             <div>

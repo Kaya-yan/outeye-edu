@@ -169,7 +169,7 @@ export default function CoursewareEditPage() {
       <div className="h-screen desk-wash flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error || "课件项目未找到"}</p>
-          <Link href="/courseware" className="text-ink-700 hover:underline text-sm">返回课件列表</Link>
+          <Link href="/history" className="text-ink-700 hover:underline text-sm">返回历史记录</Link>
         </div>
       </div>
     );
