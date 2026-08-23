@@ -2,9 +2,10 @@
 分析记录模型
 """
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from uuid import uuid4
 
 from app.core.database import Base
 
@@ -108,3 +109,15 @@ class LessonPlan(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
+
+class WordLevelCache(Base):
+    """词汇 CEFR 等级缓存（F4.3：LLM 兜底分级结果持久化，命中免调用）"""
+    __tablename__ = "word_level_cache"
+    __table_args__ = (UniqueConstraint("word", "lang", name="uq_word_lang"),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    word = Column(String(100), nullable=False, index=True)
+    lang = Column(String(2), nullable=False, default="en", index=True)
+    level = Column(String(2), nullable=False)  # A1-C2
+    source = Column(String(20), default="llm")  # llm / manual
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

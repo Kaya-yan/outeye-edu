@@ -148,6 +148,21 @@ async def whitebox_analyze(
         analyzer = WhiteboxAnalyzer()
         result = analyzer.analyze(request.text, request.student_level, language=request.language)
 
+        # F4.3：残差低频词 LLM 兜底分级（word_level_cache 缓存优先；失败原样保留未分级）
+        vocab_grading = None
+        if result.language == "en":
+            unknown_words = [w.word for w in result.vocabulary.difficult_words if w.level == "unknown"]
+            if unknown_words:
+                try:
+                    from app.services.analysis.word_grader import grade_ungraded_words, merge_levels_into_result
+
+                    levels, gmeta = await grade_ungraded_words(unknown_words, lang="en")
+                    merged_n = merge_levels_into_result(result, levels)
+                    vocab_grading = {**gmeta, "merged": merged_n}
+                except Exception as e:
+                    logger.warning(f"LLM 兜底分级异常，跳过: {type(e).__name__}: {e}")
+                    vocab_grading = {"fallback": True}
+
         # 生成标签详情
         tag_details = generate_tag_details(result)
         wiki_tags = get_wiki_tags_for_retrieval(tag_details)
@@ -278,6 +293,7 @@ async def whitebox_analyze(
             "analysis_version": result.analysis_version,
             "analysis_duration": round(duration, 2),
             "fallback_used": False,
+            "vocab_grading": vocab_grading,
         }
 
         logger.info(f"白盒分析完成: {record_id}, 耗时{duration:.2f}s, 标签{len(result.enhancement_tags)}个")

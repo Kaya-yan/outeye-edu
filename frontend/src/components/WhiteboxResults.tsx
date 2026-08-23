@@ -202,7 +202,7 @@ export default function WhiteboxResults({
         <ChartPanel title="六维分析雷达" caption="用于快速判断课文在哪些维度会拉高课堂组织成本。" term="六维分析雷达">
           <RadarChart vocabulary={v} syntax={s} discourse={d} />
         </ChartPanel>
-        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词与未分级词是否集中。" term="CEFR 词汇分布">
+        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词是否集中。专有名词单列不计难度；未分级为低频生僻词，多数已由 AI 定级至高阶档。" term="CEFR 词汇分布">
           <CefrBarChart distribution={v.cefr_distribution} totalWords={v.total_words} />
         </ChartPanel>
       </div>
