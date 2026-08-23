@@ -13,11 +13,19 @@ router = APIRouter()
 
 @router.get("")
 async def health_check():
-    """基础健康检查"""
+    """基础健康检查（含提示词模板部署诊断）"""
+    prompts_status = {"available": [], "error": None}
+    try:
+        from app.services.prompt_manager import prompt_dir
+
+        prompts_status["available"] = sorted(p.name for p in prompt_dir().glob("*.md"))
+    except Exception as e:
+        prompts_status["error"] = f"{type(e).__name__}: {e}"
     return {
         "status": "healthy",
         "service": "OutEye Edu API",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "prompts": prompts_status,
     }
 
 

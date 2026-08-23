@@ -254,21 +254,21 @@ def generate_teaching_plan(
     wiki_context = build_wiki_context(wiki_results)
     rag_context = build_rag_context(rag_results)
 
-    user_prompt = build_fusion_prompt(
-        text_title=text_title,
-        text_content=text_content,
-        analysis=analysis,
-        wiki_context=wiki_context,
-        rag_context=rag_context,
-        duration_minutes=duration_minutes,
-        course_type=course_type,
-        class_size=class_size,
-        native_language=native_language,
-    )
-
     model_name = "deepseek-chat"
     fallback_used = False
     try:
+        user_prompt = build_fusion_prompt(
+            text_title=text_title,
+            text_content=text_content,
+            analysis=analysis,
+            wiki_context=wiki_context,
+            rag_context=rag_context,
+            duration_minutes=duration_minutes,
+            course_type=course_type,
+            class_size=class_size,
+            native_language=native_language,
+        )
+
         from app.services.rag import RAGGenerator
         from app.core.config import settings
 
@@ -295,7 +295,8 @@ def generate_teaching_plan(
             usage = {}
 
     except Exception as e:
-        logger.warning(f"LLM 生成失败，使用模板回退: {e}")
+        # 模板缺失/渲染失败/LLM 异常统一降级为模板回退（前端显式标注），不 500
+        logger.warning(f"教案生成链路异常，使用模板回退: {type(e).__name__}: {e}")
         fallback_used = True
         answer = _fallback_generate(analysis, duration_minutes)
         usage = {}

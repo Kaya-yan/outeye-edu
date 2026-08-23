@@ -274,21 +274,6 @@ def generate_html_courseware(
     components = components or []
     min_pages = max(3, len(plan.get("activity_designs") or []) + 1)
 
-    user_prompt = _build_prompt(
-        title=title,
-        plan=plan,
-        analysis=analysis or {},
-        text=text,
-        language_name=language_name,
-        text_level=text_level,
-        student_level=student_level,
-        duration_minutes=duration_minutes,
-        course_type=course_type,
-        class_size=class_size,
-        native_language=native_language,
-        components=components,
-    )
-
     model_name = "template-fallback"
     fallback_used = True
     retries = 0
@@ -297,6 +282,21 @@ def generate_html_courseware(
     raw_answer = ""
 
     try:
+        user_prompt = _build_prompt(
+            title=title,
+            plan=plan,
+            analysis=analysis or {},
+            text=text,
+            language_name=language_name,
+            text_level=text_level,
+            student_level=student_level,
+            duration_minutes=duration_minutes,
+            course_type=course_type,
+            class_size=class_size,
+            native_language=native_language,
+            components=components,
+        )
+
         from app.services.rag import RAGGenerator
         from app.core.config import settings
 

@@ -174,17 +174,17 @@ def revise_teaching_plan(
     enriched_plan.setdefault("title", title)
     enriched_plan.setdefault("student_level", student_level)
 
-    user_prompt = build_revision_prompt(
-        original_plan=enriched_plan,
-        revision_instruction=revision_instruction,
-        section_to_revise=section_to_revise,
-        language=language,
-    )
-
     model_name = "deepseek-chat"
     fallback_used = False
     answer = ""
     try:
+        user_prompt = build_revision_prompt(
+            original_plan=enriched_plan,
+            revision_instruction=revision_instruction,
+            section_to_revise=section_to_revise,
+            language=language,
+        )
+
         from app.services.rag import RAGGenerator
         from app.core.config import settings
 
