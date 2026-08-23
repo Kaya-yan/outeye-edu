@@ -27,6 +27,8 @@ interface CulturalElement {
   keyword: string;
   context: string;
   explanation: string;
+  teaching_hook?: string;
+  enriched?: boolean;
 }
 
 interface WhiteboxData {
@@ -97,7 +99,15 @@ const TAG_LABELS: Record<string, string> = {
   high_lexical_diversity: "词汇丰富",
 };
 
-export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
+type CultureStatus = "idle" | "loading" | "enriched" | "fallback";
+
+export default function WhiteboxResults({
+  data,
+  cultureStatus = "idle",
+}: {
+  data: WhiteboxData;
+  cultureStatus?: CultureStatus;
+}) {
   const { vocabulary: v, syntax: s, discourse: d, learner_gap: g } = data;
 
   const readinessTone =
@@ -277,7 +287,18 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
       )}
 
       {data.cultural_elements && data.cultural_elements.length > 0 && (
-        <EvidencePanel title="文化背景元素" subtitle="Context">
+        <EvidencePanel
+          title="文化背景元素"
+          subtitle={
+            cultureStatus === "loading"
+              ? "正在补充具体背景…"
+              : cultureStatus === "enriched"
+                ? "具体背景 · AI"
+                : cultureStatus === "fallback"
+                  ? "通用建议"
+                  : "Context"
+          }
+        >
           <div className="space-y-2">
             {data.cultural_elements.map((elem, i) => (
               <div key={i} className="flex items-start gap-3 p-3 rounded-2xl bg-accent-50 border border-accent-100">
@@ -287,7 +308,12 @@ export default function WhiteboxResults({ data }: { data: WhiteboxData }) {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-ink-900">{elem.keyword}</div>
                   <div className="text-xs text-ink-400 mt-0.5">{elem.context}</div>
-                  <div className="text-xs text-ink-600 mt-1 leading-6">{elem.explanation}</div>
+                  <div className="text-xs text-ink-600 mt-1 leading-6 whitespace-pre-line">{elem.explanation}</div>
+                  {elem.teaching_hook && (
+                    <div className="text-xs text-ink-500 mt-1.5 leading-6 border-t border-accent-100 pt-1.5">
+                      课堂应用：{elem.teaching_hook}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

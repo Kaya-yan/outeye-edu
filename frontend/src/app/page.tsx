@@ -190,6 +190,7 @@ export default function AnalysisPage() {
   const [error, setError] = useState("");
 
   const [analysis, setAnalysis] = useState<WhiteboxAnalysis | null>(null);
+  const [cultureStatus, setCultureStatus] = useState<"idle" | "loading" | "enriched" | "fallback">("idle");
   const [versions, setVersions] = useState<{ basic?: GeneratePlanResult; enhanced?: GeneratePlanResult }>({});
   const [activeVersion, setActiveVersion] = useState<"basic" | "enhanced">("enhanced");
   const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
@@ -262,10 +263,37 @@ export default function AnalysisPage() {
       });
       setAnalysis(result);
       setStep("analysis");
+      void enrichCulture(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "分析失败");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 文化背景渐进式具体化：白盒秒回后由 LLM 异步替换通用建议为具体事实，不阻塞主流程
+  const enrichCulture = async (result: WhiteboxAnalysis) => {
+    if (!result.cultural_elements?.length) return;
+    setCultureStatus("loading");
+    try {
+      const enriched = await apiPost<{
+        cultural_elements: CulturalElement[];
+        fallback: boolean;
+      }>("/analysis/culture-enrich", {
+        text,
+        language_name: result.language_name,
+        cultural_elements: result.cultural_elements,
+      });
+      setCultureStatus(enriched.fallback ? "fallback" : "enriched");
+      if (enriched.cultural_elements?.length) {
+        setAnalysis((prev) =>
+          prev && prev.text_id === result.text_id
+            ? { ...prev, cultural_elements: enriched.cultural_elements }
+            : prev
+        );
+      }
+    } catch {
+      setCultureStatus("fallback");
     }
   };
 
@@ -425,6 +453,7 @@ export default function AnalysisPage() {
             <AnalysisStep
               analysis={analysis}
               loading={loading}
+              cultureStatus={cultureStatus}
               onNext={handleGenerateFromSettings}
               onBack={() => setStep("input")}
             />
@@ -779,11 +808,13 @@ function InputStep({
 function AnalysisStep({
   analysis,
   loading,
+  cultureStatus,
   onNext,
   onBack,
 }: {
   analysis: WhiteboxAnalysis;
   loading: boolean;
+  cultureStatus: "idle" | "loading" | "enriched" | "fallback";
   onNext: () => void;
   onBack: () => void;
 }) {
@@ -799,7 +830,7 @@ function AnalysisStep({
             耗时 {analysis.analysis_duration}s
           </div>
         </div>
-        <WhiteboxResults data={analysis} />
+        <WhiteboxResults data={analysis} cultureStatus={cultureStatus} />
       </div>
 
       <div className="flex gap-3">

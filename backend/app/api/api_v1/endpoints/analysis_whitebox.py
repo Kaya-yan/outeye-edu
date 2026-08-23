@@ -363,6 +363,60 @@ async def _fallback_analyze(
         )
 
 
+# ============ 文化背景具体化端点 ============
+
+class CultureEnrichRequest(BaseModel):
+    """文化背景具体化请求"""
+    text: str = Field(..., description="课文内容", min_length=20)
+    language_name: str = Field("英语", description="语言显示名称")
+    cultural_elements: List[Dict[str, Any]] = Field(
+        ..., description="白盒分析检测到的文化元素 [{category, keyword, context, explanation}]", min_length=1
+    )
+
+
+@router.post("/culture-enrich", response_model=Dict[str, Any])
+async def culture_enrich(
+    request: CultureEnrichRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    文化背景 LLM 具体化端点
+
+    白盒检测保持确定性；本端点用 LLM 把模板化"教学建议"替换为
+    具体事实性背景（起源/年代/地点/当代形态）。失败时返回原始
+    元素并 fallback=True，由前端标注。
+    """
+    import asyncio
+
+    from app.services.analysis.culture_enricher import enrich_cultural_elements
+
+    try:
+        result = await asyncio.to_thread(
+            enrich_cultural_elements,
+            text=request.text,
+            language_name=request.language_name,
+            elements=request.cultural_elements,
+        )
+        return {
+            "cultural_elements": result.items,
+            "prompt_version": result.prompt_version,
+            "model": result.model,
+            "fallback": result.fallback,
+            "self_check": result.self_check,
+            "generation_duration": result.generation_duration,
+        }
+    except Exception as e:
+        logger.error(f"文化背景具体化失败: {e}")
+        return {
+            "cultural_elements": request.cultural_elements,
+            "prompt_version": "",
+            "model": "template-fallback",
+            "fallback": True,
+            "self_check": {"error": str(e)},
+            "generation_duration": 0,
+        }
+
+
 # ============ 双源检索端点 ============
 
 class RetrieveRequest(BaseModel):
