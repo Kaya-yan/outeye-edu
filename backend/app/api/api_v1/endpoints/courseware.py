@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Literal
@@ -54,7 +55,8 @@ class CoursewareFromPlanCreate(BaseModel):
 
 
 class CoursewareGenerateRequest(BaseModel):
-    """LLM 生成课件（HTML 链路）请求"""
+    """LLM 生成课件请求（html=交互网页课件；ppt=课堂放映 PPT；word=教师课堂执行文档）"""
+    format: str = Field("html", pattern="^(html|ppt|word)$")
     title: str = Field(..., max_length=200)
     plan: Dict[str, Any]
     analysis: Optional[Dict[str, Any]] = None      # 白盒分析子集（vocabulary/syntax/discourse）
@@ -160,6 +162,136 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
         )
     except Exception as e:
         logger.error(f"课件生成任务失败: {e}")
+        state.update(status="error", error=str(e)[:300], progress=None)
+
+
+async def _run_document_generation(task_id: str, payload: CoursewareGenerateRequest, current_user: dict) -> None:
+    """PPT / Word 二进制课件链路共用任务运行器（按 format 分派生成器与产物格式）"""
+    is_word = payload.format == "word"
+    state = _GENERATION_TASKS[task_id]
+    try:
+        state.update(status="generating", progress="AI 正在设计文档结构…（约 1 分钟）")
+
+        from app.services.courseware_llm_generator import generate_ppt_courseware, generate_word_courseware
+
+        generate = generate_word_courseware if is_word else generate_ppt_courseware
+
+        result = await asyncio.to_thread(
+            generate,
+            title=payload.title,
+            plan=payload.plan,
+            analysis=payload.analysis or {},
+            text=payload.text,
+            language_name=payload.language_name,
+            text_level=payload.text_level or "",
+            student_level=payload.student_level or "",
+            duration_minutes=payload.duration_minutes,
+            course_type=payload.course_type,
+            class_size=payload.class_size,
+            native_language=payload.native_language,
+        )
+
+        state.update(status="saving", progress="正在渲染 PPT 并保存…")
+
+        import os
+
+        from app.core.config import settings
+        from app.models.courseware import ExportArtifact
+
+        file_ext = "docx" if is_word else "pptx"
+        outline_key = "word_outline" if is_word else "ppt_outline"
+        generated_by = "llm_word" if is_word else "llm_ppt"
+        stage = "courseware_word" if is_word else "courseware_ppt"
+        prompt_name = "courseware_word_v1" if is_word else "courseware_ppt_v1"
+        file_bytes = result.docx_bytes if is_word else result.pptx_bytes
+        content_count = result.section_count if is_word else result.slide_count
+
+        safe_title = re.sub(r'[\\/:*?"<>|]', "_", payload.title)[:80] or "courseware"
+        artifact_id = str(uuid4())
+        rel_dir = os.path.join("courseware", artifact_id[:2])
+        abs_dir = os.path.join(settings.UPLOAD_DIR, "courseware", artifact_id[:2])
+        os.makedirs(abs_dir, exist_ok=True)
+        file_name = f"{safe_title}.{file_ext}"
+        rel_path = os.path.join(rel_dir, file_name)
+        with open(os.path.join(abs_dir, file_name), "wb") as f:
+            f.write(file_bytes.getvalue())
+
+        editor_schema = {
+            "meta": {
+                "title": payload.title,
+                "mode": "slides",
+                "template_id": "classroom_default",
+                "source_type": "from_plan_llm",
+                "created_at": datetime.utcnow().isoformat(),
+                "source_meta": {
+                    "generated_by": "template_fallback" if result.fallback else generated_by,
+                    "prompt_version": result.prompt_version,
+                    "format": payload.format,
+                },
+            },
+            outline_key: result.outline.get("sections" if is_word else "slides", []),
+        }
+
+        async with AsyncSessionLocal() as db:
+            created = await _create_initial_project_state(
+                title=payload.title,
+                source_type="from_plan_llm",
+                source_plan_id=None,
+                mode="slides",
+                template_id="classroom_default",
+                source_meta=dict(editor_schema["meta"]["source_meta"]),
+                current_user=current_user,
+                db=db,
+                bootstrap_payload={
+                    "editor_schema_json": editor_schema,
+                    "rendered_html": None,
+                    "asset_manifest_json": {"items": [], "count": 0},
+                    "structure_sync_json": {},
+                },
+            )
+            db.add(ExportArtifact(
+                id=artifact_id,
+                project_id=created["project"]["id"],
+                version_id=created["current_version"]["id"],
+                format=file_ext,
+                file_name=file_name,
+                storage_path=rel_path,
+                source="llm_generation",
+                generated_by=current_user["user_id"],
+                extra_data={"content_count": content_count, "fallback": result.fallback},
+            ))
+            await db.commit()
+            # 日志单独提交：写失败只丢日志，绝不回滚产物
+            try:
+                from app.models.generation import GenerationLog
+
+                db.add(GenerationLog(
+                    user_id=current_user["user_id"],
+                    analysis_id=None,
+                    stage=stage,
+                    prompt_name=prompt_name,
+                    prompt_version=result.prompt_version,
+                    model=result.model,
+                    fallback="yes" if result.fallback else "no",
+                    generation_duration=result.generation_duration,
+                    self_check=result.self_check,
+                ))
+                await db.commit()
+            except Exception as log_e:
+                await db.rollback()
+                logger.warning(f"{stage} GenerationLog 写入失败（不影响产物）: {log_e}")
+
+        state.update(
+            status="done",
+            project_id=created["project"]["id"],
+            artifact_id=artifact_id,
+            download_url=f"/api/v1/courseware/artifacts/{artifact_id}/download",
+            fallback=result.fallback,
+            generation_duration=result.generation_duration,
+            progress=None,
+        )
+    except Exception as e:
+        logger.error(f"课件生成任务失败（{payload.format}）: {e}")
         state.update(status="error", error=str(e)[:300], progress=None)
 
 
@@ -512,7 +644,7 @@ async def start_courseware_generation(
     request: CoursewareGenerateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """启动 LLM 课件生成（HTML 链路，异步任务），返回 task_id 供轮询"""
+    """启动 LLM 课件生成（HTML / PPT 链路，异步任务），返回 task_id 供轮询"""
     _prune_generation_tasks()
     task_id = uuid4().hex
     _GENERATION_TASKS[task_id] = {
@@ -521,7 +653,8 @@ async def start_courseware_generation(
         "user_id": current_user["user_id"],
         "created_ts": time.time(),
     }
-    asyncio.create_task(_run_html_generation(task_id, request, current_user))
+    runner = _run_html_generation if request.format == "html" else _run_document_generation
+    asyncio.create_task(runner(task_id, request, current_user))
     return {"task_id": task_id}
 
 
@@ -539,10 +672,45 @@ async def get_courseware_generation_status(
         "status": state.get("status"),
         "progress": state.get("progress"),
         "project_id": state.get("project_id"),
+        "artifact_id": state.get("artifact_id"),
+        "download_url": state.get("download_url"),
         "fallback": state.get("fallback"),
         "generation_duration": state.get("generation_duration"),
         "error": state.get("error"),
     }
+
+
+@router.get("/artifacts/{artifact_id}/download")
+async def download_courseware_artifact(
+    artifact_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """下载课件导出产物（PPTX 等，仅项目所有者）"""
+    import os
+
+    from fastapi.responses import FileResponse
+
+    from app.core.config import settings
+    from app.models.courseware import ExportArtifact
+
+    result = await db.execute(
+        select(ExportArtifact)
+        .join(CoursewareProject, CoursewareProject.id == ExportArtifact.project_id)
+        .where(ExportArtifact.id == artifact_id, CoursewareProject.owner_user_id == current_user["user_id"])
+    )
+    artifact = result.scalar_one_or_none()
+    if not artifact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="产物不存在或无权访问")
+    abs_path = os.path.abspath(os.path.join(settings.UPLOAD_DIR, artifact.storage_path))
+    uploads_root = os.path.abspath(settings.UPLOAD_DIR)
+    if not abs_path.startswith(uploads_root + os.sep) or not os.path.isfile(abs_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="产物文件缺失，请重新生成")
+    media_type = {
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }.get(artifact.format, "application/octet-stream")
+    return FileResponse(abs_path, filename=artifact.file_name or f"courseware.{artifact.format}", media_type=media_type)
 
 
 @router.get("/{project_id}")
@@ -565,9 +733,22 @@ async def get_courseware_project(
     )
     profiles = profile_result.scalars().all()
 
+    from app.models.courseware import ExportArtifact
+
+    artifact_result = await db.execute(
+        select(ExportArtifact)
+        .where(ExportArtifact.project_id == project.id)
+        .order_by(ExportArtifact.generated_at.desc())
+    )
+    artifacts = artifact_result.scalars().all()
+
     return {
         **project.to_dict(),
         "versions": [version.to_dict() for version in versions],
+        "artifacts": [
+            {**a.to_dict(), "download_url": f"/api/v1/courseware/artifacts/{a.id}/download"}
+            for a in artifacts
+        ],
         "presentation_profiles": [profile.to_dict() for profile in profiles],
     }
 

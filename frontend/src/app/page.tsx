@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiRequest } from "@/lib/api";
 import dynamic from "next/dynamic";
 import WhiteboxResults from "@/components/WhiteboxResults";
 import TeachingPlanView from "@/components/TeachingPlanView";
@@ -901,7 +901,7 @@ function PlanStep({
     setPlanConfirmed(false);
   };
 
-  const handleCreateCourseware = async () => {
+  const handleCreateCourseware = async (format: "html" | "ppt" | "word") => {
     if (!text) {
       setRevisionError("课文内容缺失，无法生成课件，请重新分析");
       return;
@@ -911,6 +911,7 @@ function PlanStep({
     try {
       const settings = result.generation_settings;
       const start = await apiPost<{ task_id: string }>("/courseware/generate", {
+        format,
         title: result.text_title || "教学课件",
         plan: result.teaching_plan,
         analysis: {
@@ -936,16 +937,38 @@ function PlanStep({
           status: string;
           progress?: string | null;
           project_id?: string;
+          download_url?: string;
           fallback?: boolean;
           error?: string;
         }>(`/courseware/generate/${start.task_id}`);
         if (st.progress) setCoursewareProgress(st.progress);
         if (st.status === "done" && st.project_id) {
-          if (st.fallback) {
-            setCoursewareProgress("AI 完整生成暂不可用，已用简化版生成，即将进入编辑器…");
-            await new Promise((r) => setTimeout(r, 1500));
+          if (format === "html") {
+            if (st.fallback) {
+              setCoursewareProgress("AI 完整生成暂不可用，已用简化版生成，即将进入编辑器…");
+              await new Promise((r) => setTimeout(r, 1500));
+            }
+            router.push(`/courseware/${st.project_id}/edit`);
+            return;
           }
-          router.push(`/courseware/${st.project_id}/edit`);
+          // PPT / Word：认证拉取产物并触发浏览器下载
+          const ext = format === "ppt" ? "pptx" : "docx";
+          const resp = await apiRequest("GET", st.download_url || "");
+          if (!resp.ok) throw new Error("产物下载失败，请到课件列表重试");
+          const blob = await resp.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `${result.text_title || "教学课件"}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+          setCoursewareProgress(
+            st.fallback
+              ? "AI 完整生成暂不可用，已下载简化版文档（可在历史记录中重新生成）"
+              : "已生成并开始下载，可到「教学课件」查看项目"
+          );
+          await new Promise((r) => setTimeout(r, 4000));
           return;
         }
         if (st.status === "error") throw new Error(st.error || "课件生成失败，请重试");
@@ -1184,27 +1207,37 @@ function PlanStep({
               </svg>
             </div>
             <div className="flex-1 max-w-2xl">
-              <div className="section-title mb-2">HTML Editor Path</div>
-              <h3 className="text-lg font-semibold text-ink-900">AI 生成 HTML 课件</h3>
+              <div className="section-title mb-2">Courseware Generation</div>
+              <h3 className="text-lg font-semibold text-ink-900">AI 三链路课件生成</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                AI 按确认教案逐环节生成可交互的单文件课件（词汇卡、句法拆解、限时检测），生成后进入编辑器继续精修。
+                同一确认教案，三种独立产物：HTML 交互课件（进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成。
               </p>
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+          <div className="grid gap-2 lg:w-[360px]">
             <button
-              onClick={handleCreateCourseware}
+              onClick={() => handleCreateCourseware("html")}
               disabled={creatingCourseware}
               className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creatingCourseware ? "AI 生成中…" : "AI 生成课件（约 1-2 分钟）"}
+              {creatingCourseware ? "AI 生成中…" : "生成 HTML 课件（约 1-2 分钟）"}
             </button>
-            <button
-              onClick={() => router.push('/history')}
-              className="btn-secondary w-full rounded-xl py-3"
-            >
-              查看历史记录
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleCreateCourseware("ppt")}
+                disabled={creatingCourseware}
+                className="btn-secondary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                生成 PPT
+              </button>
+              <button
+                onClick={() => handleCreateCourseware("word")}
+                disabled={creatingCourseware}
+                className="btn-secondary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                生成 Word 讲义
+              </button>
+            </div>
           </div>
         </div>
         {creatingCourseware && coursewareProgress && (

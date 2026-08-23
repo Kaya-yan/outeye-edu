@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiRequest } from "@/lib/api";
 
 interface CoursewareProject {
   id: string;
@@ -35,6 +35,15 @@ interface PresentationProfile {
   name: string;
 }
 
+interface ExportArtifactItem {
+  id: string;
+  format: string;
+  file_name: string;
+  generated_at: string;
+  download_url: string;
+  extra_data?: { content_count?: number; fallback?: boolean };
+}
+
 export default function CoursewareDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,6 +52,7 @@ export default function CoursewareDetailPage() {
   const [project, setProject] = useState<CoursewareProject | null>(null);
   const [versions, setVersions] = useState<CoursewareVersion[]>([]);
   const [profiles, setProfiles] = useState<PresentationProfile[]>([]);
+  const [artifacts, setArtifacts] = useState<ExportArtifactItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [extractingVid, setExtractingVid] = useState<string | null>(null);
@@ -64,10 +74,12 @@ export default function CoursewareDetailPage() {
         updated_at: string;
         versions: CoursewareVersion[];
         presentation_profiles: PresentationProfile[];
+        artifacts?: ExportArtifactItem[];
       }>(`/courseware/${projectId}`);
       setProject(data);
       setVersions(data.versions || []);
       setProfiles(data.presentation_profiles || []);
+      setArtifacts(data.artifacts || []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "加载课件项目失败");
     } finally {
@@ -107,6 +119,23 @@ export default function CoursewareDetailPage() {
       setError(e instanceof Error ? e.message : "提取组件失败");
     } finally {
       setExtractingVid(null);
+    }
+  };
+
+  const handleDownloadArtifact = async (a: ExportArtifactItem) => {
+    try {
+      const resp = await apiRequest("GET", a.download_url);
+      if (!resp.ok) throw new Error("下载失败");
+      const blob = await resp.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = a.file_name || `courseware.${a.format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "下载产物失败");
     }
   };
 
@@ -250,6 +279,47 @@ export default function CoursewareDetailPage() {
                             {extractingVid === v.id ? "提取中..." : "提取为组件"}
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="archive-surface p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="section-title mb-2">Artifacts</div>
+                  <h2 className="text-xl font-semibold text-ink-900">生成产物</h2>
+                </div>
+              </div>
+              {artifacts.length === 0 ? (
+                <p className="text-sm text-ink-500">尚无 PPT / Word 产物（可在分析页教案确认后生成）</p>
+              ) : (
+                <div className="space-y-3">
+                  {artifacts.map((a) => (
+                    <div key={a.id} className="rounded-2xl border border-black/5 bg-white/90 px-4 py-4 shadow-soft">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-ink-900">
+                            {a.file_name || `courseware.${a.format}`}
+                            {a.extra_data?.fallback && (
+                              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                简化版生成
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-ink-400 mt-1">
+                            {a.format.toUpperCase()} · {new Date(a.generated_at).toLocaleString("zh-CN")}
+                            {a.extra_data?.content_count ? ` · ${a.extra_data.content_count} ${a.format === "docx" ? "节" : "页"}` : ""}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDownloadArtifact(a)}
+                          className="btn-secondary rounded-full px-4 py-2 text-xs"
+                        >
+                          下载
+                        </button>
                       </div>
                     </div>
                   ))}

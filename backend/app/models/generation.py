@@ -6,6 +6,7 @@
 from sqlalchemy import Column, String, Float, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from uuid import uuid4
 
 from app.core.database import Base
 
@@ -14,7 +15,7 @@ class GenerationLog(Base):
     """LLM 生成记录（新表，由 Base.metadata.create_all 自动创建）"""
     __tablename__ = "generation_logs"
 
-    id = Column(String(36), primary_key=True, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     analysis_id = Column(String(36), nullable=True, index=True)  # 关联分析记录（可空）
     stage = Column(String(50), nullable=False)  # lesson_plan / courseware_html / courseware_ppt / courseware_word / culture / revise
