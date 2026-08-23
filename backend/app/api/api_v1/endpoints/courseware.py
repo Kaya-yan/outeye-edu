@@ -2,16 +2,19 @@
 教学课件工作台 API
 """
 
+import asyncio
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_async_db
+from app.core.database import AsyncSessionLocal, get_async_db
 from app.core.security import get_current_user
 from app.models.courseware import (
     ComponentDefinition,
@@ -48,6 +51,116 @@ class CoursewareFromPlanCreate(BaseModel):
     learner_gap: Optional[Dict[str, Any]] = None
     enhancement_tags: Optional[List[str]] = None
     source_meta: Optional[Dict[str, Any]] = None
+
+
+class CoursewareGenerateRequest(BaseModel):
+    """LLM 生成课件（HTML 链路）请求"""
+    title: str = Field(..., max_length=200)
+    plan: Dict[str, Any]
+    analysis: Optional[Dict[str, Any]] = None      # 白盒分析子集（vocabulary/syntax/discourse）
+    text: str = Field(..., min_length=10)           # 课文全文
+    language_name: str = "英语"
+    text_level: Optional[str] = None
+    student_level: Optional[str] = None
+    duration_minutes: int = Field(90, ge=5, le=180)
+    course_type: Optional[str] = None
+    class_size: Optional[int] = None
+    native_language: Optional[str] = None
+    learner_gap: Optional[Dict[str, Any]] = None
+    enhancement_tags: Optional[List[str]] = None
+
+
+# 课件生成任务注册表（进程内；重启丢失，前端轮询 404 时提示重试）
+_GENERATION_TASKS: Dict[str, Dict[str, Any]] = {}
+_TASK_TTL_SECONDS = 3600
+
+
+def _prune_generation_tasks() -> None:
+    now = time.time()
+    stale = [tid for tid, s in _GENERATION_TASKS.items() if now - s.get("created_ts", now) > _TASK_TTL_SECONDS]
+    for tid in stale:
+        _GENERATION_TASKS.pop(tid, None)
+
+
+async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest, current_user: dict) -> None:
+    state = _GENERATION_TASKS[task_id]
+    try:
+        state.update(status="generating", progress="AI 正在设计课件页面…（约 1-2 分钟）")
+
+        from app.services.courseware_llm_generator import generate_html_courseware
+
+        async with AsyncSessionLocal() as db:
+            comps = (
+                await db.execute(select(ComponentDefinition).where(ComponentDefinition.scope == "official"))
+            ).scalars().all()
+            components = [c.to_dict() for c in comps]
+
+        result = await asyncio.to_thread(
+            generate_html_courseware,
+            title=payload.title,
+            plan=payload.plan,
+            analysis=payload.analysis or {},
+            text=payload.text,
+            language_name=payload.language_name,
+            text_level=payload.text_level or "",
+            student_level=payload.student_level or "",
+            duration_minutes=payload.duration_minutes,
+            course_type=payload.course_type,
+            class_size=payload.class_size,
+            native_language=payload.native_language,
+            components=components,
+            learner_gap=payload.learner_gap,
+            enhancement_tags=payload.enhancement_tags,
+        )
+
+        state.update(status="saving", progress="正在保存课件项目…")
+
+        source_meta = dict(result.editor_schema.get("meta", {}).get("source_meta", {}))
+        async with AsyncSessionLocal() as db:
+            created = await _create_initial_project_state(
+                title=payload.title,
+                source_type="from_plan_llm",
+                source_plan_id=None,
+                mode="slides",
+                template_id="classroom_default",
+                source_meta=source_meta,
+                current_user=current_user,
+                db=db,
+                bootstrap_payload={
+                    "editor_schema_json": result.editor_schema,
+                    "rendered_html": result.html,
+                    "asset_manifest_json": {"items": [], "count": 0},
+                    "structure_sync_json": result.structure_sync,
+                },
+            )
+            try:
+                from app.models.generation import GenerationLog
+
+                db.add(GenerationLog(
+                    user_id=current_user["user_id"],
+                    analysis_id=None,
+                    stage="courseware_html",
+                    prompt_name="courseware_html_v1",
+                    prompt_version=result.prompt_version,
+                    model=result.model,
+                    fallback="yes" if result.fallback else "no",
+                    generation_duration=result.generation_duration,
+                    self_check=result.self_check,
+                ))
+                await db.commit()
+            except Exception as log_e:
+                logger.warning(f"课件 GenerationLog 写入失败（不影响产物）: {log_e}")
+
+        state.update(
+            status="done",
+            project_id=created["project"]["id"],
+            fallback=result.fallback,
+            generation_duration=result.generation_duration,
+            progress=None,
+        )
+    except Exception as e:
+        logger.error(f"课件生成任务失败: {e}")
+        state.update(status="error", error=str(e)[:300], progress=None)
 
 
 class CoursewareProjectUpdate(BaseModel):
@@ -392,6 +505,44 @@ async def create_courseware_from_plan(
         db=db,
         bootstrap_payload=bootstrap_payload,
     )
+
+
+@router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
+async def start_courseware_generation(
+    request: CoursewareGenerateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """启动 LLM 课件生成（HTML 链路，异步任务），返回 task_id 供轮询"""
+    _prune_generation_tasks()
+    task_id = uuid4().hex
+    _GENERATION_TASKS[task_id] = {
+        "status": "pending",
+        "progress": "已排队",
+        "user_id": current_user["user_id"],
+        "created_ts": time.time(),
+    }
+    asyncio.create_task(_run_html_generation(task_id, request, current_user))
+    return {"task_id": task_id}
+
+
+@router.get("/generate/{task_id}")
+async def get_courseware_generation_status(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """轮询课件生成任务状态"""
+    state = _GENERATION_TASKS.get(task_id)
+    if not state or state.get("user_id") != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="生成任务不存在或已过期，请重新生成")
+    return {
+        "task_id": task_id,
+        "status": state.get("status"),
+        "progress": state.get("progress"),
+        "project_id": state.get("project_id"),
+        "fallback": state.get("fallback"),
+        "generation_duration": state.get("generation_duration"),
+        "error": state.get("error"),
+    }
 
 
 @router.get("/{project_id}")

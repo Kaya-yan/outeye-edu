@@ -12,6 +12,7 @@ interface CoursewareProject {
   source_type: string;
   status: string;
   current_version_id: string | null;
+  source_meta?: { generated_by?: string } | null;
 }
 
 interface CoursewareVersion {
@@ -49,6 +50,7 @@ export default function CoursewareEditPage() {
         source_type: string;
         status: string;
         current_version_id: string | null;
+        source_meta?: { generated_by?: string } | null;
         versions: CoursewareVersion[];
       }>(`/courseware/${projectId}`);
       setProject(data);
@@ -191,6 +193,12 @@ export default function CoursewareEditPage() {
                 <span className="drawer-handle">{project.mode === "slides" ? "幻灯片式" : "长页面式"}</span>
                 <span className="drawer-handle bg-white border border-black/5 text-ink-500">{project.status === "in_editing" ? "编辑中" : project.status}</span>
                 {currentVersion && <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-700">当前版本 v{currentVersion.version_number}</span>}
+                {project.source_meta?.generated_by === "template_fallback" && (
+                  <span className="drawer-handle bg-amber-50 border border-amber-300 text-amber-800">简化版生成（AI 完整生成暂不可用）</span>
+                )}
+                {project.source_meta?.generated_by === "llm_html" && (
+                  <span className="drawer-handle bg-sage-100 border border-sage-200 text-ink-700">AI 生成</span>
+                )}
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-3 lg:w-[430px]">

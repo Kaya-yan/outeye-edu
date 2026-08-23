@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import dynamic from "next/dynamic";
 import WhiteboxResults from "@/components/WhiteboxResults";
 import TeachingPlanView from "@/components/TeachingPlanView";
@@ -138,6 +138,19 @@ interface GeneratePlanResult {
   evidence_annotations: Record<string, unknown> | null;
   sources: Array<{ type: string; title?: string; score?: number }>;
   retrieval_info: { wiki_count: number; rag_count: number; retrieval_duration: number };
+  syntax?: {
+    avg_sentence_length: number;
+    max_sentence?: { preview: string; word_count: number; index: number };
+    long_sentences_count: number;
+    flesch_reading_ease: number;
+  };
+  discourse?: { paragraph_count: number; connective_density: number; genre_hint: string };
+  generation_settings?: {
+    duration_minutes: number;
+    course_type?: string;
+    class_size?: number;
+    native_language?: string;
+  };
   generation_duration: number;
   total_duration: number;
   model: string;
@@ -843,6 +856,7 @@ function PlanStep({
   const [revising, setRevising] = useState(false);
   const [revisionError, setRevisionError] = useState("");
   const [creatingCourseware, setCreatingCourseware] = useState(false);
+  const [coursewareProgress, setCoursewareProgress] = useState("");
   const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
   const [planConfirmed, setPlanConfirmed] = useState(false);
 
@@ -857,22 +871,60 @@ function PlanStep({
   };
 
   const handleCreateCourseware = async () => {
+    if (!text) {
+      setRevisionError("课文内容缺失，无法生成课件，请重新分析");
+      return;
+    }
     setCreatingCourseware(true);
+    setCoursewareProgress("正在启动 AI 生成…");
     try {
-      const resp = await apiPost<{ project: { id: string } }>("/courseware/from-plan", {
+      const settings = result.generation_settings;
+      const start = await apiPost<{ task_id: string }>("/courseware/generate", {
         title: result.text_title || "教学课件",
-        source_plan_id: undefined,
-        mode: "slides",
-        template_id: "classroom_default",
         plan: result.teaching_plan,
+        analysis: {
+          vocabulary: result.vocabulary,
+          syntax: result.syntax,
+          discourse: result.discourse,
+        },
+        text,
+        language_name: result.language_name || "英语",
+        text_level: result.text_level,
+        student_level: result.student_level || studentLevel,
+        duration_minutes: settings?.duration_minutes ?? 90,
+        course_type: settings?.course_type,
+        class_size: settings?.class_size,
+        native_language: settings?.native_language,
         learner_gap: result.learner_gap,
         enhancement_tags: result.enhancement_tags,
       });
-      router.push(`/courseware/${resp.project.id}/edit`);
+      // 轮询生成状态（上限 5 分钟）
+      for (let i = 0; i < 100; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const st = await apiGet<{
+          status: string;
+          progress?: string | null;
+          project_id?: string;
+          fallback?: boolean;
+          error?: string;
+        }>(`/courseware/generate/${start.task_id}`);
+        if (st.progress) setCoursewareProgress(st.progress);
+        if (st.status === "done" && st.project_id) {
+          if (st.fallback) {
+            setCoursewareProgress("AI 完整生成暂不可用，已用简化版生成，即将进入编辑器…");
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          router.push(`/courseware/${st.project_id}/edit`);
+          return;
+        }
+        if (st.status === "error") throw new Error(st.error || "课件生成失败，请重试");
+      }
+      throw new Error("生成超时（超过 5 分钟），请重试");
     } catch (e: unknown) {
-      setRevisionError(e instanceof Error ? e.message : "创建课件失败，请重试");
+      setRevisionError(e instanceof Error ? e.message : "课件生成失败，请重试");
     } finally {
       setCreatingCourseware(false);
+      setCoursewareProgress("");
     }
   };
 
@@ -1102,9 +1154,9 @@ function PlanStep({
             </div>
             <div className="flex-1 max-w-2xl">
               <div className="section-title mb-2">HTML Editor Path</div>
-              <h3 className="text-lg font-semibold text-ink-900">进入 HTML 课件编辑器</h3>
+              <h3 className="text-lg font-semibold text-ink-900">AI 生成 HTML 课件</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                确认教案后可直接进入 HTML 编辑器，继续做页面与组件调整。
+                AI 按确认教案逐环节生成可交互的单文件课件（词汇卡、句法拆解、限时检测），生成后进入编辑器继续精修。
               </p>
             </div>
           </div>
@@ -1114,7 +1166,7 @@ function PlanStep({
               disabled={creatingCourseware}
               className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creatingCourseware ? "创建中..." : "进入 HTML 编辑器"}
+              {creatingCourseware ? "AI 生成中…" : "AI 生成课件（约 1-2 分钟）"}
             </button>
             <button
               onClick={() => router.push('/history')}
@@ -1124,11 +1176,17 @@ function PlanStep({
             </button>
           </div>
         </div>
+        {creatingCourseware && coursewareProgress && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl bg-canvas-200/60 px-4 py-3 text-sm text-ink-600">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ink-300 border-t-primary-600" />
+            {coursewareProgress}
+          </div>
+        )}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="data-card p-4 bg-white/90">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Create</div>
             <div className="mt-2 text-sm font-semibold text-ink-900">创建课件项目</div>
-            <p className="mt-1 text-xs text-ink-500 leading-5">用当前教学方案建立可继续编辑的 HTML 课件。</p>
+            <p className="mt-1 text-xs text-ink-500 leading-5">AI 按教案逐环节生成可交互课件，无需手动拼装。</p>
           </div>
           <div className="data-card p-4 bg-white/90">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">Edit</div>
