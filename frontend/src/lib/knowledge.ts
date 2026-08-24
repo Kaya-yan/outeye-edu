@@ -76,3 +76,18 @@ export const deleteKnowledgeDocument = (id: string) =>
 
 export const getRagStatus = () =>
   apiGet<{ status: "ready" | "loading" }>("/rag/status");
+
+export interface PublicKnowledgeItem {
+  id: string;
+  kind: string;
+  category: string;
+  title: string;
+  summary: string;
+  badge: string;
+  source: string;
+  doc_type?: string | null;
+  created_at?: string | null;
+}
+
+export const listPublicKnowledge = () =>
+  apiGet<PublicKnowledgeItem[]>("/knowledge/public");

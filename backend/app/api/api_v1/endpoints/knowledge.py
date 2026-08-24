@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Optional
+from loguru import logger
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -209,6 +210,83 @@ async def list_knowledge_documents(
         }
 
     return list(docs.values())
+
+
+class PublicKnowledgeItem(BaseModel):
+    """公共资料条目（只读）"""
+    id: str
+    kind: str
+    category: str
+    title: str
+    summary: str
+    badge: str = "官方"
+    source: str
+    doc_type: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+BUILTIN_PUBLIC_ASSETS = [
+    {
+        "id": "builtin-teaching-theories",
+        "kind": "builtin",
+        "category": "教学理论库",
+        "title": "大学英语教学理论库",
+        "summary": "覆盖产出导向法（POA）、任务型教学、输入假说、支架式教学等常用理论的核心要点与课堂应用方式。生成教案时自动作为理论依据被引用。",
+        "badge": "官方",
+        "source": "OutEye Edu 内置",
+    },
+    {
+        "id": "builtin-cefr-wordlists",
+        "kind": "builtin",
+        "category": "CEFR 词表说明",
+        "title": "CEFR 词汇分级体系说明",
+        "summary": "平台采用主词表（约 3200 词）+ 词频频段词表（约 16400 词）两级判定课文词汇难度，未命中的低频词由 AI 按剑桥词典口径定级，课文分析中的等级徽章即来自该体系。",
+        "badge": "官方",
+        "source": "OutEye Edu 内置",
+    },
+    {
+        "id": "builtin-culture-corpus",
+        "kind": "builtin",
+        "category": "文化语料分类",
+        "title": "文化背景语料分类说明",
+        "summary": "课文分析会识别节日、历史、制度、地理、文学、习俗等文化元素，并由 AI 补充具体事实背景与课堂应用建议，帮助教师快速准备文化讲解点。",
+        "badge": "官方",
+        "source": "OutEye Edu 内置",
+    },
+]
+
+
+@router.get("/public", response_model=List[PublicKnowledgeItem])
+async def get_public_knowledge(
+    current_user: dict = Depends(get_current_user),
+):
+    """公共资料：内置知识资产说明 + 平台官方语料（只读，全员可见）"""
+    items: list = [dict(a) for a in BUILTIN_PUBLIC_ASSETS]
+    try:
+        vector_store = _get_vector_store()
+        docs: dict = {}
+        for r in vector_store.get_all_records():
+            payload = r.payload or {}
+            if payload.get("scope") != "system":
+                continue
+            doc_id = payload.get("doc_id")
+            if not doc_id or doc_id in docs:
+                continue
+            docs[doc_id] = {
+                "id": doc_id,
+                "kind": "document",
+                "category": "官方语料",
+                "title": payload.get("title", "") or "未命名文档",
+                "summary": (payload.get("content") or "")[:200],
+                "badge": "官方",
+                "source": "平台官方语料",
+                "doc_type": payload.get("doc_type") or "document",
+                "created_at": payload.get("created_at"),
+            }
+        items.extend(docs.values())
+    except Exception as e:
+        logger.warning(f"公共语料聚合失败（仅返回内置资产）: {e}")
+    return items
 
 
 @router.delete("/documents/{document_id}")

@@ -162,16 +162,6 @@ type Step = "input" | "analysis" | "plan";
 
 const COURSE_TYPES = ["精读", "泛读", "听说", "读写", "翻译", "写作", "综合"];
 
-const LANGUAGES = [
-  { code: "", label: "自动检测" },
-  { code: "en", label: "英语 English" },
-  { code: "ja", label: "日语 日本語" },
-  { code: "fr", label: "法语 Français" },
-  { code: "de", label: "德语 Deutsch" },
-  { code: "es", label: "西班牙语 Español" },
-  { code: "ko", label: "韩语 한국어" },
-];
-
 // ============ Page ============
 
 export default function AnalysisPage() {
@@ -297,6 +287,35 @@ export default function AnalysisPage() {
     }
   };
 
+  // 结果页"生成教案前确认"里改学生水平：白盒是确定性秒级计算，静默重算保持难度差距口径一致
+  // 已富化的文化背景保留，不重复触发 LLM
+  const [recomputing, setRecomputing] = useState(false);
+  const handleStudentLevelChange = async (level: string) => {
+    if (level === studentLevel) return;
+    setStudentLevel(level);
+    if (!text) return;
+    setRecomputing(true);
+    try {
+      const result = await apiPost<WhiteboxAnalysis>("/analysis/whitebox", {
+        text,
+        title,
+        student_level: level,
+        language: language || undefined,
+        native_language: nativeLanguage || undefined,
+        course_type: courseType || undefined,
+        class_size: classSize ? parseInt(classSize) : undefined,
+        duration_minutes: parseInt(durationInput, 10) || undefined,
+      });
+      setAnalysis((prev) =>
+        prev ? { ...result, cultural_elements: prev.cultural_elements } : result
+      );
+    } catch {
+      // 重算失败保留原分析；生成教案时仍使用新水平
+    } finally {
+      setRecomputing(false);
+    }
+  };
+
   // 历史恢复后的一次性自动分析（在上方恢复 useEffect 写入状态之后触发）
   useEffect(() => {
     if (!autoAnalyzeQueued) return;
@@ -383,20 +402,6 @@ export default function AnalysisPage() {
             setTitle={setTitle}
             text={text}
             setText={setText}
-            studentLevel={studentLevel}
-            setStudentLevel={setStudentLevel}
-            language={language}
-            setLanguage={setLanguage}
-            nativeLanguage={nativeLanguage}
-            setNativeLanguage={setNativeLanguage}
-            courseType={courseType}
-            setCourseType={setCourseType}
-            classSize={classSize}
-            setClassSize={setClassSize}
-            durationInput={durationInput}
-            setDurationInput={setDurationInput}
-            planMode={planMode}
-            setPlanMode={setPlanMode}
             wordCount={wordCount}
             loading={loading}
             onAnalyze={handleAnalyze}
@@ -454,6 +459,21 @@ export default function AnalysisPage() {
               analysis={analysis}
               loading={loading}
               cultureStatus={cultureStatus}
+              settings={{
+                studentLevel,
+                onStudentLevelChange: handleStudentLevelChange,
+                recomputing,
+                courseType,
+                setCourseType,
+                classSize,
+                setClassSize,
+                durationInput,
+                setDurationInput,
+                nativeLanguage,
+                setNativeLanguage,
+                planMode,
+                setPlanMode,
+              }}
               onNext={handleGenerateFromSettings}
               onBack={() => setStep("input")}
             />
@@ -539,20 +559,6 @@ function InputStep({
   setTitle,
   text,
   setText,
-  studentLevel,
-  setStudentLevel,
-  language,
-  setLanguage,
-  nativeLanguage,
-  setNativeLanguage,
-  courseType,
-  setCourseType,
-  classSize,
-  setClassSize,
-  durationInput,
-  setDurationInput,
-  planMode,
-  setPlanMode,
   wordCount,
   loading,
   onAnalyze,
@@ -561,38 +567,14 @@ function InputStep({
   setTitle: (v: string) => void;
   text: string;
   setText: (v: string) => void;
-  studentLevel: string;
-  setStudentLevel: (v: string) => void;
-  language: string;
-  setLanguage: (v: string) => void;
-  nativeLanguage: string;
-  setNativeLanguage: (v: string) => void;
-  courseType: string;
-  setCourseType: (v: string) => void;
-  classSize: string;
-  setClassSize: (v: string) => void;
-  durationInput: string;
-  setDurationInput: (v: string) => void;
-  planMode: "basic" | "enhanced";
-  setPlanMode: (v: "basic" | "enhanced") => void;
   wordCount: number;
   loading: boolean;
   onAnalyze: () => void;
 }) {
-  const adjustDuration = (delta: number) => {
-    const n = parseInt(durationInput, 10);
-    const base = Number.isNaN(n) ? 90 : n;
-    setDurationInput(String(Math.min(180, Math.max(5, base + delta))));
-  };
-
-  const durationNum = parseInt(durationInput, 10);
-  const durationInvalid =
-    durationInput !== "" && (!Number.isNaN(durationNum) && (durationNum < 5 || durationNum > 180));
-
   return (
     <div>
-      {/* 粘贴区大卡片 */}
-      <div className="workbench-panel p-3 sm:p-4 mt-6">
+      {/* 聚焦式输入区：标题内嵌顶端，正文占视口 60%（min 420px）自增高 */}
+      <div className="workbench-panel mt-6 p-3 sm:p-4">
         <input
           type="text"
           value={title}
@@ -600,14 +582,16 @@ function InputStep({
           placeholder="课文标题（可选，上传文件时自动填入）"
           className="w-full border-b border-black/5 bg-transparent px-3 py-2.5 text-base font-medium text-ink-900 placeholder:font-normal placeholder:text-ink-400 outline-none"
         />
-        <TiptapEditor
-          content={text}
-          onChange={setText}
-          frameless
-          placeholder="把课文粘贴到这里，或点左下角上传文件..."
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-2 pt-3">
-          <div className="flex items-center gap-3">
+        <div className="relative">
+          <div className="min-h-[max(420px,60vh)] pt-2">
+            <TiptapEditor
+              content={text}
+              onChange={setText}
+              frameless
+              placeholder="把课文粘贴到这里，或点左下角上传文件..."
+            />
+          </div>
+          <div className="absolute bottom-1.5 left-1 z-10">
             <FileUploadZone
               compact
               onTextExtracted={(extractedText) => setText(extractedText)}
@@ -615,190 +599,221 @@ function InputStep({
                 if (!title) setTitle(filename.replace(/\.[^.]+$/, ""));
               }}
             />
-            <span className="text-xs text-ink-400">
-              {wordCount > 0 && wordCount < 20 ? `${wordCount} 词（至少 20 词才能分析）` : `${wordCount} 词`}
-            </span>
           </div>
-          <button
-            onClick={onAnalyze}
-            disabled={loading || wordCount < 20}
-            className="btn-primary px-8 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "分析中..." : "开始分析"}
-          </button>
+          <div className="pointer-events-none absolute bottom-2 right-2 text-xs text-ink-400">
+            {wordCount > 0 && wordCount < 20
+              ? `${wordCount} 词（至少 20 词才能分析）`
+              : `${wordCount} 词`}
+          </div>
         </div>
       </div>
 
-      {/* 教学设置（可选） */}
-      <details className="group page-surface-strong mt-4 px-5">
-        <summary className="-mx-5 flex cursor-pointer select-none list-none items-center justify-center gap-1.5 py-3.5 text-sm font-medium text-ink-600 transition-colors hover:text-ink-800 [&::-webkit-details-marker]:hidden">
-          <svg
-            className="h-4 w-4 text-ink-400 transition-transform duration-200 group-open:rotate-180"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-          教学设置（可选）
-        </summary>
+      <div className="mt-5 flex justify-center">
+        <button
+          onClick={onAnalyze}
+          disabled={loading || wordCount < 20}
+          className="btn-primary px-10 py-3.5 text-base disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? "分析中..." : "开始分析"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-        <div className="grid gap-x-6 gap-y-5 border-t border-black/5 py-5 sm:grid-cols-2">
-          {/* 课时长度 */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">课时长度（分钟）</label>
-            <div className="flex items-center gap-2">
+// ============ 生成教案前确认（教学设置） ============
+
+interface SettingsProps {
+  studentLevel: string;
+  onStudentLevelChange: (v: string) => void;
+  recomputing: boolean;
+  courseType: string;
+  setCourseType: (v: string) => void;
+  classSize: string;
+  setClassSize: (v: string) => void;
+  durationInput: string;
+  setDurationInput: (v: string) => void;
+  nativeLanguage: string;
+  setNativeLanguage: (v: string) => void;
+  planMode: "basic" | "enhanced";
+  setPlanMode: (v: "basic" | "enhanced") => void;
+}
+
+function SettingsStrip(props: SettingsProps) {
+  const {
+    studentLevel,
+    onStudentLevelChange,
+    recomputing,
+    courseType,
+    setCourseType,
+    classSize,
+    setClassSize,
+    durationInput,
+    setDurationInput,
+    nativeLanguage,
+    setNativeLanguage,
+    planMode,
+    setPlanMode,
+  } = props;
+
+  const adjustDuration = (delta: number) => {
+    const n = parseInt(durationInput, 10);
+    const base = Number.isNaN(n) ? 90 : n;
+    setDurationInput(String(Math.min(180, Math.max(5, base + delta))));
+  };
+  const durationNum = parseInt(durationInput, 10);
+  const durationInvalid =
+    durationInput !== "" && (!Number.isNaN(durationNum) && (durationNum < 5 || durationNum > 180));
+
+  return (
+    <div className="page-surface-strong px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h3 className="text-sm font-semibold text-ink-800">生成教案前 · 确认教学设置</h3>
+        {recomputing && (
+          <span className="text-xs text-ink-400">正在按新水平重算难度差距…</span>
+        )}
+      </div>
+
+      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+        {/* 学生水平 */}
+        <div className="sm:col-span-2">
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">学生水平</label>
+          <div className="flex flex-wrap gap-2">
+            {CEFR_LEVELS.map((level) => (
               <button
-                type="button"
-                onClick={() => adjustDuration(-5)}
-                className="btn-secondary h-9 w-9 !p-0 text-base"
-                aria-label="减少 5 分钟"
-              >
-                −
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={durationInput}
-                onChange={(e) => setDurationInput(e.target.value.replace(/[^0-9]/g, ""))}
-                onBlur={() => {
-                  const n = parseInt(durationInput, 10);
-                  if (durationInput === "" || Number.isNaN(n)) {
-                    setDurationInput("90");
-                  } else {
-                    setDurationInput(String(Math.min(180, Math.max(5, n))));
-                  }
-                }}
-                className="morandi-input w-24 text-center"
-              />
-              <button
-                type="button"
-                onClick={() => adjustDuration(5)}
-                className="btn-secondary h-9 w-9 !p-0 text-base"
-                aria-label="增加 5 分钟"
-              >
-                +
-              </button>
-              <span className="text-xs text-ink-400">5–180 分钟，默认 90</span>
-            </div>
-            {durationInvalid && (
-              <p className="mt-1.5 text-xs text-red-600">请输入 5 到 180 之间的数字</p>
-            )}
-          </div>
-
-          {/* 课型 */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">课型</label>
-            <select
-              value={courseType}
-              onChange={(e) => setCourseType(e.target.value)}
-              className="morandi-input"
-            >
-              <option value="">未指定</option>
-              {COURSE_TYPES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 班级人数 */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">班级人数</label>
-            <input
-              type="number"
-              value={classSize}
-              onChange={(e) => setClassSize(e.target.value)}
-              placeholder="例：30"
-              min={1}
-              max={200}
-              className="morandi-input"
-            />
-          </div>
-
-          {/* 学生水平 */}
-          <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">学生水平</label>
-            <div className="flex flex-wrap gap-2">
-              {CEFR_LEVELS.map((level) => (
-                <button
-                  key={level}
-                  onClick={() => setStudentLevel(level)}
-                  className={`rounded-xl border px-3.5 py-2 text-sm transition-colors ${
-                    studentLevel === level
-                      ? "border-primary-600 bg-primary-600 text-white"
-                      : "border-black/10 bg-white text-ink-600 hover:border-primary-400"
-                  }`}
-                >
-                  {cefrLabel(level)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 课文语种 */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">课文语种</label>
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="morandi-input"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 学生母语 */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">学生母语</label>
-            <select
-              value={nativeLanguage}
-              onChange={(e) => setNativeLanguage(e.target.value)}
-              className="morandi-input"
-            >
-              <option value="">未指定</option>
-              <option value="zh">中文</option>
-              <option value="ja">日语</option>
-              <option value="ko">韩语</option>
-              <option value="ar">阿拉伯语</option>
-              <option value="ru">俄语</option>
-              <option value="pt">葡萄牙语</option>
-              <option value="other">其他</option>
-            </select>
-          </div>
-
-          {/* 生成模式 */}
-          <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">生成模式</label>
-            <div className="grid max-w-md grid-cols-2 gap-2">
-              <button
-                onClick={() => setPlanMode("basic")}
-                className={`rounded-xl border p-3 text-left transition-colors ${
-                  planMode === "basic"
-                    ? "border-primary-600 bg-primary-50"
-                    : "border-black/10 bg-white hover:border-primary-300"
+                key={level}
+                onClick={() => onStudentLevelChange(level)}
+                className={`rounded-xl border px-3.5 py-2 text-sm transition-colors ${
+                  studentLevel === level
+                    ? "border-primary-600 bg-primary-600 text-white"
+                    : "border-black/10 bg-white text-ink-600 hover:border-primary-400"
                 }`}
               >
-                <div className="text-sm font-medium text-ink-900">基础模式</div>
-                <div className="mt-0.5 text-xs text-ink-500">快速生成基础教案</div>
+                {cefrLabel(level)}
               </button>
-              <button
-                onClick={() => setPlanMode("enhanced")}
-                className={`rounded-xl border p-3 text-left transition-colors ${
-                  planMode === "enhanced"
-                    ? "border-primary-600 bg-primary-50"
-                    : "border-black/10 bg-white hover:border-primary-300"
-                }`}
-              >
-                <div className="text-sm font-medium text-ink-900">增强模式</div>
-                <div className="mt-0.5 text-xs text-ink-500">含依据引用与更细的教学设计</div>
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      </details>
+
+        {/* 课时长度 */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">课时长度（分钟）</label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => adjustDuration(-5)}
+              className="btn-secondary h-9 w-9 !p-0 text-base"
+              aria-label="减少 5 分钟"
+            >
+              −
+            </button>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={durationInput}
+              onChange={(e) => setDurationInput(e.target.value.replace(/[^0-9]/g, ""))}
+              onBlur={() => {
+                const n = parseInt(durationInput, 10);
+                if (durationInput === "" || Number.isNaN(n)) {
+                  setDurationInput("90");
+                } else {
+                  setDurationInput(String(Math.min(180, Math.max(5, n))));
+                }
+              }}
+              className="morandi-input w-24 text-center"
+            />
+            <button
+              type="button"
+              onClick={() => adjustDuration(5)}
+              className="btn-secondary h-9 w-9 !p-0 text-base"
+              aria-label="增加 5 分钟"
+            >
+              +
+            </button>
+            <span className="text-xs text-ink-400">5–180 分钟</span>
+          </div>
+          {durationInvalid && (
+            <p className="mt-1.5 text-xs text-red-600">请输入 5 到 180 之间的数字</p>
+          )}
+        </div>
+
+        {/* 课型 */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">课型</label>
+          <select
+            value={courseType}
+            onChange={(e) => setCourseType(e.target.value)}
+            className="morandi-input"
+          >
+            <option value="">未指定</option>
+            {COURSE_TYPES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* 班级人数 */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">班级人数</label>
+          <input
+            type="number"
+            value={classSize}
+            onChange={(e) => setClassSize(e.target.value)}
+            placeholder="例：30"
+            min={1}
+            max={200}
+            className="morandi-input"
+          />
+        </div>
+
+        {/* 学生母语 */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">学生母语</label>
+          <select
+            value={nativeLanguage}
+            onChange={(e) => setNativeLanguage(e.target.value)}
+            className="morandi-input"
+          >
+            <option value="">未指定</option>
+            <option value="zh">中文</option>
+            <option value="ja">日语</option>
+            <option value="ko">韩语</option>
+            <option value="ar">阿拉伯语</option>
+            <option value="ru">俄语</option>
+            <option value="pt">葡萄牙语</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+
+        {/* 生成模式 */}
+        <div className="sm:col-span-2">
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">生成模式</label>
+          <div className="grid max-w-md grid-cols-2 gap-2">
+            <button
+              onClick={() => setPlanMode("basic")}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                planMode === "basic"
+                  ? "border-primary-600 bg-primary-50"
+                  : "border-black/10 bg-white hover:border-primary-300"
+              }`}
+            >
+              <div className="text-sm font-medium text-ink-900">基础模式</div>
+              <div className="mt-0.5 text-xs text-ink-500">快速生成基础教案</div>
+            </button>
+            <button
+              onClick={() => setPlanMode("enhanced")}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                planMode === "enhanced"
+                  ? "border-primary-600 bg-primary-50"
+                  : "border-black/10 bg-white hover:border-primary-300"
+              }`}
+            >
+              <div className="text-sm font-medium text-ink-900">增强模式</div>
+              <div className="mt-0.5 text-xs text-ink-500">含依据引用与更细的教学设计</div>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -809,17 +824,21 @@ function AnalysisStep({
   analysis,
   loading,
   cultureStatus,
+  settings,
   onNext,
   onBack,
 }: {
   analysis: WhiteboxAnalysis;
   loading: boolean;
   cultureStatus: "idle" | "loading" | "enriched" | "fallback";
+  settings: SettingsProps;
   onNext: () => void;
   onBack: () => void;
 }) {
   return (
     <div className="space-y-6">
+      <SettingsStrip {...settings} />
+
       <div className="workbench-panel space-y-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
