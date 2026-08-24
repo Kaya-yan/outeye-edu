@@ -2,7 +2,9 @@ import type { VeTarget } from "./rpc";
 
 export const EXPORT_STYLE_ID = "ve-export-patches";
 
-export type VePatchKind = "css" | "text" | "image";
+export type VePatchKind = "css" | "text" | "image" | "insert";
+
+export type VeInsertPosition = "after" | "before" | "append";
 
 export interface VePatchFingerprint {
   tag: string;
@@ -21,6 +23,8 @@ export interface VePatch {
   value?: string;
   newText?: string;
   newSrc?: string;
+  position?: VeInsertPosition;
+  html?: string;
   fingerprint: VePatchFingerprint;
 }
 
@@ -42,6 +46,14 @@ export function patchId(selector: string, kind: VePatchKind, prop?: string): str
   return kind === "css" ? `${selector}||${prop}` : `${selector}||${kind}`;
 }
 
+export function insertPatchId(selector: string, seq: number): string {
+  return `${selector}||insert||${seq}`;
+}
+
+export function insertWrapperSelector(patchIdStr: string): string {
+  return `[data-ve-insert="${patchIdStr}"]`;
+}
+
 export function targetLabel(target: VeTarget): string {
   return target.component ? `${target.tag} · ${target.component}` : target.tag;
 }
@@ -51,7 +63,7 @@ export function cssPatches(patches: VePatch[]): VePatch[] {
 }
 
 export function hasDomPatches(patches: VePatch[]): boolean {
-  return patches.some((p) => p.kind === "text" || p.kind === "image");
+  return patches.some((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert");
 }
 
 export function buildPatchCss(patches: VePatch[]): string {

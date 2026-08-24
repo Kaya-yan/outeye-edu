@@ -17,11 +17,14 @@ import {
   exportFileName,
   hasDomPatches,
   injectExportStyle,
+  insertPatchId,
+  insertWrapperSelector,
   makeFingerprint,
   normalizePatch,
   patchId,
   stripExportStyle,
   targetLabel,
+  type VeInsertPosition,
   type VePatch,
 } from "./patches";
 
@@ -43,6 +46,15 @@ interface CoursewareVersion {
   rendered_html: string | null;
   change_summary: string | null;
   created_at: string;
+}
+
+interface OfficialComponent {
+  id: string;
+  name: string;
+  summary: string | null;
+  category: string | null;
+  teaching_stage?: string | null;
+  render_template_html: string | null;
 }
 
 const HISTORY_CAP = 50;
@@ -67,6 +79,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [rect, setRect] = useState<VeRect | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [components, setComponents] = useState<OfficialComponent[]>([]);
 
   const [history, setHistory] = useState<VePatch[][]>([[]]);
   const [hIndex, setHIndex] = useState(0);
@@ -75,7 +88,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   const css = useMemo(() => buildPatchCss(patches), [patches]);
   const domPatches = useMemo(
-    () => patches.filter((p) => p.kind === "text" || p.kind === "image"),
+    () => patches.filter((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert"),
     [patches]
   );
   const patchesRef = useRef<VePatch[]>([]);
@@ -121,6 +134,26 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await apiGet<OfficialComponent[]>(
+          "/courseware/components?scope=official"
+        );
+        if (!cancelled)
+          setComponents(
+            items.filter((c) => (c.render_template_html || "").trim().length > 0)
+          );
+      } catch {
+        // 组件库不可用时静默降级：Inspector 不显示插入区
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const bridge = createHostBridge(channel, (type, payload) => {
       if (type === "ve:ready") {
         setAgentReady(true);
@@ -128,18 +161,27 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         const cur = patchesRef.current;
         if (cur.length > 0) {
           bridge.send(iframeRef.current?.contentWindow || null, "ve:verify", {
-            items: cur.map((p) => ({
-              id: p.id,
-              selector: p.selector,
-              tag: p.fingerprint.tag,
-              childCount: p.fingerprint.childCount,
-              text: p.fingerprint.text,
-            })),
+            items: cur.map((p) =>
+              p.kind === "insert"
+                ? {
+                    id: p.id,
+                    selector: insertWrapperSelector(p.id),
+                    tag: "div",
+                    skipDetail: true,
+                  }
+                : {
+                    id: p.id,
+                    selector: p.selector,
+                    tag: p.fingerprint.tag,
+                    childCount: p.fingerprint.childCount,
+                    text: p.fingerprint.text,
+                  }
+            ),
           });
         }
         bridge.send(iframeRef.current?.contentWindow || null, "ve:patches:applyAll", {
           css: buildPatchCss(cur),
-          patches: cur.filter((p) => p.kind === "text" || p.kind === "image"),
+          patches: cur.filter((p) => p.kind !== "css"),
         });
       }
       if (type === "ve:pick") {
@@ -299,6 +341,25 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       mutatePatches(
         exists ? patches.map((p) => (p.id === pid ? next : p)) : patches.concat([next])
       );
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const onInsertComponent = useCallback(
+    (component: OfficialComponent, position: VeInsertPosition) => {
+      if (!target) return;
+      const seq =
+        patches.filter((p) => p.kind === "insert" && p.selector === target.selector).length + 1;
+      const next: VePatch = {
+        id: insertPatchId(target.selector, seq),
+        kind: "insert",
+        selector: target.selector,
+        label: `插入组件 · ${component.name}`,
+        position,
+        html: component.render_template_html || "",
+        fingerprint: { tag: "div", childCount: 0, text: "", w: 0, h: 0 },
+      };
+      mutatePatches(patches.concat([next]));
     },
     [target, patches, mutatePatches]
   );
@@ -546,6 +607,8 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             onStyleChange={onStyleChange}
             onStartTextEdit={(sel) => sendRpc("ve:text:edit", { selector: sel })}
             onImageReplace={onImageReplace}
+            components={components}
+            onInsertComponent={onInsertComponent}
             onSelectChain={(node) => sendRpc("ve:pick:goto", { selector: node.selector })}
             onClose={() => setTarget(null)}
           />
@@ -571,6 +634,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                       </span>
                     ) : p.kind === "image" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">图片已替换</span>
+                    ) : p.kind === "insert" ? (
+                      <span className="ml-1.5 text-[11px] text-slate-400">
+                        {p.position === "append" ? "插入内部末尾" : p.position === "before" ? "插入之前" : "插入之后"}
+                      </span>
                     ) : (
                       <span className="ml-1.5 text-[11px] text-slate-400 font-mono">
                         {p.prop}: {p.value}

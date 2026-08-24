@@ -19,12 +19,22 @@ function isTransparent(rgb: string): boolean {
   return !!m;
 }
 
+export interface InspectorComponent {
+  id: string;
+  name: string;
+  summary: string | null;
+  category: string | null;
+  render_template_html: string | null;
+}
+
 export default function Inspector({
   target,
   patchValue,
   onStyleChange,
   onStartTextEdit,
   onImageReplace,
+  components,
+  onInsertComponent,
   onSelectChain,
   onClose,
 }: {
@@ -33,6 +43,8 @@ export default function Inspector({
   onStyleChange: (prop: string, value: string | null) => void;
   onStartTextEdit: (selector: string) => void;
   onImageReplace: (selector: string, src: string) => void;
+  components: InspectorComponent[];
+  onInsertComponent: (component: InspectorComponent, position: "after" | "before" | "append") => void;
   onSelectChain: (node: VeChainNode) => void;
   onClose: () => void;
 }) {
@@ -50,6 +62,8 @@ export default function Inspector({
   const alignVal = patchValue("text-align") || s.textAlign;
   const weightVal = patchValue("font-weight") || s.fontWeight;
   const hidden = patchValue("display") === "none";
+  const [selectedCompId, setSelectedCompId] = useState<string>("");
+  const selectedComp = components.find((c) => c.id === selectedCompId) || null;
 
   const commitSize = () => {
     const n = parseFloat(sizeText);
@@ -193,6 +207,41 @@ export default function Inspector({
           </button>
         )}
       </div>
+
+      {components.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-100 space-y-2">
+          <div className="text-[10px] uppercase tracking-widest text-slate-400">插入官方组件</div>
+          <select
+            value={selectedCompId}
+            onChange={(e) => setSelectedCompId(e.target.value)}
+            className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">选择组件…</option>
+            {components.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.category ? `[${c.category}] ` : ""}
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {selectedComp && (
+            <>
+              <p className="text-[11px] leading-4 text-slate-400 line-clamp-2">{selectedComp.summary}</p>
+              <div className="flex gap-1.5">
+                {([["after", "之后"], ["before", "之前"], ["append", "内部末尾"]] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => onInsertComponent(selectedComp, v)}
+                    className="flex-1 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    插入{label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {target.tag === "img" && (
         <div className="px-4 py-3 border-b border-slate-100 space-y-2.5">

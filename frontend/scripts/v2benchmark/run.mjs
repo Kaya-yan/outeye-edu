@@ -270,7 +270,36 @@ async function benchmarkSample(file, sourceHtml) {
       na: imgPatches.length === 0,
     };
 
-    // ---- E. 导出往返保真 ----
+    // ---- G. 插入组件补丁（幂等重放 + 撤销清除） ----
+    const insertTarget = leaves[0];
+    const insertPatch = {
+      id: "bench-insert-1",
+      kind: "insert",
+      selector: cssPathHost(document, insertTarget),
+      label: "bench insert",
+      position: "after",
+      html: '<div style="padding:8px;background:#eef">BENCH COMPONENT</div>',
+      fingerprint: null,
+    };
+    const baseDom = [...textPatches, ...imgPatches];
+    ctx.send("ve:patches:applyAll", { css, patches: [...baseDom, insertPatch] });
+    await ctx.waitMsg("ve:rect");
+    ctx.send("ve:patches:applyAll", { css, patches: [...baseDom, insertPatch] });
+    await ctx.waitMsg("ve:rect");
+    const wrappers = document.querySelectorAll('[data-ve-insert="bench-insert-1"]');
+    const insertOnce = wrappers.length === 1;
+    const insertPosOk =
+      insertOnce && wrappers[0].previousElementSibling === insertTarget && wrappers[0].textContent.includes("BENCH COMPONENT");
+    // 撤销（补丁列表去掉 insert）应清除已插入节点
+    ctx.send("ve:patches:applyAll", { css, patches: baseDom });
+    await ctx.waitMsg("ve:rect");
+    const insertGone = document.querySelectorAll('[data-ve-insert="bench-insert-1"]').length === 0;
+    const insertOk = insertOnce && insertPosOk && insertGone;
+    result.categories.patch_insert = { ok: insertOk ? 1 : 0, total: 1, rate: insertOk ? 1 : 0 };
+
+    // ---- E. 导出往返保真（含 insert 补丁重新应用） ----
+    ctx.send("ve:patches:applyAll", { css, patches: [...baseDom, insertPatch] });
+    await ctx.waitMsg("ve:rect");
     const beforeExportCount = document.querySelectorAll("*").length;
     ctx.send("ve:export", { css });
     const exportResult = await ctx.waitMsg("ve:export:result");
@@ -289,29 +318,26 @@ async function benchmarkSample(file, sourceHtml) {
         exportOk = false;
         exportNotes.push("补丁样式内容缺失");
       }
+      // insert 的 wrapper 会位移兄弟 DIV 的 nth-of-type，故用唯一标记串断言导出内容而非陈旧选择器
       for (const p of textPatches) {
-        let el = null;
-        try {
-          el = vdoc.querySelector(p.selector);
-        } catch {}
-        if (!el || el.textContent !== p.newText) {
+        if (!exportResult.html.includes(p.newText)) {
           exportOk = false;
-          exportNotes.push(`文本补丁未导出: ${p.selector}`);
+          exportNotes.push(`文本补丁未导出: ${p.newText}`);
         }
       }
       for (const p of imgPatches) {
-        let el = null;
-        try {
-          el = vdoc.querySelector(p.selector);
-        } catch {}
-        if (!el || el.getAttribute("src") !== p.newSrc) {
+        if (!exportResult.html.includes(p.newSrc)) {
           exportOk = false;
-          exportNotes.push(`图片补丁未导出: ${p.selector}`);
+          exportNotes.push(`图片补丁未导出: ${p.newSrc}`);
         }
       }
       if (vdoc.querySelector("[data-ve-agent],[contenteditable],#ve-hover-box,#ve-live-patches")) {
         exportOk = false;
         exportNotes.push("导出残留编辑器痕迹");
+      }
+      if (vdoc.querySelectorAll('[data-ve-insert="bench-insert-1"]').length !== 1) {
+        exportOk = false;
+        exportNotes.push("插入组件未随导出保留");
       }
       const afterCount = vdoc.querySelectorAll("*").length;
       if (Math.abs(afterCount - beforeExportCount) > 2) {
@@ -345,7 +371,7 @@ async function benchmarkSample(file, sourceHtml) {
       rate: verifyItems.length ? verifyOk / verifyItems.length : 1,
     };
 
-    const driftIdx = verifyItems.length - 1;
+    const driftIdx = verifyItems.reduce((acc, it, i) => (it.tag !== "img" ? i : acc), -1);
     let driftDetected = false;
     if (driftIdx >= 0) {
       const fresh2 = await createDoc(sourceHtml);
@@ -360,6 +386,19 @@ async function benchmarkSample(file, sourceHtml) {
       fresh2.dom.window.close();
     }
     result.categories.drift_detect = { ok: driftDetected ? 1 : 0, total: 1, rate: driftDetected ? 1 : 0 };
+
+    // 保存后重进：底稿=导出 html 剥离补丁样式（wrapper 已底稿化），insert 重放须幂等
+    if (exportResult && exportResult.html) {
+      const reloadHtml = P.stripExportStyle(exportResult.html);
+      const freshIns = await createDoc(reloadHtml);
+      freshIns.send("ve:patches:applyAll", { css, patches: [insertPatch] });
+      await freshIns.waitMsg("ve:rect");
+      const insCount = freshIns.dom.window.document.querySelectorAll(
+        '[data-ve-insert="bench-insert-1"]'
+      ).length;
+      freshIns.dom.window.close();
+      result.categories.reload_replay_insert = { ok: insCount === 1 ? 1 : 0, total: 1, rate: insCount === 1 ? 1 : 0 };
+    }
   } catch (err) {
     result.error = String((err && err.message) || err);
   } finally {
