@@ -16,7 +16,7 @@ interface TiptapEditorProps {
 export default function TiptapEditor({
   content,
   onChange,
-  placeholder = "在此粘贴或输入课文内容...",
+  placeholder = "在此粘贴或输入课文内容…",
   frameless = false,
 }: TiptapEditorProps) {
   const editor = useEditor({

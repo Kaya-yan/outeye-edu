@@ -161,7 +161,7 @@ export default function CoursewareDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-ink-400">加载中...</div>
+        <div className="animate-pulse text-ink-400">加载中…</div>
       </div>
     );
   }
@@ -279,7 +279,7 @@ export default function CoursewareDetailPage() {
                             disabled={extractingVid === v.id}
                             className="drawer-handle bg-canvas-100 border border-black/5 text-ink-600 disabled:opacity-50"
                           >
-                            {extractingVid === v.id ? "提取中..." : "提取为组件"}
+                            {extractingVid === v.id ? "提取中…" : "提取为组件"}
                           </button>
                         </div>
                       </div>

@@ -195,7 +195,7 @@ export default function CoursewarePresentPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-ink-900 flex items-center justify-center">
-        <div className="animate-pulse text-white/50">加载展示端...</div>
+        <div className="animate-pulse text-white/50">加载展示端…</div>
       </div>
     );
   }

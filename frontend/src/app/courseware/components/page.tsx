@@ -266,7 +266,7 @@ export default function ComponentLibraryPage() {
                       disabled={downloading === comp.id}
                       className="text-[10px] font-medium text-amber-600 hover:text-amber-700 disabled:opacity-50"
                     >
-                      {downloading === comp.id ? "下载中..." : "下载"}
+                      {downloading === comp.id ? "下载中…" : "下载"}
                     </button>
                   ) : comp.scope === "personal" && comp.community_status !== "submitted" ? (
                     <button
@@ -274,7 +274,7 @@ export default function ComponentLibraryPage() {
                       disabled={submitting === comp.id}
                       className="text-[10px] font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50"
                     >
-                      {submitting === comp.id ? "提交中..." : "提交到社区"}
+                      {submitting === comp.id ? "提交中…" : "提交到社区"}
                     </button>
                   ) : comp.scope === "personal" && comp.community_status === "submitted" ? (
                     <span className="text-[10px] text-violet-400">审核中</span>

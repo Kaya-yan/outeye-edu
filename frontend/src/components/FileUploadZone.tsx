@@ -191,7 +191,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
               disabled={loading}
               className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
             >
-              {loading ? "解析中..." : "上传文件"}
+              {loading ? "解析中…" : "上传文件"}
             </button>
             <button
               type="button"
@@ -199,7 +199,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
               disabled={ocrLoading}
               className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
             >
-              {ocrLoading ? "识别中..." : "拍照识别"}
+              {ocrLoading ? "识别中…" : "拍照识别"}
             </button>
           </div>
         ) : (
@@ -216,7 +216,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
         >
           <div className="text-3xl mb-2">📎</div>
           <p className="text-sm font-medium text-gray-700">
-            {loading ? "解析中..." : "拖拽文件到此处或点击上传"}
+            {loading ? "解析中…" : "拖拽文件到此处或点击上传"}
           </p>
           <p className="text-xs text-gray-400 mt-1">
             支持 PDF / DOCX / TXT / MD 文件，或拍照上传（JPG / PNG / WebP）

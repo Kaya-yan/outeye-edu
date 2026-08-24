@@ -126,7 +126,8 @@ export default function Inspector({
               onKeyDown={(e) => {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
-              className="w-16 rounded border border-slate-200 px-2 py-1 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+              aria-label="字号（像素）"
+              className="w-16 rounded border border-slate-200 px-2 py-1 text-xs text-slate-700 focus:border-blue-500"
             />
             <span className="text-xs text-slate-400">px</span>
           </div>
@@ -155,6 +156,7 @@ export default function Inspector({
             type="color"
             value={colorVal}
             onChange={(e) => onStyleChange("color", e.target.value)}
+            aria-label="文字颜色"
             className="h-7 w-12 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
           />
         </div>
@@ -167,6 +169,7 @@ export default function Inspector({
               type="color"
               value={bgVal}
               onChange={(e) => onStyleChange("background-color", e.target.value)}
+              aria-label="背景颜色"
               className="h-7 w-12 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
             />
           </div>
@@ -214,7 +217,8 @@ export default function Inspector({
           <select
             value={selectedCompId}
             onChange={(e) => setSelectedCompId(e.target.value)}
-            className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+            aria-label="选择官方组件"
+            className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:border-blue-500"
           >
             <option value="">选择组件…</option>
             {components.map((c) => (
@@ -278,13 +282,14 @@ export default function Inspector({
             <input
               type="text"
               placeholder="或输入图片 URL"
+              aria-label="图片 URL"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   const v = (e.target as HTMLInputElement).value.trim();
                   if (v) onImageReplace(target.selector, v);
                 }
               }}
-              className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+              className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-1 text-xs focus:border-blue-500"
             />
           </div>
         </div>

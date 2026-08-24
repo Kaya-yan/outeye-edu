@@ -123,7 +123,7 @@ export default function PageRangeSelector({
           disabled={loading || !isValid}
           className="px-4 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? "解析中..." : "确认提取"}
+          {loading ? "解析中…" : "确认提取"}
         </button>
       </div>
     </div>

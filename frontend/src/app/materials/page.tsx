@@ -48,7 +48,7 @@ export default function MaterialsPage() {
           我的资料会参与课文分析；公共资料是平台提供的知识资产说明，所有人可见。
         </p>
 
-        <div className="mt-5 inline-flex rounded-2xl border border-black/5 bg-white p-1 shadow-soft">
+        <div role="tablist" aria-label="资料分类" className="mt-5 inline-flex rounded-2xl border border-black/5 bg-white p-1 shadow-soft">
           <TabButton active={tab === "mine"} onClick={() => setTab("mine")}>
             我的资料
           </TabButton>
@@ -67,7 +67,7 @@ export default function MaterialsPage() {
           <section className="space-y-3">
             {!publicLoaded && !publicError && (
               <div className="page-surface-strong px-6 py-10 text-center text-sm text-ink-400">
-                加载中...
+                加载中…
               </div>
             )}
             {publicError && (
@@ -118,6 +118,8 @@ function TabButton({
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={`rounded-xl px-5 py-2 text-sm font-medium transition-colors ${
         active ? "bg-primary-600 text-white shadow-soft" : "text-ink-600 hover:bg-canvas-100"

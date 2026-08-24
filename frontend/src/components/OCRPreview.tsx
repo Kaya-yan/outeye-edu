@@ -43,7 +43,7 @@ export default function OCRPreview({
         value={editedText}
         onChange={(e) => setEditedText(e.target.value)}
         className="w-full h-40 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none resize-y"
-        placeholder="识别结果将显示在这里..."
+        placeholder="识别结果将显示在这里…"
       />
 
       {/* 操作按钮 */}
@@ -60,7 +60,7 @@ export default function OCRPreview({
           disabled={loading}
           className="px-4 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
         >
-          {loading ? "识别中..." : "重新识别"}
+          {loading ? "识别中…" : "重新识别"}
         </button>
         <button
           onClick={() => onRetry(engine === "aliyun" ? "llm" : "aliyun")}

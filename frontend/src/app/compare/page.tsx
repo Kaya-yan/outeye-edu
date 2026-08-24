@@ -153,7 +153,7 @@ export default function ComparePage() {
                 <textarea
                   value={t.text}
                   onChange={(e) => updateText(i, "text", e.target.value)}
-                  placeholder="粘贴课文内容..."
+                  placeholder="粘贴课文内容…"
                   rows={4}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                 />
@@ -175,7 +175,7 @@ export default function ComparePage() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                分析中...
+                分析中…
               </span>
             ) : (
               "开始对比分析"

@@ -161,7 +161,7 @@ export default function CoursewareEditPage() {
   if (loading) {
     return (
       <div className="h-screen desk-wash flex items-center justify-center">
-        <div className="animate-pulse text-ink-400">加载编辑器...</div>
+        <div className="animate-pulse text-ink-400">加载编辑器…</div>
       </div>
     );
   }
@@ -231,7 +231,7 @@ export default function CoursewareEditPage() {
                 disabled={saving}
                 className="btn-primary rounded-full px-5 py-2.5 text-xs disabled:opacity-50"
               >
-                {saving ? "保存中..." : "保存版本"}
+                {saving ? "保存中…" : "保存版本"}
               </button>
             </div>
           </div>

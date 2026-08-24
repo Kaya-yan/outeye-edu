@@ -175,7 +175,7 @@ export default function ProfilePage() {
               disabled={changingPwd}
               className="btn-primary rounded-xl px-5 py-2.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {changingPwd ? "修改中..." : "修改密码"}
+              {changingPwd ? "修改中…" : "修改密码"}
             </button>
             {pwdError && (
               <p className="text-sm text-rose-700">{pwdError}</p>

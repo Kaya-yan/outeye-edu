@@ -106,7 +106,7 @@ export default function PlanEvaluationForm({
         disabled={submitting || (!sentiment && rating === 0 && !comment.trim())}
         className="btn-primary mt-3 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {submitting ? "提交中..." : "提交评价"}
+        {submitting ? "提交中…" : "提交评价"}
       </button>
     </div>
   );

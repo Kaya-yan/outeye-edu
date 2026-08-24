@@ -258,8 +258,7 @@
 
   .morandi-input:focus {
     border-color: var(--accent-primary);
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(var(--bg-surface-rgb), 0.25);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 18%, transparent);
   }
 
   .btn-primary {

@@ -16,7 +16,7 @@ const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
   ssr: false,
   loading: () => (
     <div className="min-h-[240px] flex items-center justify-center text-sm text-ink-400">
-      加载编辑器...
+      加载编辑器…
     </div>
   ),
 });
@@ -580,7 +580,8 @@ function InputStep({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="课文标题（可选，上传文件时自动填入）"
-          className="w-full border-b border-black/5 bg-transparent px-3 py-2.5 text-base font-medium text-ink-900 placeholder:font-normal placeholder:text-ink-400 outline-none"
+          aria-label="课文标题"
+          className="w-full border-b border-black/5 bg-transparent px-3 py-2.5 text-base font-medium text-ink-900 placeholder:font-normal placeholder:text-ink-400 focus-visible:border-primary-400"
         />
         <div className="relative">
           <div className="min-h-[max(420px,60vh)] pt-2">
@@ -588,7 +589,7 @@ function InputStep({
               content={text}
               onChange={setText}
               frameless
-              placeholder="把课文粘贴到这里，或点左下角上传文件..."
+              placeholder="把课文粘贴到这里，或点左下角上传文件…"
             />
           </div>
           <div className="absolute bottom-1.5 left-1 z-10">
@@ -614,7 +615,7 @@ function InputStep({
           disabled={loading || wordCount < 20}
           className="btn-primary px-10 py-3.5 text-base disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? "分析中..." : "开始分析"}
+          {loading ? "分析中…" : "开始分析"}
         </button>
       </div>
     </div>
@@ -697,7 +698,7 @@ function SettingsStrip(props: SettingsProps) {
 
         {/* 课时长度 */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink-700">课时长度（分钟）</label>
+          <label htmlFor="setting-duration" className="mb-1.5 block text-sm font-medium text-ink-700">课时长度（分钟）</label>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -720,6 +721,8 @@ function SettingsStrip(props: SettingsProps) {
                   setDurationInput(String(Math.min(180, Math.max(5, n))));
                 }
               }}
+              aria-describedby={durationInvalid ? "setting-duration-error" : undefined}
+              id="setting-duration"
               className="morandi-input w-24 text-center"
             />
             <button
@@ -733,14 +736,15 @@ function SettingsStrip(props: SettingsProps) {
             <span className="text-xs text-ink-400">5–180 分钟</span>
           </div>
           {durationInvalid && (
-            <p className="mt-1.5 text-xs text-red-600">请输入 5 到 180 之间的数字</p>
+            <p id="setting-duration-error" className="mt-1.5 text-xs text-red-600">请输入 5 到 180 之间的数字</p>
           )}
         </div>
 
         {/* 课型 */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink-700">课型</label>
+          <label htmlFor="setting-course-type" className="mb-1.5 block text-sm font-medium text-ink-700">课型</label>
           <select
+            id="setting-course-type"
             value={courseType}
             onChange={(e) => setCourseType(e.target.value)}
             className="morandi-input"
@@ -754,8 +758,9 @@ function SettingsStrip(props: SettingsProps) {
 
         {/* 班级人数 */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink-700">班级人数</label>
+          <label htmlFor="setting-class-size" className="mb-1.5 block text-sm font-medium text-ink-700">班级人数</label>
           <input
+            id="setting-class-size"
             type="number"
             value={classSize}
             onChange={(e) => setClassSize(e.target.value)}
@@ -768,8 +773,9 @@ function SettingsStrip(props: SettingsProps) {
 
         {/* 学生母语 */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink-700">学生母语</label>
+          <label htmlFor="setting-native-lang" className="mb-1.5 block text-sm font-medium text-ink-700">学生母语</label>
           <select
+            id="setting-native-lang"
             value={nativeLanguage}
             onChange={(e) => setNativeLanguage(e.target.value)}
             className="morandi-input"
@@ -864,7 +870,7 @@ function AnalysisStep({
           disabled={loading}
           className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? "生成中..." : "生成教案"}
+          {loading ? "生成中…" : "生成教案"}
         </button>
       </div>
     </div>
@@ -1134,7 +1140,7 @@ function PlanStep({
               className="rounded-xl border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {generatingOther
-                ? "生成中..."
+                ? "生成中…"
                 : `生成${activeVersion === "basic" ? "增强" : "基础"}版本`}
             </button>
           )}

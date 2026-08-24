@@ -112,7 +112,7 @@ export default function ExpertReviewPage() {
         {/* Stats Section */}
         {loading ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-            加载统计数据...
+            加载统计数据…
           </div>
         ) : stats && stats.total_reviews > 0 ? (
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6 mb-6">
@@ -279,7 +279,7 @@ export default function ExpertReviewPage() {
               <textarea
                 value={form.comments}
                 onChange={(e) => setForm({ ...form, comments: e.target.value })}
-                placeholder="对教案的整体评价..."
+                placeholder="对教案的整体评价…"
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
               />
@@ -290,7 +290,7 @@ export default function ExpertReviewPage() {
               <textarea
                 value={form.suggestion}
                 onChange={(e) => setForm({ ...form, suggestion: e.target.value })}
-                placeholder="具体的改进建议..."
+                placeholder="具体的改进建议…"
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
               />
@@ -307,7 +307,7 @@ export default function ExpertReviewPage() {
               disabled={submitting}
               className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {submitting ? "提交中..." : "提交评审"}
+              {submitting ? "提交中…" : "提交评审"}
             </button>
           </div>
         )}

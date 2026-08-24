@@ -83,6 +83,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   const [history, setHistory] = useState<VePatch[][]>([[]]);
   const [hIndex, setHIndex] = useState(0);
+  const [savedSig, setSavedSig] = useState<string>("");
   const patches = history[hIndex] || [];
   const [unresolved, setUnresolved] = useState<Record<string, string>>({});
 
@@ -118,6 +119,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           (Array.isArray(schema.ve_patches) ? schema.ve_patches : []) as VePatch[]
         ).map(normalizePatch);
         setSourceHtml(savedPatches.length > 0 ? stripExportStyle(html) : html);
+        setSavedSig(JSON.stringify(savedPatches));
         if (savedPatches.length > 0) {
           setHistory([savedPatches]);
           patchesRef.current = savedPatches;
@@ -132,6 +134,18 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       cancelled = true;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (loading) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (JSON.stringify(patches) !== savedSig) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [loading, patches, savedSig]);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,6 +441,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         }
       );
       setCurrentVersion(result.version);
+      setSavedSig(JSON.stringify(patches));
       setSavedMsg("版本已保存");
       setTimeout(() => setSavedMsg(null), 2200);
     } catch (e: unknown) {

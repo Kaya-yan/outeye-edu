@@ -444,7 +444,7 @@ export default function TeachingPlanView({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                {exporting ? "生成中..." : "生成 PPT 课件"}
+                {exporting ? "生成中…" : "生成 PPT 课件"}
               </button>
               <button
                 onClick={() => onExport("docx")}
@@ -454,7 +454,7 @@ export default function TeachingPlanView({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                {exporting ? "生成中..." : "生成 Word 课件"}
+                {exporting ? "生成中…" : "生成 Word 课件"}
               </button>
               <button
                 onClick={() => onExport("html")}
@@ -464,7 +464,7 @@ export default function TeachingPlanView({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                 </svg>
-                {exporting ? "生成中..." : "生成 HTML 课件"}
+                {exporting ? "生成中…" : "生成 HTML 课件"}
               </button>
             </div>
           )}
@@ -560,7 +560,7 @@ function RevisionInput({
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="输入修改意见，如：活动时间太长、请换成小组活动、第2条建议不适合我的学生..."
+        placeholder="输入修改意见，如：活动时间太长、请换成小组活动、第2条建议不适合我的学生…"
         className="w-full text-sm border border-amber-300 rounded p-2 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-primary-500"
         rows={3}
       />
@@ -576,7 +576,7 @@ function RevisionInput({
           disabled={!value.trim() || loading}
           className="px-3 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? "修订中..." : "重新生成"}
+          {loading ? "修订中…" : "重新生成"}
         </button>
       </div>
     </div>
