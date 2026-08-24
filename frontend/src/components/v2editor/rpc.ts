@@ -39,6 +39,7 @@ export interface VeTarget {
   page: string;
   pageTitle: string;
   selector: string;
+  src: string;
   rect: VeRect;
   text: string;
   childCount: number;

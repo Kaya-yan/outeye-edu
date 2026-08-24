@@ -2,6 +2,8 @@ import type { VeTarget } from "./rpc";
 
 export const EXPORT_STYLE_ID = "ve-export-patches";
 
+export type VePatchKind = "css" | "text" | "image";
+
 export interface VePatchFingerprint {
   tag: string;
   childCount: number;
@@ -12,11 +14,18 @@ export interface VePatchFingerprint {
 
 export interface VePatch {
   id: string;
+  kind: VePatchKind;
   selector: string;
   label: string;
-  prop: string;
-  value: string;
+  prop?: string;
+  value?: string;
+  newText?: string;
+  newSrc?: string;
   fingerprint: VePatchFingerprint;
+}
+
+export function normalizePatch(p: VePatch): VePatch {
+  return { ...p, kind: p.kind || "css" };
 }
 
 export function makeFingerprint(target: VeTarget): VePatchFingerprint {
@@ -29,19 +38,28 @@ export function makeFingerprint(target: VeTarget): VePatchFingerprint {
   };
 }
 
-export function patchId(selector: string, prop: string): string {
-  return `${selector}||${prop}`;
+export function patchId(selector: string, kind: VePatchKind, prop?: string): string {
+  return kind === "css" ? `${selector}||${prop}` : `${selector}||${kind}`;
 }
 
 export function targetLabel(target: VeTarget): string {
   return target.component ? `${target.tag} · ${target.component}` : target.tag;
 }
 
+export function cssPatches(patches: VePatch[]): VePatch[] {
+  return patches.filter((p) => (p.kind || "css") === "css" && p.prop);
+}
+
+export function hasDomPatches(patches: VePatch[]): boolean {
+  return patches.some((p) => p.kind === "text" || p.kind === "image");
+}
+
 export function buildPatchCss(patches: VePatch[]): string {
-  if (patches.length === 0) return "";
+  const list = cssPatches(patches);
+  if (list.length === 0) return "";
   const declsBySelector: { [selector: string]: string[] } = {};
   const order: string[] = [];
-  for (const p of patches) {
+  for (const p of list) {
     if (!declsBySelector[p.selector]) {
       declsBySelector[p.selector] = [];
       order.push(p.selector);

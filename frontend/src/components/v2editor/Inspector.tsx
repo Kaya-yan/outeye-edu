@@ -23,12 +23,16 @@ export default function Inspector({
   target,
   patchValue,
   onStyleChange,
+  onStartTextEdit,
+  onImageReplace,
   onSelectChain,
   onClose,
 }: {
   target: VeTarget;
   patchValue: (prop: string) => string | undefined;
   onStyleChange: (prop: string, value: string | null) => void;
+  onStartTextEdit: (selector: string) => void;
+  onImageReplace: (selector: string, src: string) => void;
   onSelectChain: (node: VeChainNode) => void;
   onClose: () => void;
 }) {
@@ -179,7 +183,63 @@ export default function Inspector({
         >
           {hidden ? "恢复显示该元素" : "隐藏该元素"}
         </button>
+
+        {target.childCount === 0 && target.tag !== "img" && (
+          <button
+            onClick={() => onStartTextEdit(target.selector)}
+            className="w-full rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"
+          >
+            编辑文本（或双击该元素）
+          </button>
+        )}
       </div>
+
+      {target.tag === "img" && (
+        <div className="px-4 py-3 border-b border-slate-100 space-y-2.5">
+          <div className="text-[10px] uppercase tracking-widest text-slate-400">图片</div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            {target.src.startsWith("data:") ? (
+              <span className="text-[11px] text-slate-500">内嵌图片（base64）</span>
+            ) : (
+              <span className="text-[11px] text-slate-500 break-all line-clamp-2">{target.src || "无 src"}</span>
+            )}
+          </div>
+          <label className="block w-full cursor-pointer rounded-lg bg-blue-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-blue-700">
+            上传图片替换
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                if (f.size > 2 * 1024 * 1024) {
+                  alert("图片过大（上限 2MB），请压缩后再上传");
+                  e.target.value = "";
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => onImageReplace(target.selector, String(reader.result));
+                reader.readAsDataURL(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              placeholder="或输入图片 URL"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const v = (e.target as HTMLInputElement).value.trim();
+                  if (v) onImageReplace(target.selector, v);
+                }
+              }}
+              className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
 
       {target.text && (
         <div className="px-4 py-3">

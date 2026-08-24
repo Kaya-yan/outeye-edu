@@ -15,8 +15,10 @@ import Inspector from "./Inspector";
 import {
   buildPatchCss,
   exportFileName,
+  hasDomPatches,
   injectExportStyle,
   makeFingerprint,
+  normalizePatch,
   patchId,
   stripExportStyle,
   targetLabel,
@@ -72,10 +74,15 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [unresolved, setUnresolved] = useState<Record<string, string>>({});
 
   const css = useMemo(() => buildPatchCss(patches), [patches]);
+  const domPatches = useMemo(
+    () => patches.filter((p) => p.kind === "text" || p.kind === "image"),
+    [patches]
+  );
   const patchesRef = useRef<VePatch[]>([]);
   useEffect(() => {
     patchesRef.current = patches;
   }, [patches]);
+  const exportResolveRef = useRef<((html: string) => void) | null>(null);
 
   const sendRpc = useCallback((type: string, payload: Record<string, unknown>) => {
     bridgeRef.current?.send(iframeRef.current?.contentWindow || null, type, payload);
@@ -94,7 +101,9 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         setCurrentVersion(v);
         const schema = (v?.editor_schema_json || {}) as { ve_patches?: VePatch[] };
         const html = v?.rendered_html || "";
-        const savedPatches = Array.isArray(schema.ve_patches) ? schema.ve_patches : [];
+        const savedPatches = (
+          (Array.isArray(schema.ve_patches) ? schema.ve_patches : []) as VePatch[]
+        ).map(normalizePatch);
         setSourceHtml(savedPatches.length > 0 ? stripExportStyle(html) : html);
         if (savedPatches.length > 0) {
           setHistory([savedPatches]);
@@ -117,9 +126,6 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         setAgentReady(true);
         setPages((payload.pages as VePageInfo[]) || []);
         const cur = patchesRef.current;
-        bridge.send(iframeRef.current?.contentWindow || null, "ve:patches:apply", {
-          css: buildPatchCss(cur),
-        });
         if (cur.length > 0) {
           bridge.send(iframeRef.current?.contentWindow || null, "ve:verify", {
             items: cur.map((p) => ({
@@ -131,6 +137,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             })),
           });
         }
+        bridge.send(iframeRef.current?.contentWindow || null, "ve:patches:applyAll", {
+          css: buildPatchCss(cur),
+          patches: cur.filter((p) => p.kind === "text" || p.kind === "image"),
+        });
       }
       if (type === "ve:pick") {
         setTarget(payload as unknown as VeTarget);
@@ -138,6 +148,15 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       }
       if (type === "ve:rect" && payload.rect) {
         setRect(payload.rect as VeRect);
+      }
+      if (type === "ve:text:commit") {
+        const sel = String(payload.selector || "");
+        const text = typeof payload.text === "string" ? payload.text : "";
+        if (sel) upsertTextRef.current(sel, text);
+      }
+      if (type === "ve:export:result" && exportResolveRef.current) {
+        exportResolveRef.current(String(payload.html || ""));
+        exportResolveRef.current = null;
       }
       if (type === "ve:verify:result") {
         const map: Record<string, string> = {};
@@ -157,8 +176,8 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!agentReady) return;
-    sendRpc("ve:patches:apply", { css });
-  }, [agentReady, css, sendRpc]);
+    sendRpc("ve:patches:applyAll", { css, patches: domPatches });
+  }, [agentReady, css, domPatches, sendRpc]);
 
   const mutatePatches = useCallback(
     (next: VePatch[]) => {
@@ -198,7 +217,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const onStyleChange = useCallback(
     (prop: string, value: string | null) => {
       if (!target) return;
-      const pid = patchId(target.selector, prop);
+      const pid = patchId(target.selector, "css", prop);
       const exists = patches.find((p) => p.id === pid);
       if (value === null) {
         if (exists) mutatePatches(patches.filter((p) => p.id !== pid));
@@ -209,6 +228,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         ? { ...exists, value }
         : {
             id: pid,
+            kind: "css",
             selector: target.selector,
             label: targetLabel(target),
             prop,
@@ -221,6 +241,85 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     },
     [target, patches, mutatePatches]
   );
+
+  const selectorTailLabel = useCallback((selector: string) => {
+    const tail = selector.split(" > ").pop() || selector;
+    return tail.replace(/:nth-of-type\(\d+\)/g, "");
+  }, []);
+
+  const upsertTextRef = useRef<(sel: string, text: string) => void>(() => {});
+
+  const upsertTextPatch = useCallback(
+    (selector: string, text: string) => {
+      const pid = patchId(selector, "text");
+      const exists = patches.find((p) => p.id === pid);
+      const label =
+        target && target.selector === selector
+          ? targetLabel(target)
+          : `文本 · ${selectorTailLabel(selector)}`;
+      if (exists && exists.newText === text) return;
+      const next: VePatch = exists
+        ? { ...exists, newText: text }
+        : {
+            id: pid,
+            kind: "text",
+            selector,
+            label,
+            newText: text,
+            fingerprint:
+              target && target.selector === selector
+                ? makeFingerprint(target)
+                : { tag: selectorTailLabel(selector), childCount: 0, text: "", w: 0, h: 0 },
+          };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === pid ? next : p)) : patches.concat([next])
+      );
+    },
+    [patches, mutatePatches, target, selectorTailLabel]
+  );
+  useEffect(() => {
+    upsertTextRef.current = upsertTextPatch;
+  }, [upsertTextPatch]);
+
+  const onImageReplace = useCallback(
+    (selector: string, src: string) => {
+      if (!target) return;
+      const pid = patchId(selector, "image");
+      const exists = patches.find((p) => p.id === pid);
+      const next: VePatch = exists
+        ? { ...exists, newSrc: src }
+        : {
+            id: pid,
+            kind: "image",
+            selector,
+            label: targetLabel(target),
+            newSrc: src,
+            fingerprint: makeFingerprint(target),
+          };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === pid ? next : p)) : patches.concat([next])
+      );
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const getExportHtml = useCallback((): Promise<string> => {
+    if (!hasDomPatches(patches)) {
+      return Promise.resolve(
+        patches.length > 0 ? injectExportStyle(sourceHtml, css) : sourceHtml
+      );
+    }
+    return new Promise<string>((resolve) => {
+      exportResolveRef.current = resolve;
+      sendRpc("ve:export", { css });
+      setTimeout(() => {
+        if (exportResolveRef.current === resolve) {
+          exportResolveRef.current = null;
+          resolve(injectExportStyle(sourceHtml, css));
+        }
+      }, 3000);
+    });
+  }, [patches, sourceHtml, css, sendRpc]);
 
   const patchValueFor = useCallback(
     (prop: string) =>
@@ -252,7 +351,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     setSaving(true);
     setSavedMsg(null);
     try {
-      const htmlOut = patches.length > 0 ? injectExportStyle(sourceHtml, css) : sourceHtml;
+      const htmlOut = await getExportHtml();
       const result = await apiPost<{ version: CoursewareVersion }>(
         `/courseware/${projectId}/versions`,
         {
@@ -274,11 +373,11 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [projectId, sourceHtml, patches, css, currentVersion]);
+  }, [projectId, sourceHtml, getExportHtml, patches, currentVersion]);
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!sourceHtml) return;
-    const htmlOut = patches.length > 0 ? injectExportStyle(sourceHtml, css) : sourceHtml;
+    const htmlOut = await getExportHtml();
     const blob = new Blob([htmlOut], { type: "text/html;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -287,7 +386,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     link.click();
     link.remove();
     URL.revokeObjectURL(link.href);
-  }, [sourceHtml, patches, css, project]);
+  }, [sourceHtml, getExportHtml, project]);
 
   if (loading) {
     return (
@@ -382,7 +481,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             V1 编辑器
           </Link>
           <button
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={!sourceHtml}
             className="rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50"
           >
@@ -445,6 +544,8 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             target={target}
             patchValue={patchValueFor}
             onStyleChange={onStyleChange}
+            onStartTextEdit={(sel) => sendRpc("ve:text:edit", { selector: sel })}
+            onImageReplace={onImageReplace}
             onSelectChain={(node) => sendRpc("ve:pick:goto", { selector: node.selector })}
             onClose={() => setTarget(null)}
           />
@@ -463,9 +564,18 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                 >
                   <div className="min-w-0 flex-1">
                     <span className="text-xs text-slate-700 truncate">{p.label}</span>
-                    <span className="ml-1.5 text-[11px] text-slate-400 font-mono">
-                      {p.prop}: {p.value}
-                    </span>
+                    {p.kind === "text" ? (
+                      <span className="ml-1.5 text-[11px] text-slate-400">
+                        文本：{(p.newText || "").slice(0, 24) || "（空）"}
+                        {(p.newText || "").length > 24 ? "…" : ""}
+                      </span>
+                    ) : p.kind === "image" ? (
+                      <span className="ml-1.5 text-[11px] text-slate-400">图片已替换</span>
+                    ) : (
+                      <span className="ml-1.5 text-[11px] text-slate-400 font-mono">
+                        {p.prop}: {p.value}
+                      </span>
+                    )}
                     {unresolved[p.id] && (
                       <span
                         className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700"
