@@ -196,11 +196,11 @@ export default function CoursewareDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => router.push(`/courseware/${projectId}/edit`)} className="btn-primary rounded-full px-5 py-3 text-sm">
+            <button onClick={() => router.push(`/courseware/${projectId}/edit-v2`)} className="btn-primary rounded-full px-5 py-3 text-sm">
               进入编辑器
             </button>
-            <button onClick={() => router.push(`/courseware/${projectId}/edit-v2`)} className="btn-secondary rounded-full px-5 py-3 text-sm">
-              V2 编辑器 · 预览
+            <button onClick={() => router.push(`/courseware/${projectId}/edit`)} className="btn-secondary rounded-full px-5 py-3 text-sm">
+              旧版编辑器
             </button>
             <button onClick={() => router.push(`/courseware/${projectId}/present`)} className="btn-secondary rounded-full px-5 py-3 text-sm">
               课堂展示
@@ -215,7 +215,7 @@ export default function CoursewareDetailPage() {
             <div className="section-title mb-2">Next Action</div>
             <h2 className="text-xl font-semibold text-ink-900">继续生产</h2>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link href={`/courseware/${projectId}/edit`} className="btn-primary rounded-full px-4 py-2 text-xs">
+              <Link href={`/courseware/${projectId}/edit-v2`} className="btn-primary rounded-full px-4 py-2 text-xs">
                 去编辑
               </Link>
               <Link href={`/courseware/${projectId}/present`} className="btn-secondary rounded-full px-4 py-2 text-xs">

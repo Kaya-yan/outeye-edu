@@ -967,7 +967,7 @@ function PlanStep({
               setCoursewareProgress("AI 完整生成暂不可用，已用简化版生成，即将进入编辑器…");
               await new Promise((r) => setTimeout(r, 1500));
             }
-            router.push(`/courseware/${st.project_id}/edit`);
+            router.push(`/courseware/${st.project_id}/edit-v2`);
             return;
           }
           // PPT / Word：认证拉取产物并触发浏览器下载
