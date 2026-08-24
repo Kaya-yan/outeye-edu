@@ -12,6 +12,16 @@ import {
 } from "./rpc";
 import { injectAgent } from "./pickAgent";
 import Inspector from "./Inspector";
+import {
+  buildPatchCss,
+  exportFileName,
+  injectExportStyle,
+  makeFingerprint,
+  patchId,
+  stripExportStyle,
+  targetLabel,
+  type VePatch,
+} from "./patches";
 
 interface CoursewareProject {
   id: string;
@@ -32,6 +42,8 @@ interface CoursewareVersion {
   change_summary: string | null;
   created_at: string;
 }
+
+const HISTORY_CAP = 50;
 
 export default function V2Editor({ projectId }: { projectId: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -54,6 +66,21 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
+  const [history, setHistory] = useState<VePatch[][]>([[]]);
+  const [hIndex, setHIndex] = useState(0);
+  const patches = history[hIndex] || [];
+  const [unresolved, setUnresolved] = useState<Record<string, string>>({});
+
+  const css = useMemo(() => buildPatchCss(patches), [patches]);
+  const patchesRef = useRef<VePatch[]>([]);
+  useEffect(() => {
+    patchesRef.current = patches;
+  }, [patches]);
+
+  const sendRpc = useCallback((type: string, payload: Record<string, unknown>) => {
+    bridgeRef.current?.send(iframeRef.current?.contentWindow || null, type, payload);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -65,7 +92,14 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         setProject(data);
         const v = data.versions?.[0] || null;
         setCurrentVersion(v);
-        setSourceHtml(v?.rendered_html || "");
+        const schema = (v?.editor_schema_json || {}) as { ve_patches?: VePatch[] };
+        const html = v?.rendered_html || "";
+        const savedPatches = Array.isArray(schema.ve_patches) ? schema.ve_patches : [];
+        setSourceHtml(savedPatches.length > 0 ? stripExportStyle(html) : html);
+        if (savedPatches.length > 0) {
+          setHistory([savedPatches]);
+          patchesRef.current = savedPatches;
+        }
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : "加载课件失败");
       } finally {
@@ -82,6 +116,21 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       if (type === "ve:ready") {
         setAgentReady(true);
         setPages((payload.pages as VePageInfo[]) || []);
+        const cur = patchesRef.current;
+        bridge.send(iframeRef.current?.contentWindow || null, "ve:patches:apply", {
+          css: buildPatchCss(cur),
+        });
+        if (cur.length > 0) {
+          bridge.send(iframeRef.current?.contentWindow || null, "ve:verify", {
+            items: cur.map((p) => ({
+              id: p.id,
+              selector: p.selector,
+              tag: p.fingerprint.tag,
+              childCount: p.fingerprint.childCount,
+              text: p.fingerprint.text,
+            })),
+          });
+        }
       }
       if (type === "ve:pick") {
         setTarget(payload as unknown as VeTarget);
@@ -90,43 +139,131 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       if (type === "ve:rect" && payload.rect) {
         setRect(payload.rect as VeRect);
       }
+      if (type === "ve:verify:result") {
+        const map: Record<string, string> = {};
+        for (const r of (payload.results as Array<{ id: string; ok: boolean; reason: string }>) || []) {
+          if (!r.ok) map[r.id] = r.reason || "无法定位";
+        }
+        setUnresolved(map);
+      }
     });
     bridgeRef.current = bridge;
     return () => {
       bridge.dispose();
       bridgeRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel]);
 
-  const setPickMode = useCallback((enabled: boolean) => {
-    setPickOn(enabled);
-    bridgeRef.current?.send(iframeRef.current?.contentWindow || null, "ve:pick:set", { enabled });
-    if (!enabled) setTarget(null);
-  }, []);
+  useEffect(() => {
+    if (!agentReady) return;
+    sendRpc("ve:patches:apply", { css });
+  }, [agentReady, css, sendRpc]);
+
+  const mutatePatches = useCallback(
+    (next: VePatch[]) => {
+      const cur = history[hIndex] || [];
+      const sameShape =
+        cur.length === next.length && cur.every((p, i) => p.id === next[i].id);
+      if (sameShape) {
+        const copy = history.slice();
+        copy[hIndex] = next;
+        setHistory(copy);
+        return;
+      }
+      const grown = history.slice(0, hIndex + 1).concat([next]);
+      const capped =
+        grown.length > HISTORY_CAP ? grown.slice(grown.length - HISTORY_CAP) : grown;
+      setHistory(capped);
+      setHIndex(capped.length - 1);
+    },
+    [history, hIndex]
+  );
+
+  const undo = useCallback(() => setHIndex((i) => Math.max(0, i - 1)), []);
+  const redo = useCallback(
+    () => setHIndex((i) => Math.min(history.length - 1, i + 1)),
+    [history.length]
+  );
+
+  const setPickMode = useCallback(
+    (enabled: boolean) => {
+      setPickOn(enabled);
+      sendRpc("ve:pick:set", { enabled });
+      if (!enabled) setTarget(null);
+    },
+    [sendRpc]
+  );
+
+  const onStyleChange = useCallback(
+    (prop: string, value: string | null) => {
+      if (!target) return;
+      const pid = patchId(target.selector, prop);
+      const exists = patches.find((p) => p.id === pid);
+      if (value === null) {
+        if (exists) mutatePatches(patches.filter((p) => p.id !== pid));
+        return;
+      }
+      if (exists && exists.value === value) return;
+      const next: VePatch = exists
+        ? { ...exists, value }
+        : {
+            id: pid,
+            selector: target.selector,
+            label: targetLabel(target),
+            prop,
+            value,
+            fingerprint: makeFingerprint(target),
+          };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === pid ? next : p)) : patches.concat([next])
+      );
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const patchValueFor = useCallback(
+    (prop: string) =>
+      patches.find((p) => p.prop === prop && p.selector === target?.selector)?.value,
+    [patches, target]
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
       if (e.key === "Escape") {
         if (pickOn) setPickMode(false);
         else setTarget(null);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pickOn, setPickMode]);
+  }, [pickOn, setPickMode, undo, redo]);
 
   const handleSaveVersion = useCallback(async () => {
     if (!sourceHtml) return;
     setSaving(true);
     setSavedMsg(null);
     try {
+      const htmlOut = patches.length > 0 ? injectExportStyle(sourceHtml, css) : sourceHtml;
       const result = await apiPost<{ version: CoursewareVersion }>(
         `/courseware/${projectId}/versions`,
         {
-          editor_schema_json: currentVersion?.editor_schema_json || {},
-          rendered_html: sourceHtml,
+          editor_schema_json: {
+            ...((currentVersion?.editor_schema_json as object) || {}),
+            ve_patches: patches,
+          },
+          rendered_html: htmlOut,
           save_type: "manual_snapshot",
-          change_summary: "V2 编辑器保存",
+          change_summary:
+            patches.length > 0 ? `V2 编辑 · ${patches.length} 处调整` : "V2 编辑器保存",
         }
       );
       setCurrentVersion(result.version);
@@ -137,10 +274,27 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [projectId, sourceHtml, currentVersion]);
+  }, [projectId, sourceHtml, patches, css, currentVersion]);
+
+  const handleExport = useCallback(() => {
+    if (!sourceHtml) return;
+    const htmlOut = patches.length > 0 ? injectExportStyle(sourceHtml, css) : sourceHtml;
+    const blob = new Blob([htmlOut], { type: "text/html;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = exportFileName(project?.title || "courseware");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+  }, [sourceHtml, patches, css, project]);
 
   if (loading) {
-    return <div className="h-screen flex items-center justify-center text-slate-400">加载 V2 编辑器…</div>;
+    return (
+      <div className="h-screen flex items-center justify-center text-slate-400">
+        加载 V2 编辑器…
+      </div>
+    );
   }
 
   if (error || !project) {
@@ -165,13 +319,26 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     <div className="h-screen flex flex-col bg-slate-50">
       <header className="flex-shrink-0 h-12 border-b border-slate-200 bg-white flex items-center justify-between px-4 gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href={`/courseware/${projectId}`} className="text-slate-400 hover:text-slate-700 text-sm flex-shrink-0">
+          <Link
+            href={`/courseware/${projectId}`}
+            className="text-slate-400 hover:text-slate-700 text-sm flex-shrink-0"
+          >
             ←
           </Link>
           <span className="font-medium text-slate-800 truncate">{project.title}</span>
           <span className="hidden sm:inline text-xs text-slate-400">
-            v{currentVersion?.version_number || 1} · {pages.length > 0 ? `${pages.length} 页` : project.mode === "slides" ? "幻灯片式" : "长页面式"}
+            v{currentVersion?.version_number || 1} ·{" "}
+            {pages.length > 0
+              ? `${pages.length} 页`
+              : project.mode === "slides"
+                ? "幻灯片式"
+                : "长页面式"}
           </span>
+          {patches.length > 0 && (
+            <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] text-blue-700">
+              {patches.length} 处调整
+            </span>
+          )}
           {project.source_meta?.generated_by === "template_fallback" && (
             <span className="hidden md:inline rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[10px] text-amber-800">
               简化版生成
@@ -189,6 +356,24 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           >
             {pickOn ? "拾取中 · 点击页面元素（Esc 退出）" : "选取元素"}
           </button>
+          <div className="flex rounded border border-slate-200 overflow-hidden">
+            <button
+              onClick={undo}
+              disabled={hIndex === 0}
+              className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              title="撤销 (Ctrl+Z)"
+            >
+              撤销
+            </button>
+            <button
+              onClick={redo}
+              disabled={hIndex >= history.length - 1}
+              className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 border-l border-slate-200"
+              title="重做 (Ctrl+Shift+Z)"
+            >
+              重做
+            </button>
+          </div>
           {savedMsg && <span className="text-xs text-emerald-600">{savedMsg}</span>}
           <Link
             href={`/courseware/${projectId}/edit`}
@@ -196,6 +381,13 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           >
             V1 编辑器
           </Link>
+          <button
+            onClick={handleExport}
+            disabled={!sourceHtml}
+            className="rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+          >
+            导出 HTML
+          </button>
           <button
             onClick={() => void handleSaveVersion()}
             disabled={saving || !sourceHtml}
@@ -241,16 +433,58 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           </div>
         )}
 
+        {pickOn && !target && (
+          <div className="absolute left-1/2 top-4 -translate-x-1/2 z-20 rounded-full bg-blue-600/90 px-4 py-1.5 text-xs text-white shadow">
+            点击课件中的任意元素开始编辑
+          </div>
+        )}
+
         {target && (
           <Inspector
+            key={target.selector}
             target={target}
-            onSelectChain={(node) =>
-              bridgeRef.current?.send(iframeRef.current?.contentWindow || null, "ve:pick:goto", {
-                selector: node.selector,
-              })
-            }
+            patchValue={patchValueFor}
+            onStyleChange={onStyleChange}
+            onSelectChain={(node) => sendRpc("ve:pick:goto", { selector: node.selector })}
             onClose={() => setTarget(null)}
           />
+        )}
+
+        {patches.length > 0 && (
+          <div className="absolute right-4 bottom-4 z-30 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] uppercase tracking-widest text-slate-400">
+              调整记录（保存后生效于展示与导出）
+            </div>
+            <ul className="max-h-56 overflow-y-auto px-2 py-2 space-y-1">
+              {patches.map((p) => (
+                <li
+                  key={p.id}
+                  className="group flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs text-slate-700 truncate">{p.label}</span>
+                    <span className="ml-1.5 text-[11px] text-slate-400 font-mono">
+                      {p.prop}: {p.value}
+                    </span>
+                    {unresolved[p.id] && (
+                      <span
+                        className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700"
+                        title={unresolved[p.id]}
+                      >
+                        ⚠ {unresolved[p.id]}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => mutatePatches(patches.filter((x) => x.id !== p.id))}
+                    className="opacity-0 group-hover:opacity-100 text-[11px] text-slate-400 hover:text-red-500 flex-shrink-0"
+                  >
+                    移除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {!agentReady && srcDoc && (

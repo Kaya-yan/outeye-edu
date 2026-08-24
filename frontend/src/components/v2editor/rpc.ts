@@ -41,6 +41,7 @@ export interface VeTarget {
   selector: string;
   rect: VeRect;
   text: string;
+  childCount: number;
   styles: VeTargetStyles;
   chain: VeChainNode[];
 }
