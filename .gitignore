@@ -104,3 +104,7 @@ task_plan.md
 
 # 提示词回归产物（含课文全文，不入库）
 backend/regression_runs/
+
+# V2 benchmark 衍生产物（样本/报告；build/ 已被忽略）
+frontend/scripts/v2benchmark/samples/
+frontend/scripts/v2benchmark/report.json
