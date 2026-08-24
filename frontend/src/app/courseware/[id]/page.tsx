@@ -199,6 +199,9 @@ export default function CoursewareDetailPage() {
             <button onClick={() => router.push(`/courseware/${projectId}/edit`)} className="btn-primary rounded-full px-5 py-3 text-sm">
               进入编辑器
             </button>
+            <button onClick={() => router.push(`/courseware/${projectId}/edit-v2`)} className="btn-secondary rounded-full px-5 py-3 text-sm">
+              V2 编辑器 · 预览
+            </button>
             <button onClick={() => router.push(`/courseware/${projectId}/present`)} className="btn-secondary rounded-full px-5 py-3 text-sm">
               课堂展示
             </button>
