@@ -76,4 +76,5 @@ async def recognize_with_llm(
 
     except Exception as e:
         logger.error(f"LLM 视觉识别失败: {e}")
-        return {"text": "", "confidence": 0, "engine": "llm", "error": "LLM 识别服务异常，请稍后重试"}
+        reason = str(e).strip()[:120] or type(e).__name__
+        return {"text": "", "confidence": 0, "engine": "llm", "error": f"LLM 识别失败：{reason}"}

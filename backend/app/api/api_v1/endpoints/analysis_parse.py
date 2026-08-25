@@ -192,6 +192,14 @@ async def parse_file(
             pass
 
 
+@router.get("/ocr-status")
+async def ocr_status():
+    """图片识别能力探针：前端据此决定是否展示拍照入口（无需登录）"""
+    aliyun = bool(settings.ALIYUN_OCR_ACCESS_KEY_ID and settings.ALIYUN_OCR_ACCESS_KEY_SECRET)
+    vision = bool(settings.LLM_VISION_MODEL)
+    return {"available": aliyun or vision, "engines": {"aliyun": aliyun, "llm_vision": vision}}
+
+
 @router.post("/ocr-image", response_model=OCRImageResponse)
 async def ocr_image(
     file: UploadFile = File(...),
@@ -205,6 +213,17 @@ async def ocr_image(
     支持 JPG / PNG / WebP 格式。
     engine: aliyun（默认）或 llm
     """
+    aliyun_configured = bool(settings.ALIYUN_OCR_ACCESS_KEY_ID and settings.ALIYUN_OCR_ACCESS_KEY_SECRET)
+
+    if engine == "aliyun" and not aliyun_configured and not settings.LLM_VISION_MODEL:
+        # 两条链都不可用：短路返回 503，不空跑注定失败的调用
+        raise HTTPException(
+            503,
+            "图片识别服务未配置（阿里云 OCR 凭证缺失，且未配置视觉模型），请联系管理员",
+        )
+    if engine == "llm" and not settings.LLM_VISION_MODEL:
+        raise HTTPException(503, "视觉识别未配置（LLM_VISION_MODEL 未设置），无法使用 LLM 识别")
+
     ext = _get_extension(file.filename or "")
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, f"不支持的图片格式: {ext}，仅支持 {', '.join(ALLOWED_IMAGE_EXTENSIONS)}")
@@ -232,10 +251,14 @@ async def ocr_image(
     result = {}
 
     if engine == "aliyun":
-        result = await _ocr_aliyun(content)
-        # 如果阿里云失败，自动降级到 LLM
-        if not result.get("text") and result.get("error"):
-            logger.warning(f"阿里云 OCR 失败，降级到 LLM: {result['error']}")
+        if aliyun_configured:
+            result = await _ocr_aliyun(content)
+            # 阿里云失败时仅在视觉模型可用时降级
+            if not result.get("text") and result.get("error"):
+                logger.warning(f"阿里云 OCR 失败: {result['error']}")
+                if settings.LLM_VISION_MODEL:
+                    result = await _ocr_llm(content)
+        else:
             result = await _ocr_llm(content)
     elif engine == "llm":
         result = await _ocr_llm(content)
@@ -244,7 +267,7 @@ async def ocr_image(
 
     if not result.get("text") and result.get("error"):
         logger.error(f"OCR 识别失败: {result['error']}")
-        raise HTTPException(500, "OCR 识别失败，请稍后重试")
+        raise HTTPException(503, f"图片识别失败：{result['error']}")
 
     text = result.get("text", "")
     return OCRImageResponse(
@@ -304,12 +327,15 @@ async def _ocr_aliyun(image_bytes: bytes) -> dict:
 
 
 async def _ocr_llm(image_bytes: bytes) -> dict:
-    """调用 LLM 视觉识别"""
+    """调用 LLM 视觉识别（仅当配置了多模态模型）"""
+    if not settings.LLM_VISION_MODEL:
+        return {"text": "", "confidence": 0, "engine": "llm", "error": "视觉模型未配置"}
+
     from app.services.ocr.llm_vision import recognize_with_llm
 
     return await recognize_with_llm(
         image_bytes=image_bytes,
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
-        model=settings.LLM_MODEL,
+        model=settings.LLM_VISION_MODEL,
     )

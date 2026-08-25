@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     ALIYUN_OCR_ACCESS_KEY_SECRET: Optional[str] = None
     ALIYUN_OCR_ENDPOINT: str = "ocr-api.cn-hangzhou.aliyuncs.com"
 
+    # 视觉模型（可选）：仅当 LLM 供应商提供多模态模型时填写（DeepSeek 文本模型不支持图片）
+    LLM_VISION_MODEL: Optional[str] = None
+
     # 前端配置（可选）
     NEXT_PUBLIC_API_URL: Optional[str] = None
 

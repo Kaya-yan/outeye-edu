@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { apiUpload } from "@/lib/api";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { apiUpload, apiGet } from "@/lib/api";
 import PageRangeSelector from "./PageRangeSelector";
 import OCRPreview from "./OCRPreview";
 
@@ -42,6 +42,18 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [pendingImages, setPendingImages] = useState<File[]>([]);
+  // 图片识别能力：null=未知或探测失败（按可用展示），false=后端确认不可用
+  const [ocrAvailable, setOcrAvailable] = useState<boolean | null>(null);
+  const ocrAvailableRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    apiGet<{ available: boolean }>("/analysis/ocr-status")
+      .then((s) => {
+        setOcrAvailable(s.available);
+        ocrAvailableRef.current = s.available;
+      })
+      .catch(() => {});
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +117,10 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
 
   // OCR 识别图片
   const handleImageOCR = async (files: File[], engine: "aliyun" | "llm" = "aliyun") => {
+    if (ocrAvailableRef.current === false) {
+      setError("图片识别服务暂不可用，请上传 PDF / DOCX / TXT / MD 文件");
+      return;
+    }
     setOcrLoading(true);
     setError("");
     setPendingImages(Array.from(files));
@@ -193,14 +209,16 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
             >
               {loading ? "解析中…" : "上传文件"}
             </button>
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              disabled={ocrLoading}
-              className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
-            >
-              {ocrLoading ? "识别中…" : "拍照识别"}
-            </button>
+            {ocrAvailable !== false && (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={ocrLoading}
+                className="btn-secondary px-3.5 py-2 text-xs disabled:opacity-50"
+              >
+                {ocrLoading ? "识别中…" : "拍照识别"}
+              </button>
+            )}
           </div>
         ) : (
         <div
@@ -219,20 +237,22 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
             {loading ? "解析中…" : "拖拽文件到此处或点击上传"}
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            支持 PDF / DOCX / TXT / MD 文件，或拍照上传（JPG / PNG / WebP）
+            支持 PDF / DOCX / TXT / MD 文件{ocrAvailable !== false ? "，或拍照上传（JPG / PNG / WebP）" : ""}
           </p>
 
           {/* 拍照按钮 */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              imageInputRef.current?.click();
-            }}
-            className="mt-3 px-4 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            📷 上传照片
-          </button>
+          {ocrAvailable !== false && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                imageInputRef.current?.click();
+              }}
+              className="mt-3 px-4 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              📷 上传照片
+            </button>
+          )}
         </div>
         )
       )}

@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import time
 import sys
+import uuid
 from loguru import logger
 
 from app.core.config import settings, init_directories
@@ -208,9 +209,10 @@ app.add_middleware(
 # 请求日志中间件
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """记录请求日志"""
+    """记录请求日志，并回显 X-Request-ID 便于浏览器↔后端日志对齐"""
     start_time = time.time()
     path = request.url.path
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
 
     # 处理请求
     response = await call_next(request)
@@ -224,11 +226,13 @@ async def log_requests(request: Request, call_next):
         logger.info(
             f"{request.method} {path} "
             f"status={response.status_code} "
-            f"duration={process_time:.4f}s"
+            f"duration={process_time:.4f}s "
+            f"rid={request_id}"
         )
 
     # 添加处理时间到响应头
     response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-Request-ID"] = request_id
 
     return response
 
