@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = ["/login", "/register"];
+const publicPaths = ["/login", "/register", "/terms", "/privacy"];
 
 // 编辑器为 public 静态文件（如 /editor/index.html），不能落入下方点号放行分支
 const authRequiredPrefixes = ["/editor", "/html-workbench"];

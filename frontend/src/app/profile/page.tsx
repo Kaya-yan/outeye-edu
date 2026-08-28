@@ -308,6 +308,12 @@ export default function ProfilePage() {
 
         <p className="mt-3 text-xs text-ink-400">技术架构：Next.js 前端 + FastAPI 后端，内置大语言模型与知识检索。</p>
 
+        <p className="mt-4 text-xs text-ink-400">
+          <a href="/terms" className="legal-link">《用户协议》</a>
+          <span className="mx-2">·</span>
+          <a href="/privacy" className="legal-link">《隐私政策》</a>
+        </p>
+
         <dl className="mt-5 space-y-3 border-t border-black/5 pt-4 text-sm">
           <div className="flex items-center justify-between py-2 border-b border-black/5">
             <dt className="text-ink-500">平台版本</dt>

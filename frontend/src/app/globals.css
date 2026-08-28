@@ -460,3 +460,24 @@
 [data-theme="dark"] .border-gray-100 { border-color: var(--border-subtle); }
 [data-theme="dark"] .border-gray-200 { border-color: var(--border-medium); }
 
+/* 法律文档链接：亮色蓝 #2563eb，暗色换亮蓝保持可辨（darkMode 未配置，走 data-theme 覆盖） */
+.legal-link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+.legal-link:hover { color: #1d4ed8; }
+[data-theme="dark"] .legal-link { color: #60a5fa; }
+[data-theme="dark"] .legal-link:hover { color: #93c5fd; }
+
+/* 注册页协议复选框未勾选时的温和抖动提示 */
+@keyframes legalShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.animate-legal-shake { animation: legalShake 0.4s ease-in-out; }
+

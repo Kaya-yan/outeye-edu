@@ -14,11 +14,20 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [agreeShake, setAgreeShake] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
 
+    if (!agreed) {
+      setError("请先阅读并同意《用户协议》和《隐私政策》");
+      setAgreeShake(false);
+      requestAnimationFrame(() => setAgreeShake(true));
+      window.setTimeout(() => setAgreeShake(false), 600);
+      return;
+    }
     if (password !== confirmPassword) {
       setError("两次输入的密码不一致");
       return;
@@ -167,6 +176,24 @@ export default function RegisterPage() {
                       placeholder="再次输入密码"
                     />
                   </div>
+
+                  <label className={`flex items-start gap-2.5 cursor-pointer select-none ${agreeShake ? "animate-legal-shake" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={agreed}
+                      onChange={(e) => {
+                        setAgreed(e.target.checked);
+                        if (e.target.checked) setError("");
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-primary-600 accent-primary-600 focus:ring-primary-300"
+                    />
+                    <span className="text-xs leading-5 text-ink-300">
+                      我已阅读并同意
+                      <Link href="/terms" target="_blank" className="legal-link">《用户协议》</Link>
+                      和
+                      <Link href="/privacy" target="_blank" className="legal-link">《隐私政策》</Link>
+                    </span>
+                  </label>
 
                   <button type="submit" disabled={loading} className="btn-primary w-full rounded-xl py-3 disabled:opacity-60 disabled:cursor-not-allowed">
                     {loading ? (

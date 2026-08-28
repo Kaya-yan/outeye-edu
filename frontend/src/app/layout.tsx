@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import ClientProviders from '@/components/ClientProviders'
 import './globals.css'
@@ -85,6 +86,8 @@ export default function RootLayout({
                     <Image src="/tubiao.png" alt="" width={14} height={16} className="h-4 w-auto" />
                     鲁公网安备37100002001572号
                   </a>
+                  <Link href="/terms" className="legal-link">用户协议</Link>
+                  <Link href="/privacy" className="legal-link">隐私政策</Link>
                 </div>
               </div>
             </footer>

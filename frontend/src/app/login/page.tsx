@@ -142,6 +142,13 @@ export default function LoginPage() {
                 </form>
               </div>
 
+              <p className="mt-3 text-center text-xs text-ink-300">
+                登录即代表你已阅读并同意
+                <Link href="/terms" target="_blank" className="legal-link">《用户协议》</Link>
+                和
+                <Link href="/privacy" target="_blank" className="legal-link">《隐私政策》</Link>
+              </p>
+
               <div className="mt-6 text-center text-sm text-ink-500">
                 还没有账户？{' '}
                 <Link href="/register" className="font-medium text-ink-900 hover:text-ink-700 underline underline-offset-4 decoration-primary-300">
