@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import ClientProviders from '@/components/ClientProviders'
 import './globals.css'
@@ -66,14 +67,25 @@ export default function RootLayout({
                     <p>挑战杯“揭榜挂帅”专项赛</p>
                   </div>
                 </div>
-                <a
-                  href="https://beian.miit.gov.cn/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-5 block text-center text-xs text-ink-300 transition-colors hover:text-ink-500"
-                >
-                  鲁ICP备2026044330号-1
-                </a>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-ink-300">
+                  <a
+                    href="https://beian.miit.gov.cn/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="transition-colors hover:text-ink-500"
+                  >
+                    鲁ICP备2026044330号-1
+                  </a>
+                  <a
+                    href="https://beian.mps.gov.cn/#/query/webSearch?code=37100002001572"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-ink-500"
+                  >
+                    <Image src="/tubiao.png" alt="" width={14} height={16} className="h-4 w-auto" />
+                    鲁公网安备37100002001572号
+                  </a>
+                </div>
               </div>
             </footer>
           </div>
