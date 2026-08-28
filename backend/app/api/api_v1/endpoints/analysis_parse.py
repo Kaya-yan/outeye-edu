@@ -4,10 +4,13 @@
 支持上传 PDF/Word/TXT 文件提取文本，以及图片 OCR 识别文字。
 """
 
+import asyncio
+import base64
 import os
 import re
 import tempfile
-from typing import Optional
+import time
+from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from pydantic import BaseModel
 from loguru import logger
@@ -199,10 +202,43 @@ async def parse_file(
 
 @router.get("/ocr-status")
 async def ocr_status():
-    """图片识别能力探针：前端据此决定是否展示拍照入口（无需登录）"""
+    """图片识别能力探针：前端据此决定是否展示拍照入口（无需登录）
+
+    只查配置会误报 available:true（阿里云控制台未开通产品时返回
+    ocrServiceNotOpen 401，配置却齐全）。因此对阿里云引擎追加一次真实
+    RecognizeGeneral 调用（1x1 PNG），结果缓存 15 分钟；探测失败且与
+    凭证无关时不翻转 available，仅透出 detail 供排查。
+    """
     aliyun = bool(settings.ALIYUN_OCR_ACCESS_KEY_ID and settings.ALIYUN_OCR_ACCESS_KEY_SECRET)
     vision = bool(settings.LLM_VISION_MODEL)
-    return {"available": aliyun or vision, "engines": {"aliyun": aliyun, "llm_vision": vision}}
+
+    verified: Optional[bool] = None
+    detail: Optional[str] = None
+    if aliyun:
+        if time.time() - _ocr_probe_cache["ts"] > _OCR_PROBE_TTL_SECONDS:
+            async with _ocr_probe_lock:
+                if time.time() - _ocr_probe_cache["ts"] > _OCR_PROBE_TTL_SECONDS:
+                    try:
+                        ok, detail = await asyncio.wait_for(
+                            asyncio.to_thread(_probe_aliyun_ocr), timeout=15
+                        )
+                    except asyncio.TimeoutError:
+                        ok, detail = None, None
+                        logger.warning("阿里云 OCR 探测超时")
+                    except Exception as e:
+                        ok, detail = None, None
+                        logger.warning(f"阿里云 OCR 探测异常: {e}")
+                    _ocr_probe_cache.update(ts=time.time(), ok=ok, detail=detail)
+        verified = _ocr_probe_cache["ok"]
+        detail = _ocr_probe_cache["detail"]
+
+    available = vision or (aliyun and verified is not False)
+    return {
+        "available": available,
+        "verified": verified,
+        "detail": detail,
+        "engines": {"aliyun": aliyun, "llm_vision": vision},
+    }
 
 
 @router.post("/ocr-image", response_model=OCRImageResponse)
@@ -261,6 +297,9 @@ async def ocr_image(
             # 阿里云失败时仅在视觉模型可用时降级
             if not result.get("text") and result.get("error"):
                 logger.warning(f"阿里云 OCR 失败: {result['error']}")
+                if result.get("error_code") == "ocrServiceNotOpen":
+                    # 负缓存：让 ocr-status 探针立即反映真实状态
+                    _ocr_probe_cache.update(ts=time.time(), ok=False, detail=result["error"])
                 if settings.LLM_VISION_MODEL:
                     result = await _ocr_llm(content)
         else:
@@ -272,6 +311,8 @@ async def ocr_image(
 
     if not result.get("text") and result.get("error"):
         logger.error(f"OCR 识别失败: {result['error']}")
+        if result.get("error_code"):
+            raise HTTPException(503, result["error"])
         raise HTTPException(503, f"图片识别失败：{result['error']}")
 
     text = result.get("text", "")
@@ -317,6 +358,35 @@ def _parse_docx(file_path: str) -> str:
     return "\n\n".join(paragraphs)
 
 
+# ============ 阿里云 OCR 真实可用性探针 ============
+
+_OCR_PROBE_TTL_SECONDS = 900
+_ocr_probe_cache: Dict[str, Any] = {"ts": 0.0, "ok": None, "detail": None}
+_ocr_probe_lock = asyncio.Lock()
+
+# 1x1 透明 PNG：只验证服务是否开通，不消耗有效识别额度
+_OCR_PROBE_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="
+)
+
+
+def _probe_aliyun_ocr() -> Tuple[Optional[bool], Optional[str]]:
+    """真调一次 RecognizeGeneral；返回 (ok, detail)。ok=None 表示无法判定（网络/图片被拒等）"""
+    from app.services.ocr.aliyun_ocr import AliyunOCR
+
+    ocr = AliyunOCR(
+        settings.ALIYUN_OCR_ACCESS_KEY_ID,
+        settings.ALIYUN_OCR_ACCESS_KEY_SECRET,
+        settings.ALIYUN_OCR_ENDPOINT,
+    )
+    result = ocr.recognize(_OCR_PROBE_PNG)
+    if result.get("error_code") == "ocrServiceNotOpen":
+        return False, result["error"]
+    if result.get("error"):
+        return None, f"阿里云 OCR 探测失败：{result['error']}"
+    return True, None
+
+
 async def _ocr_aliyun(image_bytes: bytes) -> dict:
     """调用阿里云 OCR"""
     ak_id = settings.ALIYUN_OCR_ACCESS_KEY_ID
@@ -328,7 +398,7 @@ async def _ocr_aliyun(image_bytes: bytes) -> dict:
     from app.services.ocr.aliyun_ocr import AliyunOCR
 
     ocr = AliyunOCR(ak_id, ak_secret, settings.ALIYUN_OCR_ENDPOINT)
-    return ocr.recognize(image_bytes)
+    return await asyncio.to_thread(ocr.recognize, image_bytes)
 
 
 async def _ocr_llm(image_bytes: bytes) -> dict:

@@ -58,7 +58,7 @@ class AliyunOCR:
 
             if body.code and body.code != "200":
                 logger.warning(f"阿里云 OCR 返回错误: {body.code} - {body.message}")
-                return {"text": "", "confidence": 0, "engine": "aliyun", "error": body.message}
+                return {"text": "", "confidence": 0, "engine": "aliyun", "error": body.message, "error_code": body.code}
 
             # 提取识别文本
             data = body.data or ""
@@ -74,5 +74,15 @@ class AliyunOCR:
             logger.error("阿里云 OCR SDK 未安装，请执行: pip install alibabacloud-ocr-api20210707")
             return {"text": "", "confidence": 0, "engine": "aliyun", "error": "SDK 未安装"}
         except Exception as e:
+            err_text = f"{e} {getattr(e, 'message', '')}"
+            if "ocrServiceNotOpen" in err_text:
+                logger.warning(f"阿里云 OCR 服务未开通: {e}")
+                return {
+                    "text": "",
+                    "confidence": 0,
+                    "engine": "aliyun",
+                    "error": "图片识别服务未开通：请在阿里云控制台开通「通用文字识别」（RecognizeGeneral）",
+                    "error_code": "ocrServiceNotOpen",
+                }
             logger.error(f"阿里云 OCR 识别失败: {e}")
             return {"text": "", "confidence": 0, "engine": "aliyun", "error": "阿里云 OCR 服务异常，请稍后重试"}

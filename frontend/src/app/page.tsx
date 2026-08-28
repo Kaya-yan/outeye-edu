@@ -21,6 +21,22 @@ const TiptapEditor = dynamic(() => import("@/components/TiptapEditor"), {
   ),
 });
 
+// 202 + 轮询：长 LLM 生成不再走会被代理 30s 掐断的同步请求（同 courseware 轮询口径）
+const pollGenerationTask = async <T,>(startUrl: string, body: unknown): Promise<T> => {
+  const start = await apiPost<{ task_id: string }>(startUrl, body);
+  for (let i = 0; i < 100; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const st = await apiGet<{
+      status: "pending" | "done" | "error";
+      result?: T;
+      error?: string;
+    }>(`/analysis/generation-tasks/${start.task_id}`);
+    if (st.status === "done" && st.result !== undefined) return st.result;
+    if (st.status === "error") throw new Error(st.error || "生成失败");
+  }
+  throw new Error("生成超时（超过 5 分钟）");
+};
+
 // ============ Types ============
 
 interface WhiteboxAnalysis {
@@ -266,10 +282,10 @@ export default function AnalysisPage() {
     if (!result.cultural_elements?.length) return;
     setCultureStatus("loading");
     try {
-      const enriched = await apiPost<{
+      const enriched = await pollGenerationTask<{
         cultural_elements: CulturalElement[];
         fallback: boolean;
-      }>("/analysis/culture-enrich", {
+      }>("/analysis/culture-enrich-async", {
         text,
         language_name: result.language_name,
         cultural_elements: result.cultural_elements,
@@ -329,7 +345,7 @@ export default function AnalysisPage() {
     setError("");
     setLoading(true);
     try {
-      const result = await apiPost<GeneratePlanResult>("/analysis/generate-plan", {
+      const result = await pollGenerationTask<GeneratePlanResult>("/analysis/generate-plan-async", {
         text,
         title,
         student_level: context.studentLevel,

@@ -46,12 +46,15 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
   // 图片识别能力：null=未知或探测失败（按可用展示），false=后端确认不可用
   const [ocrAvailable, setOcrAvailable] = useState<boolean | null>(null);
   const ocrAvailableRef = useRef<boolean | null>(null);
+  // 后端探针返回的不可用原因（如阿里云服务未开通），比通用提示更可行动
+  const ocrDetailRef = useRef<string | null>(null);
 
   useEffect(() => {
-    apiGet<{ available: boolean }>("/analysis/ocr-status")
+    apiGet<{ available: boolean; detail?: string | null }>("/analysis/ocr-status")
       .then((s) => {
         setOcrAvailable(s.available);
         ocrAvailableRef.current = s.available;
+        ocrDetailRef.current = s.detail ?? null;
       })
       .catch(() => {});
   }, []);
@@ -63,7 +66,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
   const isPDF = (name: string) => /\.pdf$/i.test(name);
 
   // 处理文件选择
-  const handleFiles = useCallback(async (files: FileList | File[]) => {
+  const handleFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
@@ -77,7 +80,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
       // 文档走解析
       await handleFileParse(file);
     }
-  }, []);
+  };
 
   // 解析文档文件
   const handleFileParse = async (file: File, pageFrom?: number, pageTo?: number) => {
@@ -119,7 +122,7 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
   // OCR 识别图片
   const handleImageOCR = async (files: File[], engine: "aliyun" | "llm" = "aliyun") => {
     if (ocrAvailableRef.current === false) {
-      setError("图片识别服务暂不可用，请上传 PDF / DOCX / TXT / MD 文件");
+      setError(ocrDetailRef.current || "图片识别服务暂不可用，请上传 PDF / DOCX / TXT / MD 文件");
       return;
     }
     setOcrLoading(true);
@@ -178,13 +181,13 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
     setDragOver(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     if (e.dataTransfer.files.length > 0) {
       handleFiles(e.dataTransfer.files);
     }
-  }, [handleFiles]);
+  };
 
   // 清除状态
   const handleClear = () => {

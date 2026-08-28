@@ -6,15 +6,16 @@
 """
 
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+import asyncio
 import uuid
 import time
 
 from app.utils.error_handler import handle_api_error
-from app.core.database import get_async_db
+from app.core.database import AsyncSessionLocal, get_async_db
 from app.core.security import get_current_user
 from app.models.analysis import AnalysisRecord
 
@@ -402,8 +403,6 @@ async def culture_enrich(
     具体事实性背景（起源/年代/地点/当代形态）。失败时返回原始
     元素并 fallback=True，由前端标注。
     """
-    import asyncio
-
     from app.services.analysis.culture_enricher import enrich_cultural_elements
 
     try:
@@ -745,6 +744,335 @@ async def generate_teaching_plan(
     except Exception as e:
         logger.error(f"教学方案生成失败: {e}")
         raise HTTPException(status_code=500, detail="教案生成失败，请稍后重试")
+
+
+# ============ 异步生成任务（长请求治理 1C） ============
+# generate-plan / culture-enrich 是 30-120 秒的同步 LLM 长请求，经 Next.js rewrites
+# 代理转发时会被默认 30s proxyTimeout 掐断（浏览器 500、后端日志 200）。
+# 改为 202 + task_id + 轮询；上方同步端点保留不动，作回滚开关。
+
+_PLAN_TASKS: Dict[str, Dict[str, Any]] = {}
+_PLAN_TASK_TTL_SECONDS = 3600
+
+
+def _prune_plan_tasks() -> None:
+    now = time.time()
+    stale = [tid for tid, s in _PLAN_TASKS.items() if now - s.get("created_ts", now) > _PLAN_TASK_TTL_SECONDS]
+    for tid in stale:
+        _PLAN_TASKS.pop(tid, None)
+
+
+async def _run_plan_generation(task_id: str, request: GeneratePlanRequest, current_user: dict) -> None:
+    """generate-plan 后台流水线，与同步端点同构；同步步骤走 to_thread 避免阻塞事件循环"""
+    state = _PLAN_TASKS[task_id]
+    start_time = time.time()
+    try:
+        state.update(status="analyzing", progress="白盒分析中…")
+
+        from app.services.analysis.whitebox_analyzer import WhiteboxAnalyzer
+        from app.services.analysis.tag_generator import generate_tag_details, get_wiki_tags_for_retrieval, get_rag_tags_for_retrieval
+
+        analyzer = WhiteboxAnalyzer()
+        analysis_result = await asyncio.to_thread(
+            analyzer.analyze, request.text, request.student_level, language=request.language
+        )
+
+        tag_details = generate_tag_details(analysis_result)
+        wiki_tags = get_wiki_tags_for_retrieval(tag_details)
+        rag_tags = get_rag_tags_for_retrieval(tag_details)
+
+        analysis_dict = {
+            "text_level": analysis_result.text_level,
+            "language": analysis_result.language,
+            "language_name": analysis_result.language_name,
+            "vocabulary": {
+                "total_words": analysis_result.vocabulary.total_words,
+                "unique_words": analysis_result.vocabulary.unique_words,
+                "cefr_distribution": analysis_result.vocabulary.cefr_distribution,
+                "awl_count": analysis_result.vocabulary.awl_count,
+                "awl_ratio": analysis_result.vocabulary.awl_ratio,
+                "difficult_words": [
+                    {"word": d.word, "level": d.level, "count": d.count, "in_awl": d.in_awl}
+                    for d in analysis_result.vocabulary.difficult_words
+                ],
+                "vocabulary_richness": analysis_result.vocabulary.vocabulary_richness,
+            },
+            "syntax": {
+                "total_sentences": analysis_result.syntax.total_sentences,
+                "avg_sentence_length": analysis_result.syntax.avg_sentence_length,
+                "max_sentence": {
+                    "preview": analysis_result.syntax.max_sentence.preview,
+                    "word_count": analysis_result.syntax.max_sentence.word_count,
+                    "index": analysis_result.syntax.max_sentence.index,
+                },
+                "long_sentences_count": analysis_result.syntax.long_sentences_count,
+                "very_long_sentences_count": analysis_result.syntax.very_long_sentences_count,
+                "flesch_reading_ease": analysis_result.syntax.flesch_reading_ease,
+            },
+            "discourse": {
+                "paragraph_count": analysis_result.discourse.paragraph_count,
+                "connective_density": analysis_result.discourse.connective_density,
+                "genre_hint": analysis_result.discourse.genre_hint,
+                "text_structure": analysis_result.discourse.text_structure,
+                "teaching_points": analysis_result.discourse.teaching_points,
+            },
+            "learner_gap": {
+                "text_level": analysis_result.learner_gap.text_level,
+                "student_level": analysis_result.learner_gap.student_level,
+                "gap": analysis_result.learner_gap.gap,
+                "gap_description": analysis_result.learner_gap.gap_description,
+            },
+            "enhancement_tags": analysis_result.enhancement_tags,
+            "tag_labels": analysis_result.tag_labels,
+            "teaching_insights": analysis_result.teaching_insights,
+            "cultural_elements": [
+                {"category": e.category, "keyword": e.keyword, "context": e.context, "explanation": e.explanation}
+                for e in analysis_result.cultural_elements
+            ],
+            "teaching_tips": analysis_result.teaching_tips,
+            "student_profile": {
+                "native_language": request.native_language,
+                "course_type": request.course_type,
+                "class_size": request.class_size,
+            },
+        }
+
+        logger.info(f"白盒分析完成: {analysis_result.text_level}, 标签{len(analysis_result.enhancement_tags)}个")
+
+        state.update(status="retrieving", progress="双源检索中（教学理论 + 教学资源）…")
+
+        from app.services.analysis.dual_retriever import DualRetriever
+
+        retriever = DualRetriever()
+        retrieval_result = await asyncio.to_thread(
+            retriever.retrieve,
+            wiki_tags=wiki_tags,
+            rag_tags=rag_tags,
+            enhancement_tags=analysis_result.enhancement_tags,
+            text_title=request.title,
+            max_wiki_results=request.max_retrieval_results,
+            max_rag_results=request.max_retrieval_results,
+        )
+
+        wiki_results = [
+            {
+                "title": r.title,
+                "summary": r.summary,
+                "relevance_score": r.relevance_score,
+                "tags": r.tags,
+                "confidence": r.confidence,
+                "contested": r.contested,
+                "contradictions": r.contradictions,
+                "sources": r.sources,
+                "updated": r.updated,
+            }
+            for r in retrieval_result.wiki_results
+        ]
+        rag_results = [
+            {
+                "content": r.content,
+                "score": r.score,
+                "metadata": r.metadata,
+            }
+            for r in retrieval_result.rag_results
+        ]
+
+        logger.info(f"双源检索完成: Wiki={retrieval_result.wiki_count}, RAG={retrieval_result.rag_count}")
+
+        state.update(status="generating", progress="AI 生成教学方案中…（约 30-120 秒）")
+
+        from app.services.analysis.fusion_generator import generate_teaching_plan
+
+        plan = await asyncio.to_thread(
+            generate_teaching_plan,
+            text_title=request.title or "Untitled",
+            text_content=request.text,
+            analysis=analysis_dict,
+            wiki_results=wiki_results,
+            rag_results=rag_results,
+            mode=request.mode,
+            duration_minutes=request.duration_minutes,
+            course_type=request.course_type,
+            class_size=request.class_size,
+            native_language=request.native_language,
+        )
+
+        # 教学蓝图（仅增强模式单独展示）
+        if request.mode == "enhanced":
+            from app.services.analysis.blueprint import build_teaching_blueprint
+            blueprint = build_teaching_blueprint(
+                analysis_dict,
+                {"activity_designs": plan.activity_designs},
+                wiki_results,
+                rag_results,
+                request.duration_minutes,
+            )
+            evidence_annotations = plan.evidence_annotations
+        else:
+            blueprint = None
+            evidence_annotations = None
+
+        total_duration = time.time() - start_time
+
+        response = {
+            "text_title": request.title or "Untitled",
+            "text_level": analysis_result.text_level,
+            "language_name": analysis_result.language_name,
+            "student_level": request.student_level,
+            "learner_gap": analysis_dict["learner_gap"],
+            "vocabulary": analysis_dict["vocabulary"],
+            "cultural_elements": analysis_dict["cultural_elements"],
+            "enhancement_tags": analysis_result.enhancement_tags,
+            "tag_labels": analysis_result.tag_labels,
+            "teaching_blueprint": blueprint,
+            "teaching_plan": {
+                "framework": plan.framework,
+                "objectives": plan.objectives,
+                "difficulty_overview": plan.difficulty_overview,
+                "teaching_suggestions": plan.teaching_suggestions,
+                "activity_designs": plan.activity_designs,
+                "assessment": plan.assessment,
+                "differentiation": plan.differentiation,
+                "theoretical_basis": plan.theoretical_basis,
+                "self_check": plan.self_check,
+            },
+            "evidence_annotations": evidence_annotations,
+            "sources": plan.sources,
+            "retrieval_info": {
+                "wiki_count": retrieval_result.wiki_count,
+                "rag_count": retrieval_result.rag_count,
+                "retrieval_duration": retrieval_result.retrieval_duration,
+            },
+            "syntax": analysis_dict["syntax"],
+            "discourse": analysis_dict["discourse"],
+            "generation_settings": {
+                "duration_minutes": request.duration_minutes,
+                "course_type": request.course_type,
+                "class_size": request.class_size,
+                "native_language": request.native_language,
+            },
+            "generation_duration": plan.generation_duration,
+            "total_duration": round(total_duration, 2),
+            "model": plan.model,
+            "prompt_version": plan.prompt_version,
+            "fallback": plan.fallback,
+        }
+
+        # 生成记录落库：self_check 随产物保存，质量可追溯
+        try:
+            from app.models.generation import GenerationLog
+
+            async with AsyncSessionLocal() as db:
+                db.add(GenerationLog(
+                    id=str(uuid.uuid4()),
+                    user_id=current_user["user_id"],
+                    analysis_id=None,
+                    stage="lesson_plan",
+                    prompt_name="lesson_plan_v2",
+                    prompt_version=plan.prompt_version,
+                    model=plan.model,
+                    fallback="yes" if plan.fallback else "no",
+                    generation_duration=plan.generation_duration,
+                    self_check=plan.self_check or None,
+                ))
+                await db.commit()
+        except Exception as log_err:
+            logger.warning(f"生成记录落库失败（不影响返回）: {log_err}")
+
+        logger.info(f"教学方案生成完成: 总耗时{total_duration:.2f}s")
+        state.update(status="done", result=response)
+
+    except Exception as e:
+        logger.error(f"教学方案生成失败: {e}")
+        state.update(status="error", error="教案生成失败，请稍后重试")
+
+
+async def _run_culture_enrichment(task_id: str, request: CultureEnrichRequest, current_user: dict) -> None:
+    """culture-enrich 后台执行；失败保持同步端点降级语义（返回原元素 + fallback 标记，不报错）"""
+    state = _PLAN_TASKS[task_id]
+    try:
+        state.update(status="enriching", progress="AI 生成文化背景补充中…（约 30-60 秒）")
+
+        from app.services.analysis.culture_enricher import enrich_cultural_elements
+
+        result = await asyncio.to_thread(
+            enrich_cultural_elements,
+            text=request.text,
+            language_name=request.language_name,
+            elements=request.cultural_elements,
+        )
+        state.update(status="done", result={
+            "cultural_elements": result.items,
+            "prompt_version": result.prompt_version,
+            "model": result.model,
+            "fallback": result.fallback,
+            "self_check": result.self_check,
+            "generation_duration": result.generation_duration,
+        })
+    except Exception as e:
+        logger.error(f"文化背景具体化失败: {e}")
+        state.update(status="done", result={
+            "cultural_elements": request.cultural_elements,
+            "prompt_version": "",
+            "model": "template-fallback",
+            "fallback": True,
+            "self_check": {"error": str(e)},
+            "generation_duration": 0,
+        })
+
+
+@router.post("/generate-plan-async", status_code=status.HTTP_202_ACCEPTED)
+async def generate_teaching_plan_async(
+    request: GeneratePlanRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """启动教案生成后台任务，返回 task_id；轮询 GET /generation-tasks/{task_id}"""
+    _prune_plan_tasks()
+    task_id = uuid.uuid4().hex
+    _PLAN_TASKS[task_id] = {
+        "status": "pending",
+        "progress": "已排队",
+        "user_id": current_user["user_id"],
+        "created_ts": time.time(),
+    }
+    asyncio.create_task(_run_plan_generation(task_id, request, current_user))
+    return {"task_id": task_id}
+
+
+@router.post("/culture-enrich-async", status_code=status.HTTP_202_ACCEPTED)
+async def culture_enrich_async(
+    request: CultureEnrichRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """启动文化背景具体化后台任务，返回 task_id；轮询 GET /generation-tasks/{task_id}"""
+    _prune_plan_tasks()
+    task_id = uuid.uuid4().hex
+    _PLAN_TASKS[task_id] = {
+        "status": "pending",
+        "progress": "已排队",
+        "user_id": current_user["user_id"],
+        "created_ts": time.time(),
+    }
+    asyncio.create_task(_run_culture_enrichment(task_id, request, current_user))
+    return {"task_id": task_id}
+
+
+@router.get("/generation-tasks/{task_id}")
+async def get_generation_task(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """轮询异步生成任务状态（generate-plan-async / culture-enrich-async 共用）"""
+    state = _PLAN_TASKS.get(task_id)
+    if not state or state.get("user_id") != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="生成任务不存在或已过期，请重新生成")
+    return {
+        "task_id": task_id,
+        "status": state.get("status"),
+        "progress": state.get("progress"),
+        "result": state.get("result"),
+        "error": state.get("error"),
+    }
 
 
 # ============ A/B 评价端点 ============
