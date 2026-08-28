@@ -178,6 +178,7 @@ docker compose logs -f
 
 ```bash
 cd backend
+pip install -r requirements-dev.txt   # 测试专用依赖（pytest/aiosqlite 等）
 pytest tests -q
 ```
 
@@ -265,30 +266,66 @@ npm run dev
 
 ---
 
-## 8. 故障排除
+## 8. systemd 直跑部署（生产服务器）
 
-### 8.1 Wiki 相关功能报错
+Docker-first 之外的另一种线上形态：nginx + systemd（uvicorn 直跑）+ Next.js（`next start`）。当前生产服务器 `/opt/outeye-edu` 即此形态。以下配置项历史上只存在于服务器上，换服务器或重装时**必须逐项核对重建**。
+
+### 8.1 nginx 关键配置
+
+```nginx
+# /api/ 必须直接转发后端，不要经过 Next.js rewrites（30-120s 的 LLM 生成请求会被代理层掐断）
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_read_timeout 300s;    # 教案/课件生成耗时 30-120s，留足余量
+    proxy_connect_timeout 10s;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_read_timeout 60s;
+}
+```
+
+### 8.2 uvicorn（outeye-backend.service）
+
+```ini
+ExecStart=<venv 内 uvicorn 绝对路径> app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 75
+```
+
+`--timeout-keep-alive 75`：uvicorn 默认 5s 回收空闲连接，与前置代理的连接池复用存在竞态——代理把请求派发到刚被关闭的 socket 上，浏览器收到 500 而后端日志全是 200（失败请求根本没到达后端）。75s 需大于代理侧的空闲回收窗口。Docker 形态已在 `backend/Dockerfile` CMD 中内置同一参数。
+
+### 8.3 前端安装与构建
+
+- 服务器上**必须用 `npm ci` 而非 `npm install`**：避免 `package-lock.json` 被服务器 npm 版本改写，造成工作区出现 modified 漂移
+- 构建命令不变：`npm run build`；重启前端服务前等待构建完成
+- 后端重启后等待约 60 秒预热（模型加载）再验证接口
+
+---
+
+## 9. 故障排除
+
+### 9.1 Wiki 相关功能报错
 
 先检查：
 - 主机路径 `WIKI_HOST_PATH` 是否正确
 - `OutEye-Wiki/` 是否存在
 - backend 容器内是否成功挂载到 `/app/OutEye-Wiki`
 
-### 8.2 前端页面能打开，但 API 请求失败
+### 9.2 前端页面能打开，但 API 请求失败
 
 先检查：
 - 是否通过 `http://localhost` 访问，而不是仅访问 `http://localhost:3000`
 - `NEXT_PUBLIC_API_URL` 是否与当前访问入口一致
 - Nginx 是否正常启动
 
-### 8.3 RAG / OCR / 生成效果异常
+### 9.3 RAG / OCR / 生成效果异常
 
 先检查：
 - `LLM_API_KEY` 是否有效
 - Qdrant 服务是否健康
 - OCR 相关第三方凭据是否已配置
 
-### 8.4 数据库初始化异常
+### 9.4 数据库初始化异常
 
 先检查：
 - `POSTGRES_PASSWORD` 是否为空
@@ -297,7 +334,7 @@ npm run dev
 
 ---
 
-## 9. 生产化提醒
+## 10. 生产化提醒
 
 当前这套部署更适合：
 - 比赛演示

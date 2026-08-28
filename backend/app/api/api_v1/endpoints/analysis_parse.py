@@ -52,6 +52,7 @@ class ParseFileResponse(BaseModel):
     page_to: Optional[int] = None
     word_count: int = 0
     file_type: str = ""
+    likely_scanned: bool = False
 
 
 class OCRImageResponse(BaseModel):
@@ -170,6 +171,9 @@ async def parse_file(
         text = text.strip()
         word_count = _count_words(text)
 
+        # 扫描件/图片型 PDF：有页数但几乎提不出文本（每页平均不足 10 词）
+        likely_scanned = ext == ".pdf" and total_pages > 0 and word_count < 10 * total_pages
+
         return ParseFileResponse(
             text=text,
             filename=file.filename or "unknown",
@@ -178,6 +182,7 @@ async def parse_file(
             page_to=page_to,
             word_count=word_count,
             file_type=ext.lstrip("."),
+            likely_scanned=likely_scanned,
         )
 
     except HTTPException:

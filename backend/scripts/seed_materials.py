@@ -11,8 +11,9 @@
     # 限制只处理前 N 条（测试用）
     python scripts/seed_materials.py --batch theory --dry-run --limit 3
 
-    # interview / lesson 批次（占位，未实现具体 manifest）
+    # interview / lesson 批次（manifest 已生成：manifests/interview.json、lesson.json）
     python scripts/seed_materials.py --batch interview --dry-run
+    python scripts/seed_materials.py --batch lesson --execute
 
 约束：
 - 不修改现有 5 个 system_seed（Bloom/Krashen 等），新增数据与之并存
@@ -49,13 +50,15 @@ BATCH_CONFIG = {
         "label": "理论文献",
     },
     "interview": {
-        "manifest_file": "interview.json",  # 占位，未实现
+        "manifest_file": "interview.json",
         "source_tag": "seed_materials_interview",
         "doc_type": "interview_transcript",
         "label": "访谈记录",
     },
     "lesson": {
-        "manifest_file": "lesson.json",  # 占位，未实现
+        # 2026-08 已执行：24 条 manifest 中 12 条成功（134 chunks 入库 Qdrant）；
+        # 12 条 .doc/.txt 因服务器无法解析该格式失败，赛前决策不再补
+        "manifest_file": "lesson.json",
         "source_tag": "seed_materials_lesson",
         "doc_type": "lesson_plan",
         "label": "教案案例",

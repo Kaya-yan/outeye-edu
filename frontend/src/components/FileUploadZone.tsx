@@ -11,6 +11,7 @@ interface FileInfo {
   total_pages: number;
   file_type: string;
   word_count: number;
+  likely_scanned?: boolean;
 }
 
 interface OCRResult {
@@ -305,7 +306,26 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
       )}
 
       {/* 已解析的文件信息 */}
-      {fileInfo && !showPageSelector && !ocrResult && (
+      {fileInfo && !showPageSelector && !ocrResult && fileInfo.likely_scanned ? (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-amber-700">⚠️</span>
+            <span className="text-sm text-amber-700 font-medium">{fileInfo.filename}</span>
+            <span className="text-xs text-amber-600">{fileInfo.word_count} 词</span>
+            <button
+              onClick={handleClear}
+              className="ml-auto text-xs text-amber-600 hover:text-amber-800"
+            >
+              重新上传
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-amber-700 leading-5">
+            该 PDF 可能是扫描件或图片型文档，未能提取到文本。
+            {ocrAvailable !== false && "建议点击「拍照识别」上传页面照片，"}
+            或上传可复制的文本版 PDF / DOCX。
+          </p>
+        </div>
+      ) : fileInfo && !showPageSelector && !ocrResult && (
         <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
           <span className="text-sm text-green-700">✅</span>
           <span className="text-sm text-green-700 font-medium">{fileInfo.filename}</span>

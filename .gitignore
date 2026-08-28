@@ -108,3 +108,17 @@ backend/regression_runs/
 # V2 benchmark 衍生产物（样本/报告；build/ 已被忽略）
 frontend/scripts/v2benchmark/samples/
 frontend/scripts/v2benchmark/report.json
+
+# 种子原始素材（含真实教师姓名/校名，仅存服务器，遵守匿名化决策）
+seed-materials/
+
+# 种子运行日志（文件路径含真实姓名，仅存服务器）
+seed_results/
+
+# 服务器备份与手工备份文件
+backend/backups/
+*.bak
+*.backup
+
+# seed 脚本以 sys.path.insert 方式直跑，无需包标记（服务器上为误产物）
+backend/scripts/__init__.py
