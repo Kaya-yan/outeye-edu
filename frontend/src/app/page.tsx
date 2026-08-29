@@ -992,9 +992,9 @@ function PlanStep({
             router.push(`/courseware/${st.project_id}/edit-v2`);
             return;
           }
-          // PPT / Word：认证拉取产物并触发浏览器下载
+          // PPT / Word：认证拉取产物并触发浏览器下载（download_url 已含 /api/v1，剥掉避免双重前缀）
           const ext = format === "ppt" ? "pptx" : "docx";
-          const resp = await apiRequest("GET", st.download_url || "");
+          const resp = await apiRequest("GET", (st.download_url || "").replace(/^\/api\/v1/, ""));
           if (!resp.ok) throw new Error("产物下载失败，请到课件列表重试");
           const blob = await resp.blob();
           const a = document.createElement("a");

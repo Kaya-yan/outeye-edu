@@ -124,7 +124,8 @@ export default function CoursewareDetailPage() {
 
   const handleDownloadArtifact = async (a: ExportArtifactItem) => {
     try {
-      const resp = await apiRequest("GET", a.download_url);
+      // download_url 已含 /api/v1 前缀，apiRequest 会再拼 API_BASE，须剥掉避免双重前缀 404
+      const resp = await apiRequest("GET", a.download_url.replace(/^\/api\/v1/, ""));
       if (!resp.ok) throw new Error("下载失败");
       const blob = await resp.blob();
       const link = document.createElement("a");
