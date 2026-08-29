@@ -1099,10 +1099,16 @@ function PlanStep({
       }
 
       const blob = await resp.blob();
+      // 后端按 RFC 5987 双写文件名；优先取 filename* 的 UTF-8 真名（含课文标题）
+      const cd = resp.headers.get("Content-Disposition") || "";
+      const starMatch = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      const downloadName = starMatch
+        ? decodeURIComponent(starMatch[1])
+        : `教学方案.${format}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `教学方案.${format}`;
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       a.remove();

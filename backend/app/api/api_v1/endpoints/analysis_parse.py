@@ -5,7 +5,6 @@
 """
 
 import asyncio
-import base64
 import os
 import re
 import tempfile
@@ -267,7 +266,11 @@ async def ocr_image(
 
     ext = _get_extension(file.filename or "")
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        raise HTTPException(400, f"不支持的图片格式: {ext}，仅支持 {', '.join(ALLOWED_IMAGE_EXTENSIONS)}")
+        raise HTTPException(
+            400,
+            f"不支持的图片格式: {ext}，仅支持 {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}，"
+            f"如为 HEIC 请转换为 JPG 或 PNG 后上传",
+        )
 
     # 流式读取图片到临时文件，避免一次性加载
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
@@ -278,7 +281,7 @@ async def ocr_image(
 
         # Magic byte 验证图片内容
         if not _validate_file_content(first_chunk, ext):
-            raise HTTPException(400, f"文件内容与扩展名不匹配，疑似非 {ext} 格式文件")
+            raise HTTPException(400, f"文件内容与扩展名不匹配，疑似非 {ext} 格式文件，请转换为 JPG 或 PNG 后上传")
 
         # 图片 OCR 需要完整字节，从临时文件读回
         with open(tmp_path, "rb") as f:
@@ -288,6 +291,11 @@ async def ocr_image(
             os.unlink(tmp_path)
         except OSError:
             pass
+
+    # OCR 前置校验与归一化（HEIC/CMYK/尺寸），不合规时给用户明确的转换提示
+    content, norm_err = _validate_and_normalize_image(content)
+    if norm_err:
+        raise HTTPException(400, norm_err)
 
     result = {}
 
@@ -364,10 +372,81 @@ _OCR_PROBE_TTL_SECONDS = 900
 _ocr_probe_cache: Dict[str, Any] = {"ts": 0.0, "ok": None, "detail": None}
 _ocr_probe_lock = asyncio.Lock()
 
-# 1x1 透明 PNG：只验证服务是否开通，不消耗有效识别额度
-_OCR_PROBE_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="
-)
+# 探针图：100×30 真实文字 PNG（"OCR TEST"，黑字白底）。1×1 合成图会被阿里云以
+# unsupportedImageFormat 415 拒绝，真实小图才能验证识别链路。运行时用 PIL 生成并缓存，
+# 避免在源码里嵌一段易损坏的超长 base64。
+_PROBE_IMAGE_CACHE: Dict[str, bytes] = {}
+
+
+def _get_probe_image() -> bytes:
+    if "png" not in _PROBE_IMAGE_CACHE:
+        from io import BytesIO
+
+        from PIL import Image, ImageDraw, ImageFont
+
+        im = Image.new("RGB", (100, 30), (255, 255, 255))
+        draw = ImageDraw.Draw(im)
+        font = None
+        for candidate in ("arial.ttf", "DejaVuSans.ttf", "NotoSansCJK-Regular.ttc"):
+            try:
+                font = ImageFont.truetype(candidate, 18)
+                break
+            except OSError:
+                continue
+        draw.text((10, 4), "OCR TEST", fill=(0, 0, 0), font=font or ImageFont.load_default())
+        buf = BytesIO()
+        im.save(buf, "PNG")
+        _PROBE_IMAGE_CACHE["png"] = buf.getvalue()
+    return _PROBE_IMAGE_CACHE["png"]
+
+
+def _validate_and_normalize_image(content: bytes) -> tuple[Optional[bytes], Optional[str]]:
+    """OCR 前置校验与归一化（PIL）。
+
+    - 真实格式白名单（HEIC 等无法解码的格式给出明确转换提示，而非笼统"服务异常"）
+    - 最短边 ≥15px、最长边 ≤8192px（超长截图自动缩放），符合 RecognizeGeneral 限制
+    - CMYK / 透明通道 / 16 位色深统一压到白底 RGB，避免服务端 415
+    返回 (归一化后的 bytes, None) 或 (None, 用户可读的错误信息)。
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        im = Image.open(BytesIO(content))
+        im.load()
+    except Exception:
+        return None, "图片文件无法读取，请转换为 JPG 或 PNG 后重新上传"
+
+    fmt = (im.format or "").upper()
+    if fmt not in {"JPEG", "PNG", "WEBP", "BMP"}:
+        return None, f"暂不支持 {fmt or '该'} 格式图片（如 iPhone 默认的 HEIC），请转换为 JPG 或 PNG 后上传"
+
+    w, h = im.size
+    if min(w, h) < 15:
+        return None, "图片尺寸过小（最短边需不小于 15 像素），请换用更清晰的图片"
+
+    # 非 RGB 模式（CMYK/RGBA/P/16 位）统一压到白底 RGB
+    if im.mode != "RGB":
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            bg = Image.new("RGB", im.size, (255, 255, 255))
+            bg.paste(im, mask=im.split()[-1])
+            im = bg
+        else:
+            im = im.convert("RGB")
+
+    # 超长边缩到 8192 以内（保持比例）
+    if max(im.size) > 8192:
+        ratio = 8192 / max(im.size)
+        im = im.resize((max(15, round(im.size[0] * ratio)), max(15, round(im.size[1] * ratio))))
+
+    if fmt == "JPEG" and im.mode == "RGB" and max(im.size) <= 8192 and im.size == (w, h):
+        return content, None
+
+    buf = BytesIO()
+    im.save(buf, "JPEG", quality=92)
+    return buf.getvalue(), None
 
 
 def _probe_aliyun_ocr() -> Tuple[Optional[bool], Optional[str]]:
@@ -379,7 +458,7 @@ def _probe_aliyun_ocr() -> Tuple[Optional[bool], Optional[str]]:
         settings.ALIYUN_OCR_ACCESS_KEY_SECRET,
         settings.ALIYUN_OCR_ENDPOINT,
     )
-    result = ocr.recognize(_OCR_PROBE_PNG)
+    result = ocr.recognize(_get_probe_image())
     if result.get("error_code") == "ocrServiceNotOpen":
         return False, result["error"]
     if result.get("error"):

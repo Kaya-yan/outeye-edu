@@ -13,6 +13,7 @@ from loguru import logger
 import asyncio
 import uuid
 import time
+from urllib.parse import quote
 
 from app.utils.error_handler import handle_api_error
 from app.core.database import AsyncSessionLocal, get_async_db
@@ -1149,12 +1150,21 @@ async def export_plan(
         # Sanitize filename to prevent header injection
         safe_filename = filename.replace('"', '').replace('\r', '').replace('\n', '').replace('\\', '')
 
+        # HTTP 头只接受 latin-1，中文文件名直接放 header 会 500（latin-1 codec can't encode）。
+        # 按 RFC 5987 双写：filename= 给老客户端的 ASCII 兜底名，filename*= 给 UTF-8 编码真名。
+        ascii_fallback = f"lesson-plan.{request.format}"
+        quoted_name = quote(safe_filename)
+
         logger.info(f"导出 {request.format}: {safe_filename}")
 
         return StreamingResponse(
             buffer,
             media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'}
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{quoted_name}'
+                )
+            },
         )
 
     except HTTPException:

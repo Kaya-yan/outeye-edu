@@ -4,7 +4,7 @@
 使用阿里云通用文字识别 API，支持中英文混合识别。
 """
 
-import base64
+import io
 import threading
 from typing import Dict, Any
 from loguru import logger
@@ -50,9 +50,9 @@ class AliyunOCR:
             from alibabacloud_ocr_api20210707 import models as ocr_models
 
             client = self._get_client()
-            body_stream = base64.b64encode(image_bytes).decode("utf-8")
-
-            request = ocr_models.RecognizeGeneralRequest(body=body_stream)
+            # SDK 的 body 参数是 BinaryIO（req_body_type=formData，原样作为请求流上传）。
+            # 传 base64 字符串会被服务端当图片二进制解析 → 415 unsupportedImageFormat。
+            request = ocr_models.RecognizeGeneralRequest(body=io.BytesIO(image_bytes))
             response = client.recognize_general(request)
             body = response.body
 
@@ -83,6 +83,15 @@ class AliyunOCR:
                     "engine": "aliyun",
                     "error": "图片识别服务未开通：请在阿里云控制台开通「通用文字识别」（RecognizeGeneral）",
                     "error_code": "ocrServiceNotOpen",
+                }
+            if "unsupportedImageFormat" in err_text or "415" in err_text:
+                logger.warning(f"阿里云 OCR 拒绝图片格式: {e}")
+                return {
+                    "text": "",
+                    "confidence": 0,
+                    "engine": "aliyun",
+                    "error": "图片格式不受支持（可能是 HEIC、CMYK 或特殊色深），请转换为 JPG 或 PNG 后重新上传",
+                    "error_code": "unsupportedImageFormat",
                 }
             logger.error(f"阿里云 OCR 识别失败: {e}")
             return {"text": "", "confidence": 0, "engine": "aliyun", "error": "阿里云 OCR 服务异常，请稍后重试"}

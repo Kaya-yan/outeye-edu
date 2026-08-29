@@ -35,6 +35,8 @@ python-docx==1.1.0
 python-pptx==0.6.23
 PyMuPDF==1.24.5
 PyPDF2==3.0.1
+# OCR 图片前置校验/归一化（此前为 python-pptx 传递依赖，现为直接依赖）
+Pillow>=10.0
 
 # 阿里云 OCR
 alibabacloud-ocr-api20210707>=1.0.0
