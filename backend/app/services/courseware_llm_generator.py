@@ -1,9 +1,11 @@
 """
-课件 LLM 生成引擎（FIX-3 · F3.1/F3.2，提示词 courseware_html_v1 · 九要素）
+课件 LLM 生成引擎（FIX-3 · F3.1/F3.2；HTML 链路 ④a 升级为三层架构）
 
-HTML 链路：输入 = 确认版教案 + 白盒指标 + 课文全文 + 教学设置 + 官方组件库，
-LLM 生成单文件交互 HTML，落 CoursewareVersion.rendered_html。
-解析/校验失败自动重试一次；仍失败回退模板拼装（courseware_bootstrap），
+HTML 链路（courseware_html_v2 · 三层）：框架层+主题层写死在
+courseware_skeleton_v2.html（16:9 舞台、翻页/键盘/页码、交互行为、学术讲义
+token 组），LLM 只生成逐页内容区 ```html 块 + 四选一强调色声明，后端拼装。
+程序自检只查内容页（页数/单焦点/交互数/禁忌/行内色值），单页不合格定向
+重生成 ≤2 轮，仍失败确定性净化；整副失败重试一次后回退 courseware_bootstrap，
 fallback=True 由前端标注"简化版生成"，绝不静默。
 PPT 链路（F3.3）：LLM 逐页大纲 JSON（≤6 要点/页、口语化讲者备注）
 → python-pptx 渲染 16:9；校验失败重试一次，仍失败回退确定性大纲。
@@ -12,8 +14,10 @@ Word 链路（F3.4）后续在此模块追加。
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from html import escape as _html_escape
 from io import BytesIO
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import uuid4
 from loguru import logger
 import json
@@ -23,9 +27,19 @@ import time
 from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
 
-PROMPT_NAME = "courseware_html_v1"
+PROMPT_NAME = "courseware_html_v2"
 
 _EXTERNAL_RE = re.compile(r"(?:src|href)\s*=\s*[\"']https?://|@import|<link[^>]+stylesheet", re.IGNORECASE)
+
+# ============ ④a 三层架构：骨架（框架+主题）与内容层分离 ============
+
+_SKELETON_PATH = Path(__file__).resolve().parent / "courseware_skeleton_v2.html"
+_SKELETON_CACHE: Optional[str] = None
+
+THEME_PAPER = "#faf9f5"
+THEME_TOKENS = {"paper": THEME_PAPER, "ink": "#1e3a5f", "text": "#2b2b33", "muted": "#6b6f76"}
+ACCENT_PALETTE = {"#b5493e": "朱砂红", "#3e6b5a": "黛绿", "#99653a": "暖赭", "#35507a": "绀青"}
+DEFAULT_ACCENT = "#35507a"
 
 
 @dataclass
@@ -133,33 +147,194 @@ def _build_components_digest(components: List[Dict[str, Any]]) -> str:
     return "\n".join(lines) or "-（组件库为空，按约束规范自行设计原生交互）"
 
 
-def _extract_html(answer: str) -> str:
-    """提取 ```html 代码块；无围栏时退而求完整 <!DOCTYPE …</html> 片段"""
-    blocks = re.findall(r"```html\s*(.*?)\s*```", answer, re.DOTALL | re.IGNORECASE)
-    if blocks:
-        return max(blocks, key=len).strip()
-    m = re.search(r"<!DOCTYPE.*?</html>", answer, re.DOTALL | re.IGNORECASE)
-    if m:
-        return m.group(0).strip()
-    return ""
+# ---- 内容层解析与程序自检（④a：框架项由骨架保证，只查内容页） ----
+
+@dataclass
+class _ContentPage:
+    title: str
+    intent: str
+    html: str
 
 
-def _validate_html(html: str, min_pages: int) -> Optional[str]:
-    """返回 None 表示通过，否则返回失败原因（用于重试反馈与回退判定）"""
-    if not html:
-        return "未找到 HTML 文档（需要 ```html 完整代码块）"
-    if "</html>" not in html or "<body" not in html.lower():
-        return "HTML 文档不完整（缺少 body 或 </html>）"
-    if len(html) < 1500:
-        return f"HTML 过短（{len(html)} 字符），疑似截断"
-    page_count = len(re.findall(r"data-page\s*=", html))
-    if page_count < min_pages:
-        return f"页面数不足：需 ≥{min_pages} 个 data-page 页面，实际 {page_count}"
-    if not re.search(r"data-component\s*=", html):
-        return "缺少 data-component 组件标注"
-    if _EXTERNAL_RE.search(html):
-        return "存在外链资源（src/href 指向 http、@import 或外链样式表），违反单文件约束"
+_ACCENT_DECL_RE = re.compile(r"ACCENT\s*[:：]\s*(#[0-9a-fA-F]{6})")
+_PAGE_META_RE = re.compile(r"<!--\s*page\s*[:：]\s*\d+\s*(?:\|\s*(.*?))?\s*-->", re.IGNORECASE)
+_PAGE_INTENT_RE = re.compile(r"<!--\s*intent\s*[:：]\s*(.*?)\s*-->", re.IGNORECASE)
+_RAW_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgb[a]?\s*\(|\bhsl[a]?\s*\(")
+_GRADIENT_RE = re.compile(r"gradient\s*\(", re.IGNORECASE)
+# ASCII 构造 emoji 区段，避免在源码嵌非 ASCII 字符区间（编辑易损坏）
+_EMOJI_RE = re.compile(
+    "["
+    + chr(0x2600) + "-" + chr(0x27BF)
+    + chr(0x2B00) + "-" + chr(0x2BFF)
+    + chr(0xFE0F)
+    + chr(0x1F000) + "-" + chr(0x1FAFF)
+    + "]"
+)
+_FORBIDDEN_TAGS_RE = re.compile(r"<\s*(script|style|link|iframe|object|embed)\b", re.IGNORECASE)
+_EVENT_ATTR_RE = re.compile(r"\son[a-z]+\s*=", re.IGNORECASE)
+_INLINE_STYLE_FORBIDDEN_RE = re.compile(
+    r"style\s*=\s*[\"'][^\"']*\b(color|background|font-family|line-height)", re.IGNORECASE
+)
+_PAGE_FOCUS_RE = re.compile(r"class\s*=\s*[\"'][^\"']*\bpage-focus\b")
+_INTERACTION_MARKERS = {
+    "reveal": re.compile(r"<details[^>]*class\s*=\s*[\"'][^\"']*\breveal\b", re.IGNORECASE),
+    "timeline": re.compile(r"class\s*=\s*[\"'][^\"']*\btimeline\b", re.IGNORECASE),
+    "vocab-card": re.compile(r"class\s*=\s*[\"'][^\"']*\bvocab-card\b", re.IGNORECASE),
+    "timer": re.compile(r"class\s*=\s*[\"'][^\"']*\btimer\b|data-seconds\s*=", re.IGNORECASE),
+}
+
+
+def _parse_pages(answer: str) -> Tuple[str, List[_ContentPage]]:
+    """解析内容层输出：ACCENT 声明 + 逐页 ```html 块。
+
+    页注释（page/intent）契约在块内前两行；模型偏离写在围栏外时回看
+    上一围栏结束到本围栏开始之间的文本兜底。
+    """
+    pages: List[_ContentPage] = []
+    prev_end = 0
+    for m_fence in re.finditer(r"```html\s*(.*?)\s*```", answer, re.DOTALL | re.IGNORECASE):
+        block = m_fence.group(1)
+        m_meta = _PAGE_META_RE.search(block[:400])
+        m_intent = _PAGE_INTENT_RE.search(block[:400])
+        content = block
+        if m_meta or m_intent:
+            for m in (m_meta, m_intent):
+                if m:
+                    content = content.replace(m.group(0), "", 1)
+        else:
+            lookback = answer[prev_end:m_fence.start()][-400:]
+            m_meta = _PAGE_META_RE.search(lookback)
+            m_intent = _PAGE_INTENT_RE.search(lookback)
+        pages.append(
+            _ContentPage(
+                title=(m_meta.group(1).strip() if m_meta and m_meta.group(1) else ""),
+                intent=(m_intent.group(1).strip() if m_intent else ""),
+                html=content.strip(),
+            )
+        )
+        prev_end = m_fence.end()
+    m_accent = _ACCENT_DECL_RE.search(answer)
+    accent = (m_accent.group(1).lower() if m_accent else "")
+    return accent, pages
+
+
+def _interaction_types(pages: List[_ContentPage]) -> Set[str]:
+    all_html = "\n".join(p.html for p in pages)
+    return {name for name, rx in _INTERACTION_MARKERS.items() if rx.search(all_html)}
+
+
+def _validate_content_page(page: _ContentPage) -> List[str]:
+    """单页程序自检：单焦点 / 无脚本 / 无事件属性 / 无行内色值 / 无渐变 / 无 emoji / 无外链"""
+    problems = []
+    focus_count = len(_PAGE_FOCUS_RE.findall(page.html))
+    if focus_count != 1:
+        problems.append(f"必须恰好一个 .page-focus，实际 {focus_count} 个")
+    if len(page.html) < 120:
+        problems.append("内容过短（<120 字符），疑似截断")
+    if _FORBIDDEN_TAGS_RE.search(page.html):
+        problems.append("含禁用标签（script/style/link/iframe 等），行为与样式由骨架负责")
+    if _EVENT_ATTR_RE.search(page.html):
+        problems.append("含事件属性（on*=）")
+    if _RAW_COLOR_RE.search(page.html):
+        problems.append("含行内色值（#hex/rgb()/hsl()），颜色只能用 var(--token)")
+    if _GRADIENT_RE.search(page.html):
+        problems.append("含渐变")
+    if _EMOJI_RE.search(page.html):
+        problems.append("含 emoji 或装饰性符号")
+    if _INLINE_STYLE_FORBIDDEN_RE.search(page.html):
+        problems.append("行内 style 含禁用属性（color/background/font-family/line-height）")
+    if _EXTERNAL_RE.search(page.html):
+        problems.append("含外链资源，违反单文件约束")
+    return problems
+
+
+def _validate_deck(pages: List[_ContentPage], min_pages: int) -> Optional[str]:
+    """整副课件结构性校验：返回 None 通过，否则失败原因（触发整体重试/回退）"""
+    if len(pages) < min_pages:
+        return f"页面数不足：需 ≥{min_pages} 页，实际 {len(pages)}"
+    types = _interaction_types(pages)
+    if len(types) < 3:
+        return f"交互类型不足：需 ≥3 种（reveal/timeline/vocab-card/timer），实际 {sorted(types) or '无'}"
     return None
+
+
+def _sanitize_page(html_str: str) -> str:
+    """重生成仍失败时的兜底净化：确定性剥除脚本/事件/违禁行内样式/emoji，保证硬性红线"""
+    s = re.sub(r"<script\b.*?</script>|<style\b.*?</style>|<iframe\b.*?</iframe>", "", html_str, flags=re.IGNORECASE | re.DOTALL)
+    s = re.sub(r"<\s*(link|object|embed)\b[^>]*/?>", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\son[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"style\s*=\s*(\"[^\"]*\b(?:color|background|font-family|line-height|gradient)[^\"]*\"|'[^']*\b(?:color|background|font-family|line-height|gradient)[^']*')", "", s, flags=re.IGNORECASE)
+    s = _EMOJI_RE.sub("", s)
+    return s.strip()
+
+
+def _load_skeleton() -> str:
+    global _SKELETON_CACHE
+    if _SKELETON_CACHE is None:
+        _SKELETON_CACHE = _SKELETON_PATH.read_text(encoding="utf-8")
+    return _SKELETON_CACHE
+
+
+def _blend_colors(hex_fg: str, hex_bg: str, ratio: float) -> str:
+    fg = [int(hex_fg[i:i + 2], 16) for i in (1, 3, 5)]
+    bg = [int(hex_bg[i:i + 2], 16) for i in (1, 3, 5)]
+    mixed = [round(ratio * fg[i] + (1 - ratio) * bg[i]) for i in range(3)]
+    return "#" + "".join(f"{c:02x}" for c in mixed)
+
+
+def _assemble_skeleton(title: str, accent: str, pages: List[_ContentPage]) -> str:
+    """三层拼装：骨架（框架+主题）+ 逐页内容 section（重编页码，保留 title/intent）"""
+    sections = []
+    for i, p in enumerate(pages, 1):
+        attrs = f'<section class="page" data-page="{i}" data-title="{_html_escape(p.title or f"第{i}页", quote=True)}"'
+        if p.intent:
+            attrs += f' data-intent="{_html_escape(p.intent, quote=True)}"'
+        sections.append(f'{attrs}>\n{p.html}\n</section>')
+    html = _load_skeleton().replace("<!--SECTIONS-->", "\n".join(sections))
+    return (
+        html.replace("__TITLE__", _html_escape(title))
+        .replace("__ACCENT__", accent)
+        .replace("__ACCENT_SOFT__", _blend_colors(accent, THEME_PAPER, 0.12))
+    )
+
+
+def _relative_luminance(hex_color: str) -> float:
+    def channel(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def contrast_ratio(hex_a: str, hex_b: str) -> float:
+    """WCAG 对比度；主题 token 组合在测试中断言 ≥4.5:1（内容层禁行内色值即承袭该保证）"""
+    la, lb = _relative_luminance(hex_a), _relative_luminance(hex_b)
+    lighter, darker = max(la, lb), min(la, lb)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _regen_page(generator: Any, system_prompt: str, user_prompt: str, page: _ContentPage, index: int, problems: List[str]) -> Optional[_ContentPage]:
+    """单页定向重生成：成功且通过自检才替换，否则返回 None（调用方保留原稿）"""
+    user = (
+        f"{user_prompt}\n\n"
+        f"以下是课件第 {index} 页（标题：{page.title or '无'}，教学意图：{page.intent or '无'}）的现有内容：\n"
+        f"```html\n{page.html}\n```\n\n"
+        "程序自检发现以下问题：\n" + "\n".join(f"- {p}" for p in problems) + "\n\n"
+        "请只重写这一页的内容区 HTML，修复上述全部问题，教学设计保持不变。"
+        "输出：一个 ```html 代码块（块内前两行仍是页注释 page/intent），此外不输出任何文字。"
+        "提醒：颜色只用 var(--ink/--text/--muted/--paper/--accent/--line)；禁止 script/style/link/iframe、"
+        "事件属性、行内色值、渐变、emoji、外链；每页恰好一个 .page-focus。"
+    )
+    answer, _usage = generator._generate_with_api(
+        [{"role": "system", "content": system_prompt}, {"role": "user", "content": user}]
+    )
+    _, pages = _parse_pages(answer)
+    if len(pages) != 1:
+        return None
+    if _validate_content_page(pages[0]):
+        return None
+    return pages[0]
 
 
 def _build_prompt(
@@ -268,10 +443,11 @@ def generate_html_courseware(
     enhancement_tags: Optional[List[str]] = None,
 ) -> HTMLCoursewareResult:
     """
-    生成单文件交互 HTML 课件。
+    生成单文件交互 HTML 课件（④a 三层架构）。
 
-    LLM 输出经结构校验；失败自动重试一次（携带失败原因）；
-    仍失败回退 courseware_bootstrap 模板拼装，fallback=True。
+    内容层 LLM 输出（逐页 ```html 块 + ACCENT 声明）经程序自检：
+    整副失败自动重试一次（携带原因）；单页不合格定向重生成（≤2 轮），
+    仍失败则确定性净化保底线；全部失败回退 courseware_bootstrap，fallback=True。
     """
     start_time = time.time()
     version = prompt_version(PROMPT_NAME)
@@ -282,6 +458,10 @@ def generate_html_courseware(
     fallback_used = True
     retries = 0
     html = ""
+    accent = DEFAULT_ACCENT
+    pages: List[_ContentPage] = []
+    regenerated: List[int] = []
+    sanitized: List[int] = []
     self_check: Dict[str, Any] = {}
     raw_answer = ""
 
@@ -322,27 +502,73 @@ def generate_html_courseware(
 
             answer, _usage = generator._generate_with_api(messages)
             raw_answer = answer
-            html = _extract_html(answer)
-            reason = _validate_html(html, min_pages)
+            accent, pages = _parse_pages(answer)
+            reason = _validate_deck(pages, min_pages)
 
             if reason:
-                # F3.5：解析/校验失败自动重试一次，携带失败原因
+                # F3.5：整副失败自动重试一次，携带失败原因
                 retries = 1
-                logger.warning(f"HTML 课件首次校验失败（{reason}），重试一次")
+                logger.warning(f"HTML 课件内容层首次校验失败（{reason}），重试一次")
                 messages += [
                     {"role": "assistant", "content": answer[-2000:]},
-                    {"role": "user", "content": f"上一次输出未通过结构校验：{reason}。请重新输出完整的 HTML 文档与自检 JSON，严格遵循输出契约。"},
+                    {"role": "user", "content": f"上一次输出未通过结构校验：{reason}。请重新按输出契约输出：ACCENT 首行声明 + 逐页 ```html 块 + 自检 JSON。"},
                 ]
                 answer, _usage = generator._generate_with_api(messages)
                 raw_answer = answer
-                html = _extract_html(answer)
-                reason = _validate_html(html, min_pages)
+                accent, pages = _parse_pages(answer)
+                reason = _validate_deck(pages, min_pages)
 
             if reason:
                 logger.warning(f"HTML 课件重试仍失败（{reason}），回退模板拼装")
             else:
                 fallback_used = False
-                self_check = _extract_selfcheck(raw_answer)
+
+                # 逐页程序自检：定向重生成 ≤2 轮，仍失败则确定性净化保硬性红线
+                for round_no in range(2):
+                    failing = [(i, probs) for i, p in enumerate(pages) if (probs := _validate_content_page(p))]
+                    if not failing:
+                        break
+                    if len(failing) > 4:
+                        reason = "不合格页过多（>4），整体质量不足：" + "；".join(
+                            f"第{i + 1}页({'/'.join(probs[:2])})" for i, probs in failing[:3]
+                        )
+                        logger.warning(f"HTML 课件{reason}，回退模板拼装")
+                        fallback_used = True
+                        break
+                    logger.info(f"内容页自检第{round_no + 1}轮：第 {[i + 1 for i, _ in failing]} 页需重写")
+                    for i, probs in failing:
+                        fixed = _regen_page(generator, system_prompt, user_prompt, pages[i], i + 1, probs)
+                        if fixed is not None:
+                            pages[i] = fixed
+                            if i + 1 not in regenerated:
+                                regenerated.append(i + 1)
+
+                if not fallback_used:
+                    residual = [(i, probs) for i, p in enumerate(pages) if (probs := _validate_content_page(p))]
+                    for i, probs in residual:
+                        logger.warning(f"第{i + 1}页重生成后仍不合格（{'；'.join(probs)}），确定性净化保底线")
+                        pages[i].html = _sanitize_page(pages[i].html)
+                        sanitized.append(i + 1)
+
+                if not fallback_used:
+                    accent_note = None
+                    if accent not in ACCENT_PALETTE:
+                        logger.warning(f"强调色 {accent or '未声明'} 不在色板内，回退默认 {DEFAULT_ACCENT}")
+                        accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
+                        accent = DEFAULT_ACCENT
+                    self_check = {
+                        "prompt_version": version,
+                        "accent": accent,
+                        "accent_note": accent_note,
+                        "pages_count": len(pages),
+                        "page_intents": [
+                            {"page": i + 1, "title": p.title, "intent": p.intent} for i, p in enumerate(pages)
+                        ],
+                        "interaction_types": sorted(_interaction_types(pages)),
+                        "regenerated_pages": regenerated,
+                        "sanitized_pages": sanitized,
+                        "llm_self_check": _extract_selfcheck(raw_answer),
+                    }
         else:
             logger.warning("LLM 不可用，HTML 课件回退模板拼装")
     except Exception as e:
@@ -369,7 +595,8 @@ def generate_html_courseware(
         }
         source_meta = {"generated_by": "template_fallback", "prompt_version": version}
     else:
-        source_meta = {"generated_by": "llm_html", "prompt_version": version}
+        html = _assemble_skeleton(title, accent, pages)
+        source_meta = {"generated_by": "llm_html_v2", "prompt_version": version}
         schema = _wrap_llm_schema(title, html, source_meta)
         sync = _structure_sync_from_pages(schema)
 
