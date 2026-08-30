@@ -12,7 +12,7 @@ import uuid
 
 from app.core.database import get_async_db
 from app.core.security import get_current_user
-from app.models.analysis import AnalysisRecord
+from app.models.analysis import AnalysisRecord, AnalysisProgress
 
 router = APIRouter()
 
@@ -40,6 +40,7 @@ class ProjectResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    furthest_step: Optional[str] = None  # input | analysis | plan | confirmed（无进度行时为 None）
 
     class Config:
         from_attributes = True
@@ -54,7 +55,7 @@ class ProjectUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
 
-def _record_to_response(record: AnalysisRecord) -> dict:
+def _record_to_response(record: AnalysisRecord, furthest_step: Optional[str] = None) -> dict:
     """将 AnalysisRecord 转换为 ProjectResponse 格式"""
     return {
         "id": record.id,
@@ -68,6 +69,7 @@ def _record_to_response(record: AnalysisRecord) -> dict:
         "status": record.analysis_status or "draft",
         "created_at": record.created_at,
         "updated_at": record.updated_at or record.created_at,
+        "furthest_step": furthest_step,
     }
 
 
@@ -91,7 +93,17 @@ async def get_projects(
     result = await db.execute(query)
     records = result.scalars().all()
 
-    return [_record_to_response(r) for r in records]
+    # 进度批量查询（③ 历史恢复）：列表页直接展示最远完成步骤
+    progress_map: dict = {}
+    if records:
+        progress_result = await db.execute(
+            select(AnalysisProgress).where(
+                AnalysisProgress.analysis_id.in_([r.id for r in records])
+            )
+        )
+        progress_map = {p.analysis_id: p.furthest_step for p in progress_result.scalars().all()}
+
+    return [_record_to_response(r, progress_map.get(r.id)) for r in records]
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -111,7 +123,11 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
-    return _record_to_response(record)
+    progress_result = await db.execute(
+        select(AnalysisProgress).where(AnalysisProgress.analysis_id == project_id)
+    )
+    progress = progress_result.scalar_one_or_none()
+    return _record_to_response(record, progress.furthest_step if progress else None)
 
 
 @router.post("", response_model=ProjectResponse)

@@ -9,16 +9,19 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from loguru import logger
 import asyncio
+import json
 import uuid
 import time
+from datetime import datetime
 from urllib.parse import quote
 
 from app.utils.error_handler import handle_api_error
 from app.core.database import AsyncSessionLocal, get_async_db
 from app.core.security import get_current_user
-from app.models.analysis import AnalysisRecord
+from app.models.analysis import AnalysisRecord, LessonPlanVersion, AnalysisProgress
 
 router = APIRouter()
 
@@ -519,6 +522,155 @@ class GeneratePlanRequest(BaseModel):
     duration_minutes: int = Field(90, description="课时时长（分钟）", ge=5, le=180)
     mode: str = Field("enhanced", description="生成模式：basic/enhanced", pattern=r"^(basic|enhanced)$")
     max_retrieval_results: int = Field(3, description="每源最大检索数", ge=1, le=10)
+    analysis_id: Optional[str] = Field(None, description="对应白盒分析记录 id，用于教案版本落库与断点恢复（缺省不落库）")
+
+
+# ============ 教案版本与进度（③ 历史恢复） ============
+
+_STEP_ORDER = {"analysis": 1, "plan": 2, "confirmed": 3}
+
+
+async def _upsert_plan_version(db: AsyncSession, analysis_id: str, user_id: str, mode: str, result: Dict[str, Any]) -> str:
+    """按 (analysis_id, mode) upsert 教案版本快照，返回版本 id（幂等：重复调用覆盖同一行）"""
+    existing = (await db.execute(
+        select(LessonPlanVersion).where(
+            LessonPlanVersion.analysis_id == analysis_id,
+            LessonPlanVersion.mode == mode,
+        )
+    )).scalar_one_or_none()
+    payload = json.dumps(result, ensure_ascii=False)
+    if existing is None:
+        version = LessonPlanVersion(analysis_id=analysis_id, user_id=user_id, mode=mode, result_json=payload)
+        db.add(version)
+        await db.flush()
+        return version.id
+    existing.result_json = payload
+    existing.updated_at = datetime.utcnow()
+    return existing.id
+
+
+async def _advance_progress(
+    db: AsyncSession,
+    analysis_id: str,
+    user_id: str,
+    step: str,
+    confirmed_plan_id: Optional[str] = None,
+) -> None:
+    """进度只前进不回退（confirmed 后再生成 basic/enhanced 不降级）"""
+    progress = (await db.execute(
+        select(AnalysisProgress).where(AnalysisProgress.analysis_id == analysis_id)
+    )).scalar_one_or_none()
+    if progress is None:
+        db.add(AnalysisProgress(
+            analysis_id=analysis_id,
+            user_id=user_id,
+            furthest_step=step,
+            confirmed_plan_id=confirmed_plan_id,
+        ))
+    else:
+        if _STEP_ORDER.get(step, 0) > _STEP_ORDER.get(progress.furthest_step, 0):
+            progress.furthest_step = step
+        if confirmed_plan_id:
+            progress.confirmed_plan_id = confirmed_plan_id
+        progress.updated_at = datetime.utcnow()
+
+
+async def _persist_plan_version(
+    db: AsyncSession,
+    analysis_id: Optional[str],
+    user_id: str,
+    mode: str,
+    result: Dict[str, Any],
+) -> None:
+    """生成结果落库（best-effort）：所有权不符或失败仅告警，绝不影响生成返回"""
+    if not analysis_id:
+        return
+    try:
+        record = (await db.execute(
+            select(AnalysisRecord.user_id).where(AnalysisRecord.id == analysis_id)
+        )).first()
+        if record is None or record.user_id != user_id:
+            logger.warning(f"教案版本落库跳过：分析记录不存在或非本人 ({analysis_id})")
+            return
+        await _upsert_plan_version(db, analysis_id, user_id, mode, result)
+        await _advance_progress(db, analysis_id, user_id, "plan")
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"教案版本落库失败（不影响返回）: {e}")
+        await db.rollback()
+
+
+class PlanConfirmRequest(BaseModel):
+    """教案确认请求"""
+    mode: str = Field(..., description="确认时激活的版本：basic/enhanced", pattern=r"^(basic|enhanced)$")
+    result: Dict[str, Any] = Field(..., description="确认的教案生成结果快照")
+
+
+@router.post("/{analysis_id}/plan-confirm", response_model=Dict[str, Any])
+async def confirm_lesson_plan(
+    analysis_id: str,
+    request: PlanConfirmRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """确认教案：落 confirmed 快照并把进度推进到 confirmed（幂等，重复确认覆盖同一行）"""
+    record = (await db.execute(
+        select(AnalysisRecord.user_id).where(AnalysisRecord.id == analysis_id)
+    )).first()
+    if record is None or record.user_id != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
+
+    snapshot = {"origin_mode": request.mode, "result": request.result}
+    version_id = await _upsert_plan_version(db, analysis_id, current_user["user_id"], "confirmed", snapshot)
+    await _advance_progress(db, analysis_id, current_user["user_id"], "confirmed", confirmed_plan_id=version_id)
+    await db.commit()
+    logger.info(f"教案已确认: analysis={analysis_id}, origin={request.mode}")
+    return {"analysis_id": analysis_id, "status": "confirmed", "mode": request.mode}
+
+
+@router.get("/{analysis_id}/resume-state", response_model=Dict[str, Any])
+async def get_resume_state(
+    analysis_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """恢复状态：furthest_step（无进度行时按 analysis_status 推导）+ 三类版本快照；解析失败的版本跳过不报错"""
+    record = (await db.execute(
+        select(AnalysisRecord).where(AnalysisRecord.id == analysis_id)
+    )).scalar_one_or_none()
+    if record is None or record.user_id != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
+
+    progress = (await db.execute(
+        select(AnalysisProgress).where(AnalysisProgress.analysis_id == analysis_id)
+    )).scalar_one_or_none()
+    if progress is not None:
+        furthest = progress.furthest_step
+    else:
+        furthest = "analysis" if record.analysis_status == "completed" else "input"
+
+    versions: Dict[str, Any] = {"basic": None, "enhanced": None}
+    confirmed = None
+    rows = (await db.execute(
+        select(LessonPlanVersion).where(LessonPlanVersion.analysis_id == analysis_id)
+    )).scalars().all()
+    for row in rows:
+        try:
+            parsed = json.loads(row.result_json)
+        except (ValueError, TypeError):
+            logger.warning(f"教案版本 JSON 解析失败，跳过: {row.id}")
+            continue
+        if row.mode in versions:
+            versions[row.mode] = parsed
+        elif row.mode == "confirmed":
+            confirmed = parsed
+
+    return {
+        "analysis_id": analysis_id,
+        "furthest_step": furthest,
+        "versions": versions,
+        "confirmed": confirmed,
+    }
 
 
 @router.post("/generate-plan", response_model=Dict[str, Any])
@@ -738,6 +890,9 @@ async def generate_teaching_plan(
             await db.commit()
         except Exception as log_err:
             logger.warning(f"生成记录落库失败（不影响返回）: {log_err}")
+
+        # 教案版本落库（③ 历史恢复）：携带 analysis_id 时持久化，失败不影响返回
+        await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response)
 
         logger.info(f"教学方案生成完成: 总耗时{total_duration:.2f}s")
         return response
@@ -979,6 +1134,14 @@ async def _run_plan_generation(task_id: str, request: GeneratePlanRequest, curre
                 await db.commit()
         except Exception as log_err:
             logger.warning(f"生成记录落库失败（不影响返回）: {log_err}")
+
+        # 教案版本落库（③ 历史恢复）：携带 analysis_id 时持久化，失败不影响任务结果
+        if request.analysis_id:
+            try:
+                async with AsyncSessionLocal() as db:
+                    await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response)
+            except Exception as persist_err:
+                logger.warning(f"教案版本落库失败（不影响返回）: {persist_err}")
 
         logger.info(f"教学方案生成完成: 总耗时{total_duration:.2f}s")
         state.update(status="done", result=response)

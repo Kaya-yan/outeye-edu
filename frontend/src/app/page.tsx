@@ -176,6 +176,13 @@ interface GeneratePlanResult {
 
 type Step = "input" | "analysis" | "plan";
 
+// ③ 历史恢复：后端 GET /analysis/{id}/resume-state 的载荷
+interface ResumeState {
+  furthest_step: string;
+  versions: { basic?: GeneratePlanResult | null; enhanced?: GeneratePlanResult | null };
+  confirmed?: { origin_mode: "basic" | "enhanced"; result: GeneratePlanResult } | null;
+}
+
 const COURSE_TYPES = ["精读", "泛读", "听说", "读写", "翻译", "写作", "综合"];
 
 // ============ Page ============
@@ -202,30 +209,71 @@ export default function AnalysisPage() {
   const [lastContext, setLastContext] = useState<TeachingContext | null>(null);
 
   // 从历史记录点"继续"进入：恢复上次的课文与设置；
-  // 已完成过分析的记录自动重析（白盒为确定性计算，秒级），直接回到结果视图
+  // 已生成过教案的记录直接跳回教案步（免重分析），其余自动重析（白盒为确定性计算，秒级）
   const [autoAnalyzeQueued, setAutoAnalyzeQueued] = useState(false);
+  const [resumeRecordId, setResumeRecordId] = useState<string | null>(null);
+  const [restoredConfirmed, setRestoredConfirmed] = useState(false);
   useEffect(() => {
+    let parsed: {
+      id?: string;
+      title?: string;
+      source_text?: string;
+      student_level?: string;
+      course_type?: string;
+      duration_minutes?: number;
+      auto_analyze?: boolean;
+    };
     try {
       const raw = sessionStorage.getItem("outeye:resume-project");
       if (!raw) return;
       sessionStorage.removeItem("outeye:resume-project");
-      const p = JSON.parse(raw) as {
-        title?: string;
-        source_text?: string;
-        student_level?: string;
-        course_type?: string;
-        duration_minutes?: number;
-        auto_analyze?: boolean;
-      };
-      if (p.title) setTitle(p.title);
-      if (p.source_text) setText(p.source_text);
-      if (p.student_level) setStudentLevel(p.student_level);
-      if (p.course_type) setCourseType(p.course_type);
-      if (p.duration_minutes) setDurationInput(String(p.duration_minutes));
-      if (p.auto_analyze && p.source_text) setAutoAnalyzeQueued(true);
+      parsed = JSON.parse(raw);
     } catch {
       // 恢复失败不阻塞正常使用
+      return;
     }
+    const p = parsed;
+    if (p.title) setTitle(p.title);
+    if (p.source_text) setText(p.source_text);
+    if (p.student_level) setStudentLevel(p.student_level);
+    if (p.course_type) setCourseType(p.course_type);
+    if (p.duration_minutes) setDurationInput(String(p.duration_minutes));
+    if (p.id) setResumeRecordId(p.id);
+
+    if (!p.auto_analyze || !p.source_text) return;
+    if (!p.id) {
+      setAutoAnalyzeQueued(true);
+      return;
+    }
+    void (async () => {
+      try {
+        const state = await apiGet<ResumeState>(`/analysis/${p.id}/resume-state`);
+        const usable = state.versions.basic || state.versions.enhanced || state.confirmed;
+        if ((state.furthest_step === "plan" || state.furthest_step === "confirmed") && usable) {
+          const restored: { basic?: GeneratePlanResult; enhanced?: GeneratePlanResult } = {};
+          if (state.versions.basic) restored.basic = state.versions.basic;
+          if (state.versions.enhanced) restored.enhanced = state.versions.enhanced;
+          // 确认快照覆盖其来源版本：恢复的就是教师当时拍板的那一版
+          if (state.confirmed?.result) {
+            restored[state.confirmed.origin_mode] = state.confirmed.result;
+          }
+          setVersions(restored);
+          setActiveVersion(
+            state.confirmed?.result
+              ? state.confirmed.origin_mode
+              : state.versions.enhanced
+                ? "enhanced"
+                : "basic"
+          );
+          if (state.furthest_step === "confirmed" && state.confirmed) setRestoredConfirmed(true);
+          setStep("plan");
+          return;
+        }
+      } catch (err) {
+        console.warn("恢复教案状态失败，降级为重新分析", err);
+      }
+      setAutoAnalyzeQueued(true);
+    })();
   }, []);
 
   // 结果出来后自动平滑滚回页面顶部，避免用户拖动半天
@@ -356,6 +404,7 @@ export default function AnalysisPage() {
         duration_minutes: context.durationMinutes,
         mode,
         max_retrieval_results: 3,
+        analysis_id: analysis?.text_id || resumeRecordId || undefined,
       });
       setVersions((prev) => ({ ...prev, [mode]: result }));
       setActiveVersion(mode);
@@ -383,9 +432,23 @@ export default function AnalysisPage() {
   };
 
   const handleGenerateOther = async () => {
-    if (!lastContext) return;
+    // 历史恢复直达教案步时 lastContext 为空，从恢复版本的生成设置推导
+    let context = lastContext;
+    if (!context) {
+      const current = versions[activeVersion];
+      if (!current) return;
+      const s = current.generation_settings;
+      context = {
+        courseType: s?.course_type || courseType || "精读",
+        durationMinutes: s?.duration_minutes ?? 90,
+        classSize: s?.class_size ?? 30,
+        studentLevel: current.student_level || studentLevel,
+        mode: planMode,
+      };
+      setLastContext(context);
+    }
     const other = activeVersion === "basic" ? "enhanced" : "basic";
-    await generateVersion(lastContext, other);
+    await generateVersion(context, other);
   };
 
   // Reset
@@ -396,6 +459,8 @@ export default function AnalysisPage() {
     setActiveVersion("enhanced");
     setLastContext(null);
     setError("");
+    setResumeRecordId(null);
+    setRestoredConfirmed(false);
   };
 
   if (step === "input") {
@@ -509,6 +574,8 @@ export default function AnalysisPage() {
               title={title}
               studentLevel={studentLevel}
               language={language}
+              analysisId={analysis?.text_id || resumeRecordId}
+              initialConfirmed={restoredConfirmed}
             />
           )}
         </div>
@@ -908,6 +975,8 @@ function PlanStep({
   title,
   studentLevel,
   language,
+  analysisId,
+  initialConfirmed,
 }: {
   result: GeneratePlanResult;
   versions: { basic?: GeneratePlanResult; enhanced?: GeneratePlanResult };
@@ -921,6 +990,8 @@ function PlanStep({
   title?: string;
   studentLevel?: string;
   language?: string;
+  analysisId?: string | null;
+  initialConfirmed?: boolean;
 }) {
   const router = useRouter();
   const [exporting, setExporting] = useState(false);
@@ -930,7 +1001,18 @@ function PlanStep({
   const [creatingCourseware, setCreatingCourseware] = useState(false);
   const [coursewareProgress, setCoursewareProgress] = useState("");
   const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
-  const [planConfirmed, setPlanConfirmed] = useState(false);
+  const [planConfirmed, setPlanConfirmed] = useState(initialConfirmed ?? false);
+
+  // 确认教案：先亮 UI，再后台落库（幂等）；失败不影响课堂侧使用
+  const confirmPlan = () => {
+    setPlanConfirmed(true);
+    if (analysisId) {
+      void apiPost(`/analysis/${analysisId}/plan-confirm`, {
+        mode: activeVersion,
+        result,
+      }).catch(() => {});
+    }
+  };
 
   const availableVersions = (["basic", "enhanced"] as const).filter(
     (v) => versions[v]
@@ -1226,7 +1308,7 @@ function PlanStep({
             studentLevel={studentLevel}
             language={language}
             planConfirmed={planConfirmed}
-            onConfirmPlan={() => setPlanConfirmed(true)}
+            onConfirmPlan={confirmPlan}
             onUnconfirmPlan={() => setPlanConfirmed(false)}
           />
         )}

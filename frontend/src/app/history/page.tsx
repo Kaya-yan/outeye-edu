@@ -15,11 +15,20 @@ interface Project {
   status: string;
   created_at: string;
   source_text?: string;
+  furthest_step?: string | null;
 }
 
 const RESUME_KEY = "outeye:resume-project";
 
 function progressOf(p: Project): { label: string; className: string; dot: string } {
+  switch (p.furthest_step) {
+    case "confirmed":
+      return { label: "教案已确认", className: "bg-accent-100 text-ink-900 border border-accent-200", dot: "bg-accent-500" };
+    case "plan":
+      return { label: "教案已生成", className: "bg-sage-100 text-ink-800 border border-sage-200", dot: "bg-sage-500" };
+    default:
+      break;
+  }
   switch (p.analysis_status) {
     case "processing":
       return { label: "分析中", className: "bg-accent-100 text-ink-900 border border-accent-200", dot: "bg-accent-500" };

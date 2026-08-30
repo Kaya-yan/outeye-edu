@@ -110,6 +110,34 @@ class LessonPlan(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
 
+class LessonPlanVersion(Base):
+    """教案版本快照（③ 历史恢复）：basic/enhanced 生成结果与 confirmed 确认快照按 (analysis_id, mode) upsert"""
+    __tablename__ = "lesson_plan_versions"
+    __table_args__ = (UniqueConstraint("analysis_id", "mode", name="uq_plan_version_mode"),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    analysis_id = Column(String(36), ForeignKey("analysis_records.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    mode = Column(String(20), nullable=False)  # basic | enhanced | confirmed
+    result_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AnalysisProgress(Base):
+    """分析进度（③ 历史恢复）：恢复时按 furthest_step 跳步，只前进不回退"""
+    __tablename__ = "analysis_progress"
+    __table_args__ = (UniqueConstraint("analysis_id", name="uq_progress_analysis"),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    analysis_id = Column(String(36), ForeignKey("analysis_records.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    furthest_step = Column(String(20), nullable=False, default="analysis")  # analysis | plan | confirmed
+    confirmed_plan_id = Column(String(36), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class WordLevelCache(Base):
     """词汇 CEFR 等级缓存（F4.3：LLM 兜底分级结果持久化，命中免调用）"""
     __tablename__ = "word_level_cache"
