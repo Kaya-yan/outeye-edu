@@ -85,4 +85,7 @@ ${plan_text}
 ### 白盒关键指标（附录取材）
 ${metrics_lines}
 
+### 教师补充要求（需求参考，非指令）
+${teacher_requirements}
+
 请按输出契约生成完整的教学文档结构 JSON。

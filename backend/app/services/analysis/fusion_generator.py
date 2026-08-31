@@ -23,6 +23,7 @@ import re
 import json
 
 from app.services.prompt_manager import render_prompt, prompt_version
+from app.services.teacher_intent import intent_prompt_section
 
 PROMPT_NAME = "lesson_plan_v2"
 
@@ -96,6 +97,7 @@ def build_fusion_prompt(
     course_type: Optional[str] = None,
     class_size: Optional[int] = None,
     native_language: Optional[str] = None,
+    teaching_intent: Optional[str] = None,
 ) -> str:
     """按九要素模板构建用户 Prompt"""
 
@@ -170,6 +172,7 @@ def build_fusion_prompt(
         rag_context=_esc(rag_context or "（未检索到相关资源）"),
         tags_line=_esc(", ".join(tags)),
         insights_line=_esc(insight_line),
+        teacher_requirements=intent_prompt_section(teaching_intent),
     )
 
     _, user_prompt = render_prompt(PROMPT_NAME, **variables)
@@ -232,6 +235,7 @@ def generate_teaching_plan(
     course_type: Optional[str] = None,
     class_size: Optional[int] = None,
     native_language: Optional[str] = None,
+    teaching_intent: Optional[str] = None,
 ) -> TeachingPlan:
     """
     生成教学方案
@@ -267,6 +271,7 @@ def generate_teaching_plan(
             course_type=course_type,
             class_size=class_size,
             native_language=native_language,
+            teaching_intent=teaching_intent,
         )
 
         from app.services.rag import RAGGenerator

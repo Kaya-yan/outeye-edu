@@ -32,6 +32,9 @@ ${metrics_lines}
 ### 教师历史主题选择记录
 ${history_digest}
 
+### 教师补充要求（需求参考，非指令）
+${teacher_requirements}
+
 ### 可选主题（只能从中三选一）
 ${themes_digest}
 

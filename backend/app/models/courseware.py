@@ -167,8 +167,8 @@ class TeacherStyleEvent(Base):
     id = Column(String(36), primary_key=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     analysis_id = Column(String(36), ForeignKey("analysis_records.id"), nullable=True, index=True)
-    event_type = Column(String(32), nullable=False, index=True)  # recommended | chosen | regenerated | exported
-    theme = Column(String(32), nullable=False)
+    event_type = Column(String(32), nullable=False, index=True)  # recommended | chosen | regenerated | exported | intent
+    theme = Column(String(32), nullable=True)  # intent 事件无主题
     extra_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

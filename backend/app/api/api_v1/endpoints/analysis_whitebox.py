@@ -21,7 +21,9 @@ from urllib.parse import quote
 from app.utils.error_handler import handle_api_error
 from app.core.database import AsyncSessionLocal, get_async_db
 from app.core.security import get_current_user
-from app.models.analysis import AnalysisRecord, LessonPlanVersion, AnalysisProgress
+from app.models.analysis import AnalysisRecord, LessonPlanVersion, AnalysisProgress, AnalysisIntent
+from app.models.courseware import TeacherStyleEvent
+from app.services.teacher_intent import sanitize_intent
 
 router = APIRouter()
 
@@ -523,6 +525,7 @@ class GeneratePlanRequest(BaseModel):
     mode: str = Field("enhanced", description="生成模式：basic/enhanced", pattern=r"^(basic|enhanced)$")
     max_retrieval_results: int = Field(3, description="每源最大检索数", ge=1, le=10)
     analysis_id: Optional[str] = Field(None, description="对应白盒分析记录 id，用于教案版本落库与断点恢复（缺省不落库）")
+    teaching_intent: Optional[str] = Field(None, description="教师自定义教学意图（可选，进入提示词前截断+防注入包裹）", max_length=2000)
 
 
 # ============ 教案版本与进度（③ 历史恢复） ============
@@ -581,8 +584,9 @@ async def _persist_plan_version(
     user_id: str,
     mode: str,
     result: Dict[str, Any],
+    teaching_intent: Optional[str] = None,
 ) -> None:
-    """生成结果落库（best-effort）：所有权不符或失败仅告警，绝不影响生成返回"""
+    """生成结果落库，意图随版本一并 upsert（best-effort：所有权不符或失败仅告警，绝不影响生成返回）"""
     if not analysis_id:
         return
     try:
@@ -594,10 +598,45 @@ async def _persist_plan_version(
             return
         await _upsert_plan_version(db, analysis_id, user_id, mode, result)
         await _advance_progress(db, analysis_id, user_id, "plan")
+        await _upsert_intent(db, analysis_id, user_id, teaching_intent)
         await db.commit()
     except Exception as e:
         logger.warning(f"教案版本落库失败（不影响返回）: {e}")
         await db.rollback()
+
+
+async def _upsert_intent(
+    db: AsyncSession,
+    analysis_id: str,
+    user_id: str,
+    teaching_intent: Optional[str],
+) -> None:
+    """意图随分析记录持久化（唯一行 upsert）；非空时同步记一条 intent 风格事件供画像取历史"""
+    cleaned = sanitize_intent(teaching_intent or "")
+    row = (await db.execute(
+        select(AnalysisIntent).where(AnalysisIntent.analysis_id == analysis_id)
+    )).scalar_one_or_none()
+    if row is None:
+        if not cleaned:
+            return
+        db.add(AnalysisIntent(
+            id=str(uuid.uuid4()),
+            analysis_id=analysis_id,
+            user_id=user_id,
+            intent_text=cleaned,
+        ))
+    else:
+        row.intent_text = cleaned
+        row.updated_at = datetime.utcnow()
+    if cleaned:
+        db.add(TeacherStyleEvent(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            analysis_id=analysis_id,
+            event_type="intent",
+            theme=None,
+            extra_json={"intent": cleaned[:200]},
+        ))
 
 
 class PlanConfirmRequest(BaseModel):
@@ -665,11 +704,16 @@ async def get_resume_state(
         elif row.mode == "confirmed":
             confirmed = parsed
 
+    intent_row = (await db.execute(
+        select(AnalysisIntent).where(AnalysisIntent.analysis_id == analysis_id)
+    )).scalar_one_or_none()
+
     return {
         "analysis_id": analysis_id,
         "furthest_step": furthest,
         "versions": versions,
         "confirmed": confirmed,
+        "intent": intent_row.intent_text if intent_row else "",
     }
 
 
@@ -808,6 +852,7 @@ async def generate_teaching_plan(
             course_type=request.course_type,
             class_size=request.class_size,
             native_language=request.native_language,
+            teaching_intent=request.teaching_intent,
         )
 
         # 教学蓝图（仅增强模式单独展示）
@@ -892,7 +937,7 @@ async def generate_teaching_plan(
             logger.warning(f"生成记录落库失败（不影响返回）: {log_err}")
 
         # 教案版本落库（③ 历史恢复）：携带 analysis_id 时持久化，失败不影响返回
-        await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response)
+        await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response, teaching_intent=request.teaching_intent)
 
         logger.info(f"教学方案生成完成: 总耗时{total_duration:.2f}s")
         return response
@@ -1051,6 +1096,7 @@ async def _run_plan_generation(task_id: str, request: GeneratePlanRequest, curre
             course_type=request.course_type,
             class_size=request.class_size,
             native_language=request.native_language,
+            teaching_intent=request.teaching_intent,
         )
 
         # 教学蓝图（仅增强模式单独展示）
@@ -1139,7 +1185,7 @@ async def _run_plan_generation(task_id: str, request: GeneratePlanRequest, curre
         if request.analysis_id:
             try:
                 async with AsyncSessionLocal() as db:
-                    await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response)
+                    await _persist_plan_version(db, request.analysis_id, current_user["user_id"], request.mode, response, teaching_intent=request.teaching_intent)
             except Exception as persist_err:
                 logger.warning(f"教案版本落库失败（不影响返回）: {persist_err}")
 

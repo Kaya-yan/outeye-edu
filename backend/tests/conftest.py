@@ -45,3 +45,13 @@ def client(test_db_session):
     app.dependency_overrides[get_async_db] = override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """全量套件内 TestClient 同 IP（"testclient"）会发出数百请求，触发内存限流 429 串扰后续测试"""
+    from app.core.rate_limit import rate_limiter, file_upload_limiter
+
+    rate_limiter._requests.clear()
+    file_upload_limiter._requests.clear()
+    yield

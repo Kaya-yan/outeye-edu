@@ -75,6 +75,7 @@ class CoursewareGenerateRequest(BaseModel):
     enhancement_tags: Optional[List[str]] = None
     theme: Optional[str] = None                     # HTML 链路视觉主题（④b，缺省 academic）
     analysis_id: Optional[str] = None               # 风格档案关联（同 ③ 的 analysis_id）
+    teaching_intent: Optional[str] = Field(None, description="教师自定义教学意图（可选，进入提示词前截断+防注入包裹）", max_length=2000)
 
 
 class ThemeBriefRequest(BaseModel):
@@ -87,6 +88,7 @@ class ThemeBriefRequest(BaseModel):
     student_level: Optional[str] = None
     course_type: Optional[str] = None
     analysis: Optional[Dict[str, Any]] = None
+    teaching_intent: Optional[str] = Field(None, description="教师自定义教学意图（可选，进入提示词前截断+防注入包裹）", max_length=2000)
 
 
 # 课件生成任务注册表（进程内；重启丢失，前端轮询 404 时提示重试）
@@ -170,6 +172,7 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
             learner_gap=payload.learner_gap,
             enhancement_tags=payload.enhancement_tags,
             theme=payload.theme,
+            teaching_intent=payload.teaching_intent,
         )
 
         state.update(status="saving", progress="正在保存课件项目…")
@@ -256,6 +259,7 @@ async def _run_document_generation(task_id: str, payload: CoursewareGenerateRequ
             course_type=payload.course_type,
             class_size=payload.class_size,
             native_language=payload.native_language,
+            teaching_intent=payload.teaching_intent,
         )
 
         state.update(status="saving", progress="正在渲染 PPT 并保存…")
@@ -735,6 +739,7 @@ async def create_theme_brief(
         student_level=request.student_level or "",
         course_type=request.course_type or "",
         history_digest=style_history_digest(history),
+        teaching_intent=request.teaching_intent,
     )
     await _record_style_event(
         db,

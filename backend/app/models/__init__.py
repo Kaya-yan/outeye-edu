@@ -3,7 +3,7 @@
 """
 
 from app.models.user import User
-from app.models.analysis import AnalysisRecord, LessonPlan, LessonPlanVersion, AnalysisProgress
+from app.models.analysis import AnalysisRecord, LessonPlan, LessonPlanVersion, AnalysisProgress, AnalysisIntent
 from app.models.learning import LearningRecord, UserFeedback, UserBehavior
 from app.models.document import Document, DocumentChunk
 from app.models.generation import GenerationLog
@@ -22,6 +22,7 @@ __all__ = [
     "LessonPlan",
     "LessonPlanVersion",
     "AnalysisProgress",
+    "AnalysisIntent",
     "LearningRecord",
     "UserFeedback",
     "Document",

@@ -551,6 +551,9 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                 ? "幻灯片式"
                 : "长页面式"}
           </span>
+          <span className="hidden lg:inline rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500">
+            AI 生成内容 · 请核对
+          </span>
           {patches.length > 0 && (
             <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] text-blue-700">
               {patches.length} 处调整

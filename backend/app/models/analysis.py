@@ -138,6 +138,19 @@ class AnalysisProgress(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AnalysisIntent(Base):
+    """教师自定义教学意图：按 analysis_id 唯一 upsert，恢复时带回输入框"""
+    __tablename__ = "analysis_intents"
+    __table_args__ = (UniqueConstraint("analysis_id", name="uq_intent_analysis"),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    analysis_id = Column(String(36), ForeignKey("analysis_records.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    intent_text = Column(String(600), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class WordLevelCache(Base):
     """词汇 CEFR 等级缓存（F4.3：LLM 兜底分级结果持久化，命中免调用）"""
     __tablename__ = "word_level_cache"

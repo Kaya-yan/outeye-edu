@@ -27,6 +27,7 @@ import time
 from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
 from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, get_theme
+from app.services.teacher_intent import intent_prompt_section
 
 PROMPT_NAME = "courseware_html_v2"
 
@@ -360,6 +361,7 @@ def _build_prompt(
     native_language: str,
     components: List[Dict[str, Any]],
     theme: Optional[CoursewareTheme] = None,
+    teaching_intent: Optional[str] = None,
 ) -> str:
     stages = plan.get("activity_designs") or []
     cw_theme = theme or _ACADEMIC
@@ -378,6 +380,7 @@ def _build_prompt(
         metrics_lines=_esc(_build_metrics_lines(analysis)),
         components_digest=_esc(_build_components_digest(components)),
         theme_desc=f"「{cw_theme.name}」主题（{cw_theme.palette_desc}）",
+        teacher_requirements=intent_prompt_section(teaching_intent),
     )
     return user_prompt
 
@@ -453,6 +456,7 @@ def generate_html_courseware(
     learner_gap: Optional[Dict[str, Any]] = None,
     enhancement_tags: Optional[List[str]] = None,
     theme: Optional[str] = None,
+    teaching_intent: Optional[str] = None,
 ) -> HTMLCoursewareResult:
     """
     生成单文件交互 HTML 课件（④a 三层架构）。
@@ -493,6 +497,7 @@ def generate_html_courseware(
             native_language=native_language,
             components=components,
             theme=cw_theme,
+            teaching_intent=teaching_intent,
         )
 
         from app.services.rag import RAGGenerator
@@ -727,6 +732,7 @@ def _build_ppt_prompt(
     class_size: int,
     native_language: str,
     slide_count_hint: int,
+    teaching_intent: Optional[str] = None,
 ) -> str:
     _, user_prompt = render_prompt(
         PPT_PROMPT_NAME,
@@ -742,6 +748,7 @@ def _build_ppt_prompt(
         full_text=_esc(prepare_text(text or "")),
         plan_text=_esc(_format_plan_text(plan)),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
+        teacher_requirements=intent_prompt_section(teaching_intent),
     )
     return user_prompt
 
@@ -882,6 +889,12 @@ def _render_pptx(outline: Dict[str, Any], title: str) -> BytesIO:
         add_text(slide, 0.8, 7.05, 8.0, 0.4, [title[:40]], 9, ink_soft)
         add_text(slide, 11.5, 7.05, 1.4, 0.4, [f"{idx} / {total}"], 9, ink_soft, align=PP_ALIGN.RIGHT)
 
+    # AIGC 标识末页（合规要求：AI 生成内容显式标识）
+    slide = prs.slides.add_slide(blank)
+    fill_bg(slide, canvas)
+    add_text(slide, 1.0, 2.9, 11.3, 1.2, ["本课件由 OutEye Edu AI 生成"], 24, ink_soft, align=PP_ALIGN.CENTER)
+    add_text(slide, 1.0, 4.2, 11.3, 0.8, ["仅供教学参考，请教师核对后使用"], 14, ink_soft, align=PP_ALIGN.CENTER)
+
     buf = BytesIO()
     prs.save(buf)
     buf.seek(0)
@@ -901,6 +914,7 @@ def generate_ppt_courseware(
     course_type: Optional[str] = None,
     class_size: Optional[int] = None,
     native_language: Optional[str] = None,
+    teaching_intent: Optional[str] = None,
 ) -> PPTCoursewareResult:
     """
     生成 16:9 课堂放映 PPT：LLM 逐页大纲 JSON → python-pptx 渲染。
@@ -933,6 +947,7 @@ def generate_ppt_courseware(
             class_size=class_size or 30,
             native_language=native_language or "中文",
             slide_count_hint=slide_count_hint,
+            teaching_intent=teaching_intent,
         )
 
         from app.services.rag import RAGGenerator
@@ -1053,6 +1068,7 @@ def _build_word_prompt(
     course_type: str,
     class_size: int,
     native_language: str,
+    teaching_intent: Optional[str] = None,
 ) -> str:
     _, user_prompt = render_prompt(
         WORD_PROMPT_NAME,
@@ -1067,6 +1083,7 @@ def _build_word_prompt(
         full_text=_esc(prepare_text(text or "")),
         plan_text=_esc(_format_plan_text(plan)),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
+        teacher_requirements=intent_prompt_section(teaching_intent),
     )
     return user_prompt
 
@@ -1149,6 +1166,11 @@ def _render_docx(outline: Dict[str, Any], title: str) -> BytesIO:
                 for j, val in enumerate(row[: len(headers)]):
                     cells[j].text = val
 
+    # AIGC 标识末段（合规要求：AI 生成内容显式标识）
+    p = doc.add_paragraph("本文档由 OutEye Edu AI 生成，仅供教学参考，请教师核对后使用。")
+    for run in p.runs:
+        run.font.size = Pt(9)
+
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
@@ -1168,6 +1190,7 @@ def generate_word_courseware(
     course_type: Optional[str] = None,
     class_size: Optional[int] = None,
     native_language: Optional[str] = None,
+    teaching_intent: Optional[str] = None,
 ) -> WordCoursewareResult:
     """
     生成教师课堂执行文档（Word）：LLM 结构 JSON → python-docx 渲染。
@@ -1198,6 +1221,7 @@ def generate_word_courseware(
             course_type=course_type or "综合",
             class_size=class_size or 30,
             native_language=native_language or "中文",
+            teaching_intent=teaching_intent,
         )
 
         from app.services.rag import RAGGenerator

@@ -181,9 +181,53 @@ interface ResumeState {
   furthest_step: string;
   versions: { basic?: GeneratePlanResult | null; enhanced?: GeneratePlanResult | null };
   confirmed?: { origin_mode: "basic" | "enhanced"; result: GeneratePlanResult } | null;
+  intent?: string;
 }
 
 const COURSE_TYPES = ["精读", "泛读", "听说", "读写", "翻译", "写作", "综合"];
+
+// 教师自定义教学意图：快捷标签点选填入，文本框可再编辑；不填不影响流程
+const INTENT_PRESETS = ["侧重词汇操练", "强调文化对比", "增加课堂互动", "突出语法讲解"];
+
+function IntentInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const applyPreset = (preset: string) => {
+    if (value.includes(preset)) return;
+    onChange(value.trim() ? `${value.trim().replace(/[；;，,\s]+$/, "")}；${preset}` : preset);
+  };
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-ink-900">教学意图</span>
+        {INTENT_PRESETS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => applyPreset(p)}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              value.includes(p)
+                ? "border-primary-300 bg-primary-50 text-primary-700"
+                : "border-black/10 bg-white text-ink-600 hover:border-primary-200"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        <span className="text-xs text-ink-400">可选 · 优先于 AI 默认设计</span>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, 500))}
+        rows={2}
+        maxLength={500}
+        placeholder="例如：本课重点练习被动语态的口语运用；学生下月参加演讲比赛…"
+        className="w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-primary-400 focus:outline-none"
+      />
+      <p className="mt-1.5 text-xs leading-5 text-ink-400">
+        意图将用于教案与课件生成；与可读性或学术规范冲突时，AI 执行意图精神并在结果中说明调整。
+      </p>
+    </div>
+  );
+}
 
 // ============ Page ============
 
@@ -213,6 +257,7 @@ export default function AnalysisPage() {
   const [autoAnalyzeQueued, setAutoAnalyzeQueued] = useState(false);
   const [resumeRecordId, setResumeRecordId] = useState<string | null>(null);
   const [restoredConfirmed, setRestoredConfirmed] = useState(false);
+  const [teacherIntent, setTeacherIntent] = useState("");
   useEffect(() => {
     let parsed: {
       id?: string;
@@ -258,6 +303,7 @@ export default function AnalysisPage() {
             restored[state.confirmed.origin_mode] = state.confirmed.result;
           }
           setVersions(restored);
+          if (state.intent) setTeacherIntent(state.intent);
           setActiveVersion(
             state.confirmed?.result
               ? state.confirmed.origin_mode
@@ -405,6 +451,7 @@ export default function AnalysisPage() {
         mode,
         max_retrieval_results: 3,
         analysis_id: analysis?.text_id || resumeRecordId || undefined,
+        teaching_intent: teacherIntent.trim() || undefined,
       });
       setVersions((prev) => ({ ...prev, [mode]: result }));
       setActiveVersion(mode);
@@ -461,6 +508,7 @@ export default function AnalysisPage() {
     setError("");
     setResumeRecordId(null);
     setRestoredConfirmed(false);
+    setTeacherIntent("");
   };
 
   if (step === "input") {
@@ -540,6 +588,8 @@ export default function AnalysisPage() {
               analysis={analysis}
               loading={loading}
               cultureStatus={cultureStatus}
+              intent={teacherIntent}
+              onIntentChange={setTeacherIntent}
               settings={{
                 studentLevel,
                 onStudentLevelChange: handleStudentLevelChange,
@@ -576,6 +626,8 @@ export default function AnalysisPage() {
               language={language}
               analysisId={analysis?.text_id || resumeRecordId}
               initialConfirmed={restoredConfirmed}
+              intent={teacherIntent}
+              onIntentChange={setTeacherIntent}
             />
           )}
         </div>
@@ -914,6 +966,8 @@ function AnalysisStep({
   loading,
   cultureStatus,
   settings,
+  intent,
+  onIntentChange,
   onNext,
   onBack,
 }: {
@@ -921,6 +975,8 @@ function AnalysisStep({
   loading: boolean;
   cultureStatus: "idle" | "loading" | "enriched" | "fallback";
   settings: SettingsProps;
+  intent: string;
+  onIntentChange: (v: string) => void;
   onNext: () => void;
   onBack: () => void;
 }) {
@@ -939,6 +995,10 @@ function AnalysisStep({
           </div>
         </div>
         <WhiteboxResults data={analysis} cultureStatus={cultureStatus} />
+      </div>
+
+      <div className="workbench-panel p-4">
+        <IntentInput value={intent} onChange={onIntentChange} />
       </div>
 
       <div className="flex gap-3">
@@ -995,6 +1055,8 @@ function PlanStep({
   language,
   analysisId,
   initialConfirmed,
+  intent,
+  onIntentChange,
 }: {
   result: GeneratePlanResult;
   versions: { basic?: GeneratePlanResult; enhanced?: GeneratePlanResult };
@@ -1010,6 +1072,8 @@ function PlanStep({
   language?: string;
   analysisId?: string | null;
   initialConfirmed?: boolean;
+  intent: string;
+  onIntentChange: (v: string) => void;
 }) {
   const router = useRouter();
   const [exporting, setExporting] = useState(false);
@@ -1044,6 +1108,7 @@ function PlanStep({
         syntax: result.syntax,
         discourse: result.discourse,
       },
+      teaching_intent: intent.trim() || undefined,
     })
       .then((brief) => {
         setThemeBrief(brief);
@@ -1106,6 +1171,7 @@ function PlanStep({
         enhancement_tags: result.enhancement_tags,
         analysis_id: analysisId || undefined,
         theme: format === "html" && selectedTheme ? selectedTheme : undefined,
+        teaching_intent: intent.trim() || undefined,
       });
       // 轮询生成状态（上限 5 分钟）
       for (let i = 0; i < 100; i++) {
@@ -1273,6 +1339,7 @@ function PlanStep({
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="rounded-full bg-canvas-200 px-3 py-1.5 text-ink-600 shadow-soft">{result.text_level} → {result.student_level}</span>
             <span className="rounded-full bg-sage-100 px-3 py-1.5 text-ink-700 shadow-soft">总耗时 {result.total_duration}s</span>
+            <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-ink-500 shadow-soft">AI 生成 · 请核对后使用</span>
           </div>
         </div>
 
@@ -1381,6 +1448,11 @@ function PlanStep({
 
       {/* Courseware entry — 仅在教案确认后显示 */}
       {planConfirmed && (
+      <div className="workbench-panel p-4">
+        <IntentInput value={intent} onChange={onIntentChange} />
+      </div>
+      )}
+      {planConfirmed && (
       <div className="archive-surface p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-4">
@@ -1393,7 +1465,7 @@ function PlanStep({
               <div className="section-title mb-2">Courseware Generation</div>
               <h3 className="text-lg font-semibold text-ink-900">AI 三链路课件生成</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                同一确认教案，三种独立产物：HTML 交互课件（进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成。
+                同一确认教案，三种独立产物：HTML 交互课件（进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成，所有产物均标注「AI 生成」。
               </p>
             </div>
           </div>

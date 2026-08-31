@@ -18,6 +18,7 @@ from app.services.courseware_themes import (
     themes_digest_for_planner,
 )
 from app.services.prompt_manager import render_prompt
+from app.services.teacher_intent import intent_prompt_section
 
 PLANNER_PROMPT_NAME = "courseware_theme_planner_v1"
 
@@ -46,6 +47,7 @@ def plan_theme_brief(
     student_level: str = "",
     course_type: str = "",
     history_digest: str = "（暂无记录）",
+    teaching_intent: Optional[str] = None,
 ) -> Dict[str, Any]:
     """返回 {course_type, recommended_theme, reason, design_notes, source}；source=llm|cold_start"""
     try:
@@ -74,6 +76,7 @@ def plan_theme_brief(
             metrics_lines=_build_metrics_lines(analysis or {}),
             history_digest=history_digest or "（暂无记录）",
             themes_digest=themes_digest_for_planner(),
+            teacher_requirements=intent_prompt_section(teaching_intent),
         )
         answer, _usage = generator._generate_with_api(
             [
