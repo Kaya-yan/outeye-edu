@@ -35,6 +35,8 @@ export default function Inspector({
   onImageReplace,
   components,
   onInsertComponent,
+  onInsertTextBox,
+  onInsertImage,
   onSelectChain,
   onClose,
 }: {
@@ -45,6 +47,8 @@ export default function Inspector({
   onImageReplace: (selector: string, src: string) => void;
   components: InspectorComponent[];
   onInsertComponent: (component: InspectorComponent, position: "after" | "before" | "append") => void;
+  onInsertTextBox: (position: "after" | "before" | "append") => void;
+  onInsertImage: (position: "after" | "before" | "append", src: string) => void;
   onSelectChain: (node: VeChainNode) => void;
   onClose: () => void;
 }) {
@@ -64,6 +68,7 @@ export default function Inspector({
   const hidden = patchValue("display") === "none";
   const [selectedCompId, setSelectedCompId] = useState<string>("");
   const selectedComp = components.find((c) => c.id === selectedCompId) || null;
+  const [insertPos, setInsertPos] = useState<"after" | "before" | "append">("after");
 
   const commitSize = () => {
     const n = parseFloat(sizeText);
@@ -246,6 +251,53 @@ export default function Inspector({
           )}
         </div>
       )}
+
+      <div className="px-4 py-3 border-b border-slate-100 space-y-2">
+        <div className="text-[10px] uppercase tracking-widest text-slate-400">插入元素</div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-slate-500 flex-shrink-0">插入位置</span>
+          <div className="flex rounded border border-slate-200 overflow-hidden">
+            {([["after", "之后"], ["before", "之前"], ["append", "内部末尾"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setInsertPos(v)}
+                className={`px-2.5 py-1 text-xs transition-colors ${
+                  insertPos === v ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button
+          onClick={() => onInsertTextBox(insertPos)}
+          className="w-full rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200"
+        >
+          插入文本框（插入后双击编辑）
+        </button>
+        <label className="block w-full cursor-pointer rounded-lg bg-slate-100 px-3 py-1.5 text-center text-xs font-medium text-slate-600 hover:bg-slate-200">
+          上传图片插入（≤2MB）
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              if (f.size > 2 * 1024 * 1024) {
+                alert("图片过大（上限 2MB），请压缩后再上传");
+                e.target.value = "";
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => onInsertImage(insertPos, String(reader.result));
+              reader.readAsDataURL(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
 
       {target.tag === "img" && (
         <div className="px-4 py-3 border-b border-slate-100 space-y-2.5">

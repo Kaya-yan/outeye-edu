@@ -25,6 +25,7 @@ export interface VePatch {
   newSrc?: string;
   position?: VeInsertPosition;
   html?: string;
+  oeId?: string;
   fingerprint: VePatchFingerprint;
 }
 
@@ -48,6 +49,28 @@ export function patchId(selector: string, kind: VePatchKind, prop?: string): str
 
 export function insertPatchId(selector: string, seq: number): string {
   return `${selector}||insert||${seq}`;
+}
+
+// 取该锚点上已有 insert 序号的最大值 +1：移除某条后再插入不会撞出重复 patch id
+export function nextInsertSeq(patches: VePatch[], selector: string): number {
+  let max = 0;
+  for (const p of patches) {
+    if (p.kind === "insert" && p.selector === selector) {
+      const m = p.id.match(/insert\|\|(\d+)$/);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+  }
+  return max + 1;
+}
+
+// 插入元素用 data-oe-id 作稳定锚点，避开 nth-of-type 在插入位移后失效
+export function nextOeId(patches: VePatch[], prefix: string): string {
+  const used = new Set(
+    patches.filter((p) => p.kind === "insert" && p.oeId).map((p) => p.oeId as string)
+  );
+  let n = 1;
+  while (used.has(`${prefix}${n}`)) n++;
+  return `${prefix}${n}`;
 }
 
 export function insertWrapperSelector(patchIdStr: string): string {

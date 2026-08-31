@@ -20,6 +20,8 @@ import {
   insertPatchId,
   insertWrapperSelector,
   makeFingerprint,
+  nextInsertSeq,
+  nextOeId,
   normalizePatch,
   patchId,
   stripExportStyle,
@@ -362,15 +364,55 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const onInsertComponent = useCallback(
     (component: OfficialComponent, position: VeInsertPosition) => {
       if (!target) return;
-      const seq =
-        patches.filter((p) => p.kind === "insert" && p.selector === target.selector).length + 1;
       const next: VePatch = {
-        id: insertPatchId(target.selector, seq),
+        id: insertPatchId(target.selector, nextInsertSeq(patches, target.selector)),
         kind: "insert",
         selector: target.selector,
         label: `插入组件 · ${component.name}`,
         position,
         html: component.render_template_html || "",
+        fingerprint: { tag: "div", childCount: 0, text: "", w: 0, h: 0 },
+      };
+      mutatePatches(patches.concat([next]));
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const onInsertTextBox = useCallback(
+    (position: VeInsertPosition) => {
+      if (!target) return;
+      const oeId = nextOeId(patches, "oe-text");
+      const next: VePatch = {
+        id: insertPatchId(target.selector, nextInsertSeq(patches, target.selector)),
+        kind: "insert",
+        selector: target.selector,
+        label: `插入文本框 · ${oeId}`,
+        position,
+        oeId,
+        html:
+          `<div data-oe-id="${oeId}" style="padding:12px 18px;border:1px dashed var(--line,#d6d2c7);` +
+          `border-radius:10px;font-size:20px;line-height:1.7;color:var(--text,#2b2b33)">双击编辑这段文字</div>`,
+        fingerprint: { tag: "div", childCount: 0, text: "", w: 0, h: 0 },
+      };
+      mutatePatches(patches.concat([next]));
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const onInsertImage = useCallback(
+    (position: VeInsertPosition, src: string) => {
+      if (!target) return;
+      const oeId = nextOeId(patches, "oe-img");
+      const next: VePatch = {
+        id: insertPatchId(target.selector, nextInsertSeq(patches, target.selector)),
+        kind: "insert",
+        selector: target.selector,
+        label: `插入图片 · ${oeId}`,
+        position,
+        oeId,
+        html:
+          `<img data-oe-id="${oeId}" src="${src}" alt="插入的图片" ` +
+          `style="max-width:100%;border-radius:10px">`,
         fingerprint: { tag: "div", childCount: 0, text: "", w: 0, h: 0 },
       };
       mutatePatches(patches.concat([next]));
@@ -624,6 +666,8 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             onImageReplace={onImageReplace}
             components={components}
             onInsertComponent={onInsertComponent}
+            onInsertTextBox={onInsertTextBox}
+            onInsertImage={onInsertImage}
             onSelectChain={(node) => sendRpc("ve:pick:goto", { selector: node.selector })}
             onClose={() => setTarget(null)}
           />
