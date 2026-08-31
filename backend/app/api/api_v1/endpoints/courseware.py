@@ -22,6 +22,7 @@ from app.models.courseware import (
     CoursewareProject,
     CoursewareVersion,
     PresentationProfile,
+    TeacherStyleEvent,
 )
 from app.services.courseware_bootstrap import (
     build_blank_courseware,
@@ -29,6 +30,8 @@ from app.services.courseware_bootstrap import (
     build_default_presentation_settings,
     build_imported_courseware,
 )
+from app.services.courseware_theme_planner import plan_theme_brief, style_history_digest
+from app.services.courseware_themes import THEMES, get_theme, theme_catalog
 
 router = APIRouter()
 
@@ -70,6 +73,20 @@ class CoursewareGenerateRequest(BaseModel):
     native_language: Optional[str] = None
     learner_gap: Optional[Dict[str, Any]] = None
     enhancement_tags: Optional[List[str]] = None
+    theme: Optional[str] = None                     # HTML 链路视觉主题（④b，缺省 academic）
+    analysis_id: Optional[str] = None               # 风格档案关联（同 ③ 的 analysis_id）
+
+
+class ThemeBriefRequest(BaseModel):
+    """生成前风格规划请求（④b）：课文摘录 + 白盒子集 + 教师历史 → 三选一设计简报"""
+    analysis_id: Optional[str] = None
+    title: str = Field(..., max_length=200)
+    text: str = Field(..., min_length=10, max_length=60_000)
+    language_name: str = "英语"
+    text_level: Optional[str] = None
+    student_level: Optional[str] = None
+    course_type: Optional[str] = None
+    analysis: Optional[Dict[str, Any]] = None
 
 
 # 课件生成任务注册表（进程内；重启丢失，前端轮询 404 时提示重试）
@@ -82,6 +99,45 @@ def _prune_generation_tasks() -> None:
     stale = [tid for tid, s in _GENERATION_TASKS.items() if now - s.get("created_ts", now) > _TASK_TTL_SECONDS]
     for tid in stale:
         _GENERATION_TASKS.pop(tid, None)
+
+
+async def _record_style_event(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    analysis_id: Optional[str],
+    event_type: str,
+    theme: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """风格档案写入（best-effort）：失败只告警回滚，绝不影响主流程"""
+    try:
+        db.add(TeacherStyleEvent(
+            id=str(uuid4()),
+            user_id=user_id,
+            analysis_id=analysis_id,
+            event_type=event_type,
+            theme=theme,
+            extra_json=extra,
+        ))
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.warning(f"风格事件写入失败（不影响主流程）: {e}")
+
+
+async def _next_generate_event_type(db: AsyncSession, user_id: str, analysis_id: Optional[str]) -> str:
+    """同篇课文的第二次及以后生成记为 regenerated（供风格档案区分首用与重试）"""
+    if not analysis_id:
+        return "chosen"
+    prior = await db.execute(
+        select(func.count()).select_from(TeacherStyleEvent).where(
+            TeacherStyleEvent.user_id == user_id,
+            TeacherStyleEvent.analysis_id == analysis_id,
+            TeacherStyleEvent.event_type.in_(("chosen", "regenerated")),
+        )
+    )
+    return "regenerated" if (prior.scalar() or 0) > 0 else "chosen"
 
 
 async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest, current_user: dict) -> None:
@@ -113,11 +169,14 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
             components=components,
             learner_gap=payload.learner_gap,
             enhancement_tags=payload.enhancement_tags,
+            theme=payload.theme,
         )
 
         state.update(status="saving", progress="正在保存课件项目…")
 
+        resolved_theme = get_theme(payload.theme)
         source_meta = dict(result.editor_schema.get("meta", {}).get("source_meta", {}))
+        source_meta["theme"] = resolved_theme.id
         async with AsyncSessionLocal() as db:
             created = await _create_initial_project_state(
                 title=payload.title,
@@ -152,6 +211,14 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
                 await db.commit()
             except Exception as log_e:
                 logger.warning(f"课件 GenerationLog 写入失败（不影响产物）: {log_e}")
+            await _record_style_event(
+                db,
+                user_id=current_user["user_id"],
+                analysis_id=payload.analysis_id,
+                event_type=await _next_generate_event_type(db, current_user["user_id"], payload.analysis_id),
+                theme=resolved_theme.id,
+                extra={"format": "html", "fallback": result.fallback, "requested": payload.theme or ""},
+            )
 
         state.update(
             status="done",
@@ -639,6 +706,47 @@ async def create_courseware_from_plan(
     )
 
 
+@router.post("/theme-brief")
+async def create_theme_brief(
+    request: ThemeBriefRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """生成前风格规划（④b）：轻量 LLM 出设计简报 + 教师历史偏好；LLM 不可用时冷启动映射兜底"""
+    history = (
+        await db.execute(
+            select(TeacherStyleEvent)
+            .where(
+                TeacherStyleEvent.user_id == current_user["user_id"],
+                TeacherStyleEvent.event_type.in_(("chosen", "regenerated")),
+            )
+            .order_by(TeacherStyleEvent.created_at.desc())
+            .limit(10)
+        )
+    ).scalars().all()
+
+    brief = await asyncio.to_thread(
+        plan_theme_brief,
+        title=request.title,
+        text=request.text,
+        analysis=request.analysis or {},
+        language_name=request.language_name,
+        text_level=request.text_level or "",
+        student_level=request.student_level or "",
+        course_type=request.course_type or "",
+        history_digest=style_history_digest(history),
+    )
+    await _record_style_event(
+        db,
+        user_id=current_user["user_id"],
+        analysis_id=request.analysis_id,
+        event_type="recommended",
+        theme=brief["recommended_theme"],
+        extra={"source": brief["source"]},
+    )
+    return {**brief, "themes": theme_catalog()}
+
+
 @router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
 async def start_courseware_generation(
     request: CoursewareGenerateRequest,
@@ -710,6 +818,18 @@ async def download_courseware_artifact(
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }.get(artifact.format, "application/octet-stream")
+    # 风格档案：导出事件（项目带主题时才记，best-effort 不阻塞下载）
+    project_meta = getattr(artifact.project, "source_meta", None) or {}
+    exported_theme = project_meta.get("theme")
+    if exported_theme in THEMES:
+        await _record_style_event(
+            db,
+            user_id=current_user["user_id"],
+            analysis_id=None,
+            event_type="exported",
+            theme=exported_theme,
+            extra={"artifact_id": artifact_id, "format": artifact.format},
+        )
     return FileResponse(abs_path, filename=artifact.file_name or f"courseware.{artifact.format}", media_type=media_type)
 
 

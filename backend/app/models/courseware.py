@@ -160,6 +160,30 @@ class ExportArtifact(Base):
         }
 
 
+class TeacherStyleEvent(Base):
+    """教师风格档案（④b）：推荐 vs 选用/重新生成/导出事件，供风格规划阶段取历史偏好"""
+    __tablename__ = "teacher_style_events"
+
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    analysis_id = Column(String(36), ForeignKey("analysis_records.id"), nullable=True, index=True)
+    event_type = Column(String(32), nullable=False, index=True)  # recommended | chosen | regenerated | exported
+    theme = Column(String(32), nullable=False)
+    extra_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "analysis_id": self.analysis_id,
+            "event_type": self.event_type,
+            "theme": self.theme,
+            "extra_json": self.extra_json,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ComponentDefinition(Base):
     """教学组件定义"""
     __tablename__ = "component_definitions"

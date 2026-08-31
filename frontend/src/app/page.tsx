@@ -962,6 +962,24 @@ function AnalysisStep({
 
 // ============ Step 3: Plan ============
 
+interface ThemeCard {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  default_accent: string;
+  colors: { paper: string; ink: string; accent: string };
+}
+
+interface ThemeBrief {
+  course_type: string;
+  recommended_theme: string;
+  reason: string;
+  design_notes: string;
+  source: string;
+  themes: ThemeCard[];
+}
+
 function PlanStep({
   result,
   versions,
@@ -1002,6 +1020,40 @@ function PlanStep({
   const [coursewareProgress, setCoursewareProgress] = useState("");
   const [blueprintConfirmed, setBlueprintConfirmed] = useState(false);
   const [planConfirmed, setPlanConfirmed] = useState(initialConfirmed ?? false);
+  const [themeBrief, setThemeBrief] = useState<ThemeBrief | null>(null);
+  const [themeCards, setThemeCards] = useState<ThemeCard[]>([]);
+  const [selectedTheme, setSelectedTheme] = useState("");
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefRequested, setBriefRequested] = useState(false);
+
+  // 确认教案后拉一次风格简报（三选一推荐 + 可改选）；失败静默降级到后端默认主题
+  useEffect(() => {
+    if (!planConfirmed || briefRequested || !text || text.length < 10) return;
+    setBriefRequested(true);
+    setBriefLoading(true);
+    apiPost<ThemeBrief>("/courseware/theme-brief", {
+      analysis_id: analysisId || undefined,
+      title: result.text_title || "教学课件",
+      text: text.slice(0, 60000),
+      language_name: result.language_name || "英语",
+      text_level: result.text_level || undefined,
+      student_level: result.student_level || studentLevel || undefined,
+      course_type: result.generation_settings?.course_type || undefined,
+      analysis: {
+        vocabulary: result.vocabulary,
+        syntax: result.syntax,
+        discourse: result.discourse,
+      },
+    })
+      .then((brief) => {
+        setThemeBrief(brief);
+        setThemeCards(brief.themes || []);
+        setSelectedTheme(brief.recommended_theme);
+      })
+      .catch(() => {})
+      .finally(() => setBriefLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planConfirmed, briefRequested]);
 
   // 确认教案：先亮 UI，再后台落库（幂等）；失败不影响课堂侧使用
   const confirmPlan = () => {
@@ -1052,6 +1104,8 @@ function PlanStep({
         native_language: settings?.native_language,
         learner_gap: result.learner_gap,
         enhancement_tags: result.enhancement_tags,
+        analysis_id: analysisId || undefined,
+        theme: format === "html" && selectedTheme ? selectedTheme : undefined,
       });
       // 轮询生成状态（上限 5 分钟）
       for (let i = 0; i < 100; i++) {
@@ -1369,6 +1423,66 @@ function PlanStep({
             </div>
           </div>
         </div>
+
+        {/* ④b 视觉主题：生成前设计简报（三选一，AI 推荐 + 可改选） */}
+        {themeCards.length > 0 && (
+          <div className="mt-4 border-t border-black/5 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium text-ink-900">
+                视觉主题
+                <span className="ml-2 text-xs font-normal text-ink-400">仅影响 HTML 课件</span>
+              </span>
+              {briefLoading && <span className="text-xs text-ink-400">AI 正在规划风格…</span>}
+              {themeBrief && !briefLoading && (
+                <span className="text-xs text-ink-500">
+                  AI 推荐「{themeCards.find((t) => t.id === themeBrief.recommended_theme)?.name || themeBrief.recommended_theme}」，可点击改选
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {themeCards.map((t) => {
+                const selected = selectedTheme === t.id;
+                const recommended = themeBrief?.recommended_theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTheme(t.id)}
+                    title={t.description}
+                    className={`rounded-xl border p-2.5 text-left transition-colors ${
+                      selected
+                        ? "border-primary-400 bg-primary-50 shadow-soft"
+                        : "border-black/10 bg-white hover:border-primary-200"
+                    }`}
+                  >
+                    <div className="mb-1.5 flex gap-1">
+                      <span
+                        style={{ background: t.colors.paper }}
+                        className="h-4 flex-1 rounded border border-black/10"
+                      />
+                      <span style={{ background: t.colors.ink }} className="h-4 w-4 rounded" />
+                      <span style={{ background: t.colors.accent }} className="h-4 w-4 rounded" />
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-medium text-ink-800">
+                      {t.name}
+                      {recommended && (
+                        <span className="rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700">
+                          推荐
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-[10px] text-ink-400">{t.tagline}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {themeBrief?.reason && (
+              <p className="mt-2 text-xs leading-5 text-ink-500">
+                {themeBrief.reason}
+                {themeBrief.design_notes ? ` · 设计提示：${themeBrief.design_notes}` : ""}
+              </p>
+            )}
+          </div>
+        )}
         {creatingCourseware && coursewareProgress && (
           <div className="mt-4 flex items-center gap-3 rounded-xl bg-canvas-200/60 px-4 py-3 text-sm text-ink-600">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ink-300 border-t-primary-600" />

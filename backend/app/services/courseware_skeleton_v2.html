@@ -1,10 +1,12 @@
 <!DOCTYPE html>
-<!-- courseware_skeleton_v2 · 框架层 + 主题层（三层架构 ④a）
+<!-- courseware_skeleton_v2 · 框架层 + 主题层（三层架构 ④a；④b 主题库 token 化）
      框架层（本文件写死，模型不生成）：16:9 舞台、翻页导航、键盘事件、页码指示、交互组件 JS。
-     主题层：全部颜色/字体/字号/间距走 var(--token)，默认「学术讲义」token 组。
-     拼装标记（强调色、强调色浅变体、课件标题、页面区注入点）由后端替换——
+     主题层：:root 整块 token 组与主题微调样式由后端按所选主题注入（courseware_themes.py），
+     内容层只写 var(--token)，换主题对 LLM 透明。
+     拼装标记（课件标题、token 组、主题微调样式、页面区注入点）由后端替换——
      注意：本注释不得出现这些标记的字面形式，否则会被 str.replace 误替换。
-     对比度契约（WCAG，暖白底 #faf9f5）：--text 13.3 / --ink 10.9 / --muted 4.79 / 四色强调色 4.66-7.73，均 ≥4.5:1。 -->
+     对比度契约（WCAG）：每套主题的 ink/text/muted 与四色强调色对该主题 paper/card ≥4.5:1，
+     由 tests/test_courseware_themes.py 断言。 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -12,20 +14,10 @@
 <title>__TITLE__</title>
 <style>
 :root{
-  --paper:#faf9f5;
-  --ink:#1e3a5f;
-  --text:#2b2b33;
-  --muted:#6b6f76;
-  --line:#e3e0d8;
-  --accent:__ACCENT__;
-  --accent-soft:__ACCENT_SOFT__;
-  --font-title:'Noto Serif SC','Source Han Serif SC','Songti SC',serif;
-  --font-body:'Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif;
-  --fs-title:44px; --fs-h2:32px; --fs-body:21px; --fs-caption:16px;
-  --lh-body:1.8;
+__TOKEN_BLOCK__
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;background:#e8e6e0;font-family:var(--font-body);color:var(--text)}
+html,body{height:100%;background:var(--backdrop);font-family:var(--font-body);color:var(--text)}
 #stage-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
 #stage{position:relative;width:1280px;height:720px;background:var(--paper);transform:scale(var(--fit,1));transform-origin:center;box-shadow:0 12px 48px rgba(30,58,95,.18);overflow:hidden}
 .page{position:absolute;inset:0;padding:72px 96px 64px;display:none;flex-direction:column;font-size:var(--fs-body);line-height:var(--lh-body);overflow:hidden}
@@ -38,8 +30,8 @@ html,body{height:100%;background:#e8e6e0;font-family:var(--font-body);color:var(
 .page-focus{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
 .caption{font-size:var(--fs-caption);color:var(--muted)}
 .quote-src{font-size:var(--fs-caption);color:var(--muted);margin-top:10px}
-.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px}
-.callout{border-left:4px solid var(--accent);background:#fff;padding:14px 18px;border-radius:0 10px 10px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 24px}
+.callout{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
 .hl{background:var(--accent-soft);padding:2px 6px;border-radius:4px}
 .cols{display:flex;gap:36px;min-height:0}
 .cols>.col{flex:1;min-width:0}
@@ -48,20 +40,20 @@ ul.plain li{padding-left:22px;position:relative}
 ul.plain li::before{content:"";position:absolute;left:2px;top:.72em;width:8px;height:8px;background:var(--accent);border-radius:50%}
 
 /* ============ 交互组件（类契约：内容层只写结构，行为全在骨架） ============ */
-details.reveal{border:1px solid var(--line);border-radius:10px;padding:16px 20px;background:#fff}
+details.reveal{border:1px solid var(--line);border-radius:10px;padding:16px 20px;background:var(--card)}
 details.reveal summary{cursor:pointer;font-weight:600;color:var(--ink);list-style:none;font-size:19px}
 details.reveal summary::-webkit-details-marker{display:none}
 details.reveal summary::before{content:"点击展开　";color:var(--accent);font-size:var(--fs-caption)}
 details.reveal[open] summary{margin-bottom:10px}
 details.reveal[open] summary::before{content:"点击收起　"}
 ol.timeline{list-style:none;display:flex;flex-direction:column;gap:14px}
-ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:#fff;opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
+ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:var(--card);opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
 ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
 .vocab-grid{display:flex;flex-wrap:wrap;gap:18px}
 .vocab-card{width:196px;height:128px;perspective:900px;cursor:default}
 .vocab-card .inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s}
 .vocab-card:hover .inner,.vocab-card.flip .inner{transform:rotateY(180deg)}
-.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;border:1px solid var(--line);background:#fff;text-align:center}
+.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;border:1px solid var(--line);background:var(--card);text-align:center}
 .vocab-card .front{font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
 .vocab-card .front .phonetic{font-family:var(--font-body);font-size:var(--fs-caption);font-weight:400;color:var(--muted);margin-top:6px}
 .vocab-card .back{transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:16px;line-height:1.7}
@@ -83,6 +75,9 @@ body.oe-edit-all #stage-wrap{position:static;display:block;background:var(--pape
 body.oe-edit-all #stage{width:100%;height:auto;transform:none;box-shadow:none}
 body.oe-edit-all .page{position:relative;inset:auto;display:flex;min-height:720px;border-bottom:1px solid var(--line)}
 body.oe-edit-all #nav-prev,body.oe-edit-all #nav-next,body.oe-edit-all #page-indicator,body.oe-edit-all #deck-title{display:none}
+
+/* 主题级组件微调（后端按所选主题注入，默认空） */
+__THEME_EXTRA__
 </style>
 </head>
 <body>

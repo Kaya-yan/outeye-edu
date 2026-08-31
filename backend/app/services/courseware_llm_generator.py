@@ -26,6 +26,7 @@ import time
 
 from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
+from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, get_theme
 
 PROMPT_NAME = "courseware_html_v2"
 
@@ -36,10 +37,12 @@ _EXTERNAL_RE = re.compile(r"(?:src|href)\s*=\s*[\"']https?://|@import|<link[^>]+
 _SKELETON_PATH = Path(__file__).resolve().parent / "courseware_skeleton_v2.html"
 _SKELETON_CACHE: Optional[str] = None
 
-THEME_PAPER = "#faf9f5"
-THEME_TOKENS = {"paper": THEME_PAPER, "ink": "#1e3a5f", "text": "#2b2b33", "muted": "#6b6f76"}
+# 默认主题（academic）的基线 token；主题库见 courseware_themes.py
+_ACADEMIC = get_theme(DEFAULT_THEME_ID)
+THEME_PAPER = _ACADEMIC.tokens["paper"]
+THEME_TOKENS = {k: _ACADEMIC.tokens[k] for k in ("paper", "ink", "text", "muted")}
 ACCENT_PALETTE = {"#b5493e": "朱砂红", "#3e6b5a": "黛绿", "#99653a": "暖赭", "#35507a": "绀青"}
-DEFAULT_ACCENT = "#35507a"
+DEFAULT_ACCENT = _ACADEMIC.default_accent
 
 
 @dataclass
@@ -282,19 +285,24 @@ def _blend_colors(hex_fg: str, hex_bg: str, ratio: float) -> str:
     return "#" + "".join(f"{c:02x}" for c in mixed)
 
 
-def _assemble_skeleton(title: str, accent: str, pages: List[_ContentPage]) -> str:
-    """三层拼装：骨架（框架+主题）+ 逐页内容 section（重编页码，保留 title/intent）"""
+def _assemble_skeleton(title: str, accent: str, pages: List[_ContentPage], theme: Optional[CoursewareTheme] = None) -> str:
+    """三层拼装：骨架（框架）+ 主题 token 组与微调（④b）+ 逐页内容 section（重编页码）"""
+    theme = theme or _ACADEMIC
     sections = []
     for i, p in enumerate(pages, 1):
         attrs = f'<section class="page" data-page="{i}" data-title="{_html_escape(p.title or f"第{i}页", quote=True)}"'
         if p.intent:
             attrs += f' data-intent="{_html_escape(p.intent, quote=True)}"'
         sections.append(f'{attrs}>\n{p.html}\n</section>')
+    token_block = (
+        theme.token_css()
+        + f"\n  --accent:{accent};\n  --accent-soft:{_blend_colors(accent, theme.tokens['paper'], 0.12)};"
+    )
     html = _load_skeleton().replace("<!--SECTIONS-->", "\n".join(sections))
     return (
         html.replace("__TITLE__", _html_escape(title))
-        .replace("__ACCENT__", accent)
-        .replace("__ACCENT_SOFT__", _blend_colors(accent, THEME_PAPER, 0.12))
+        .replace("__TOKEN_BLOCK__", token_block)
+        .replace("__THEME_EXTRA__", theme.extra_css)
     )
 
 
@@ -351,8 +359,10 @@ def _build_prompt(
     class_size: int,
     native_language: str,
     components: List[Dict[str, Any]],
+    theme: Optional[CoursewareTheme] = None,
 ) -> str:
     stages = plan.get("activity_designs") or []
+    cw_theme = theme or _ACADEMIC
     _, user_prompt = render_prompt(
         PROMPT_NAME,
         title=_esc(title),
@@ -367,6 +377,7 @@ def _build_prompt(
         plan_text=_esc(_format_plan_text(plan)),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
         components_digest=_esc(_build_components_digest(components)),
+        theme_desc=f"「{cw_theme.name}」主题（{cw_theme.palette_desc}）",
     )
     return user_prompt
 
@@ -441,6 +452,7 @@ def generate_html_courseware(
     components: Optional[List[Dict[str, Any]]] = None,
     learner_gap: Optional[Dict[str, Any]] = None,
     enhancement_tags: Optional[List[str]] = None,
+    theme: Optional[str] = None,
 ) -> HTMLCoursewareResult:
     """
     生成单文件交互 HTML 课件（④a 三层架构）。
@@ -452,6 +464,7 @@ def generate_html_courseware(
     start_time = time.time()
     version = prompt_version(PROMPT_NAME)
     components = components or []
+    cw_theme = get_theme(theme)
     min_pages = max(3, len(plan.get("activity_designs") or []) + 1)
 
     model_name = "template-fallback"
@@ -479,6 +492,7 @@ def generate_html_courseware(
             class_size=class_size,
             native_language=native_language,
             components=components,
+            theme=cw_theme,
         )
 
         from app.services.rag import RAGGenerator
@@ -560,6 +574,7 @@ def generate_html_courseware(
                         "prompt_version": version,
                         "accent": accent,
                         "accent_note": accent_note,
+                        "theme": cw_theme.id,
                         "pages_count": len(pages),
                         "page_intents": [
                             {"page": i + 1, "title": p.title, "intent": p.intent} for i, p in enumerate(pages)
@@ -595,8 +610,8 @@ def generate_html_courseware(
         }
         source_meta = {"generated_by": "template_fallback", "prompt_version": version}
     else:
-        html = _assemble_skeleton(title, accent, pages)
-        source_meta = {"generated_by": "llm_html_v2", "prompt_version": version}
+        html = _assemble_skeleton(title, accent, pages, theme=cw_theme)
+        source_meta = {"generated_by": "llm_html_v2", "prompt_version": version, "theme": cw_theme.id}
         schema = _wrap_llm_schema(title, html, source_meta)
         sync = _structure_sync_from_pages(schema)
 

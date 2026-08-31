@@ -13,6 +13,7 @@ from app.models.courseware import (
     PresentationProfile,
     ExportArtifact,
     ComponentDefinition,
+    TeacherStyleEvent,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "PresentationProfile",
     "ExportArtifact",
     "ComponentDefinition",
+    "TeacherStyleEvent",
 ]
