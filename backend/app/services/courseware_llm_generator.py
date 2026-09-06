@@ -945,6 +945,19 @@ def generate_html_courseware(
             )
             pages, page_infos = _generate_pages(generator, blueprint, prompt_kwargs, _progress)
 
+            # S5 教研员评审：逐页复核，fail 带意见重写 ≤2 轮；异常保留原稿不阻塞产出
+            reviewer_summary: Optional[Dict[str, Any]] = None
+            if getattr(settings, "PAGE_REVIEWER_ENABLED", True):
+                _progress("AI 教研员正在复核页面质量…")
+                try:
+                    from app.services.courseware_page_reviewer import review_pages
+
+                    pages, reviewer_summary = review_pages(
+                        generator, blueprint, prompt_kwargs, pages, page_infos, _progress
+                    )
+                except Exception as rev_e:
+                    logger.warning(f"教研员复核整体异常，跳过复核: {rev_e}")
+
             fallback_used = False
             accent_note = None
             if cw_theme.dark:
@@ -979,6 +992,7 @@ def generate_html_courseware(
                 "regenerated_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["regens"]],
                 "sanitized_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["sanitized"]],
                 "stub_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["stub"]],
+                "reviewer": reviewer_summary if reviewer_summary is not None else {"enabled": False},
             }
         else:
             logger.warning("LLM 不可用，HTML 课件回退模板拼装")
