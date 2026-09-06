@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     VISUAL_QC_ENABLED: bool = True            # S6 视觉质检（截图 + 多模态模型）
     CONSISTENCY_REVIEW_ENABLED: bool = True   # S7 全局一致性审校（术语统一）
 
+    # 视觉质检多模态模型（S6：DashScope OpenAI 兼容模式；未配 key 时整层优雅跳过）
+    VISION_API_KEY: str = ""
+    VISION_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    VISION_MODEL: str = "qwen-vl-plus"
+
     # Embedding模型配置
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_DIMENSION: int = 384

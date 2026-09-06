@@ -969,6 +969,42 @@ def generate_html_courseware(
                 logger.warning(f"强调色 {accent or '未声明'} 不在色板内，回退默认 {DEFAULT_ACCENT}")
                 accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
                 accent = DEFAULT_ACCENT
+
+            # S6 视觉质检：截图 + 多模态查缺陷 + 问题页重生成一轮；异常降级不阻塞
+            visual_qc_summary: Optional[Dict[str, Any]] = None
+            if getattr(settings, "VISUAL_QC_ENABLED", True):
+                try:
+                    from app.services.courseware_visual_qc import run_visual_qc
+
+                    def _make_doc(pg: _ContentPage) -> str:
+                        return _assemble_skeleton(title, accent, [pg], theme=cw_theme)
+
+                    def _regen_for_visual(i: int, pg: _ContentPage, problems: List[str]) -> Optional[_ContentPage]:
+                        spec = blueprint[i]
+                        prev_t = (blueprint[i - 1].get("title") or KIND_LABELS.get(blueprint[i - 1]["kind"], "未知")) if i else "（无）"
+                        next_t = (blueprint[i + 1].get("title") or KIND_LABELS.get(blueprint[i + 1]["kind"], "未知")) if i + 1 < len(blueprint) else "（无）"
+                        page_system, _ = render_prompt(PAGE_PROMPT_NAME)
+                        page_prompt = _build_page_prompt(
+                            spec, page_no=i + 1, total=len(blueprint),
+                            context_nav=f"前一页「{prev_t}」，后一页「{next_t}」", **prompt_kwargs,
+                        )
+                        rewritten = _regen_page(generator, page_system, page_prompt, pg, i + 1, problems)
+                        if rewritten is not None:
+                            rewritten.title = rewritten.title or spec.get("title") or ""
+                            rewritten.intent = spec.get("intent") or rewritten.intent
+                        return rewritten
+
+                    pages, visual_qc_summary = run_visual_qc(
+                        pages,
+                        blueprint=blueprint,
+                        make_doc=_make_doc,
+                        regen_page=_regen_for_visual,
+                        kind_labels=KIND_LABELS,
+                        progress_cb=_progress,
+                    )
+                except Exception as qc_e:
+                    logger.warning(f"视觉质检整体异常，跳过: {qc_e}")
+                    visual_qc_summary = {"enabled": True, "error": str(qc_e)[:200]}
             self_check = {
                 "prompt_version": version,
                 "planner_version": prompt_version(PLANNER_PROMPT_NAME),
@@ -993,6 +1029,7 @@ def generate_html_courseware(
                 "sanitized_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["sanitized"]],
                 "stub_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["stub"]],
                 "reviewer": reviewer_summary if reviewer_summary is not None else {"enabled": False},
+                "visual_qc": visual_qc_summary if visual_qc_summary is not None else {"enabled": False},
             }
         else:
             logger.warning("LLM 不可用，HTML 课件回退模板拼装")

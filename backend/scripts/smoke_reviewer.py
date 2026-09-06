@@ -67,6 +67,9 @@ print("reviewer version:", rv.get("version"), "| pass_score:", rv.get("pass_scor
 for p in rv.get("pages", []):
     problems = "；".join(p.get("problems") or [])[:80]
     print(f"  第{p['page']}页 score={p.get('score')} verdict={p.get('verdict')} rewrites={p.get('rewrites')} {problems}")
+vq = sc.get("visual_qc") or {}
+print("visual_qc enabled:", vq.get("enabled"), "| skipped:", vq.get("skipped"), "| error:", vq.get("error"),
+      "| checked:", vq.get("checked_pages"), "| issues:", vq.get("issue_pages"))
 
 fails: list = []
 if result.fallback:
