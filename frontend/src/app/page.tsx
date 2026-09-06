@@ -313,6 +313,7 @@ export default function AnalysisPage() {
           );
           if (state.furthest_step === "confirmed" && state.confirmed) setRestoredConfirmed(true);
           setStep("plan");
+          scrollTopSmooth();
           return;
         }
       } catch (err) {
@@ -322,16 +323,8 @@ export default function AnalysisPage() {
     })();
   }, []);
 
-  // 结果出来后自动平滑滚回页面顶部，避免用户拖动半天
-  // 用 prevRef 记录上一次的"是否有结果"，只在 null→有值 的转换瞬间触发，避免用户滚动后再被弹回
-  const prevHadResultRef = useRef(false);
-  useEffect(() => {
-    const hasResult = analysis !== null || versions.basic !== undefined || versions.enhanced !== undefined;
-    if (hasResult && !prevHadResultRef.current) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-    prevHadResultRef.current = hasResult;
-  }, [analysis, versions]);
+  // 新视图出现时平滑滚到内容顶部；各节点显式调用（生成完成/恢复跳步）
+  const scrollTopSmooth = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   // 统计词数：英文按空格分词，中文按字符计数（1个汉字≈1.5词）
   const wordCount = (() => {
@@ -363,6 +356,7 @@ export default function AnalysisPage() {
       });
       setAnalysis(result);
       setStep("analysis");
+      scrollTopSmooth();
       void enrichCulture(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "分析失败");
@@ -456,6 +450,7 @@ export default function AnalysisPage() {
       setVersions((prev) => ({ ...prev, [mode]: result }));
       setActiveVersion(mode);
       setStep("plan");
+      scrollTopSmooth();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
@@ -1090,6 +1085,25 @@ function PlanStep({
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefRequested, setBriefRequested] = useState(false);
 
+  // 确认教案 → 平滑滚到课件入口（intent/主题/生成按钮区）；恢复场景挂载即 confirmed 不滚
+  const coursewareEntryRef = useRef<HTMLDivElement>(null);
+  const prevConfirmedRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = prevConfirmedRef.current;
+    prevConfirmedRef.current = planConfirmed;
+    if (prev === false && planConfirmed) {
+      coursewareEntryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [planConfirmed]);
+
+  // 蓝图总览确认 → 滚回方案面板顶部（TeachingPlanView 在原位展开）
+  const planPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (blueprintConfirmed && planPanelRef.current) {
+      planPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [blueprintConfirmed]);
+
   // 确认教案后拉一次风格简报（三选一推荐 + 可改选）；失败静默降级到后端默认主题
   useEffect(() => {
     if (!planConfirmed || briefRequested || !text || text.length < 10) return;
@@ -1330,7 +1344,7 @@ function PlanStep({
 
   return (
     <div className="space-y-6">
-      <div className="workbench-panel">
+      <div ref={planPanelRef} className="workbench-panel scroll-mt-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-5">
           <div>
             <div className="section-title mb-2">Step 3</div>
@@ -1448,7 +1462,7 @@ function PlanStep({
 
       {/* Courseware entry — 仅在教案确认后显示 */}
       {planConfirmed && (
-      <div className="workbench-panel p-4">
+      <div ref={coursewareEntryRef} className="workbench-panel p-4 scroll-mt-4">
         <IntentInput value={intent} onChange={onIntentChange} />
       </div>
       )}
