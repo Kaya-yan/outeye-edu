@@ -1058,11 +1058,33 @@ def generate_html_courseware(
         source_meta = {"generated_by": "template_fallback", "prompt_version": version}
     else:
         html = _assemble_skeleton(title, accent, pages, theme=cw_theme)
+        # S7 全局一致性审校：术语统一（文本节点替换 + 结构校验回滚）+ 结构意见存 meta
+        consistency_summary: Optional[Dict[str, Any]] = None
+        from app.core.config import settings as _cons_settings
+
+        if getattr(_cons_settings, "CONSISTENCY_REVIEW_ENABLED", True):
+            try:
+                from app.services.courseware_consistency import run_consistency_review
+
+                _progress("AI 正在做全局一致性审校…")
+                html, consistency_summary = run_consistency_review(
+                    generator,
+                    html=html,
+                    title=title,
+                    language_name=language_name,
+                    student_level=student_level or "",
+                    progress_cb=_progress,
+                )
+            except Exception as cons_e:
+                logger.warning(f"全局一致性审校异常，跳过: {cons_e}")
+                consistency_summary = {"enabled": True, "error": str(cons_e)[:200]}
+        self_check["consistency_review"] = consistency_summary if consistency_summary is not None else {"enabled": False}
         source_meta = {
             "generated_by": "llm_html_two_stage",
             "prompt_version": version,
             "theme": cw_theme.id,
             "page_blueprint": blueprint,
+            "consistency_review": consistency_summary,
         }
         schema = _wrap_llm_schema(title, html, source_meta)
         sync = _structure_sync_from_pages(schema)

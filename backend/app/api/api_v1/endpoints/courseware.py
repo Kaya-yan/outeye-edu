@@ -259,11 +259,13 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
                     },
                 )
 
+        consistency_notes = len(((result.self_check.get("consistency_review") or {}).get("structure_notes")) or [])
         state.update(
             status="done",
             project_id=created["project"]["id"],
             fallback=result.fallback,
             generation_duration=result.generation_duration,
+            consistency_notes=consistency_notes,
             progress=None,
         )
     except Exception as e:
@@ -889,6 +891,7 @@ async def get_courseware_generation_status(
         "download_url": state.get("download_url"),
         "fallback": state.get("fallback"),
         "generation_duration": state.get("generation_duration"),
+        "consistency_notes": state.get("consistency_notes"),
         "error": state.get("error"),
     }
 

@@ -1265,6 +1265,7 @@ function PlanStep({
           project_id?: string;
           download_url?: string;
           fallback?: boolean;
+          consistency_notes?: number;
           error?: string;
         }>(`/courseware/generate/${start.task_id}`);
         if (st.progress) setCoursewareProgress(st.progress);
@@ -1273,6 +1274,11 @@ function PlanStep({
             if (st.fallback) {
               setCoursewareProgress("AI 完整生成暂不可用，已用简化版生成，即将进入编辑器…");
               await new Promise((r) => setTimeout(r, 1500));
+            } else if (st.consistency_notes) {
+              setCoursewareProgress(
+                `课件已生成；AI 审校提出 ${st.consistency_notes} 条结构建议，进入编辑器可查看`
+              );
+              await new Promise((r) => setTimeout(r, 1800));
             }
             router.push(`/courseware/${st.project_id}/edit-v2`);
             return;

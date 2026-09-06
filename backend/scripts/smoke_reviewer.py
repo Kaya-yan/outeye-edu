@@ -70,6 +70,13 @@ for p in rv.get("pages", []):
 vq = sc.get("visual_qc") or {}
 print("visual_qc enabled:", vq.get("enabled"), "| skipped:", vq.get("skipped"), "| error:", vq.get("error"),
       "| checked:", vq.get("checked_pages"), "| issues:", vq.get("issue_pages"))
+cr = sc.get("consistency_review") or {}
+print("consistency enabled:", cr.get("enabled"), "| replaced:", cr.get("total_replaced"),
+      "| rolled_back:", cr.get("rolled_back"), "| note:", cr.get("note"), "| error:", cr.get("error"))
+for t in cr.get("terminology") or []:
+    print("  术语组:", t.get("canonical"), "←", t.get("variants"))
+for n in cr.get("structure_notes") or []:
+    print("  结构意见:", n)
 
 fails: list = []
 if result.fallback:
@@ -82,6 +89,8 @@ if not any("AI 教研员正在复核页面质量" in m for m in messages):
     fails.append("进度文案缺少复核提示")
 if not any("正在复核：第" in m for m in messages):
     fails.append("进度文案缺少逐页复核页号")
+if cr.get("error"):
+    fails.append(f"全局审校异常：{cr.get('error')}")
 
 out = "scripts/_smoke_reviewer.html"
 with open(out, "w", encoding="utf-8") as f:

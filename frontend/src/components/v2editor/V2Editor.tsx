@@ -30,6 +30,13 @@ import {
   type VePatch,
 } from "./patches";
 
+interface ConsistencyReview {
+  structure_notes?: string[];
+  total_replaced?: number;
+  replacements?: Record<string, number>;
+  rolled_back?: boolean;
+}
+
 interface CoursewareProject {
   id: string;
   title: string;
@@ -37,7 +44,7 @@ interface CoursewareProject {
   source_type: string;
   status: string;
   current_version_id: string | null;
-  source_meta?: { generated_by?: string } | null;
+  source_meta?: { generated_by?: string; consistency_review?: ConsistencyReview | null } | null;
 }
 
 interface CoursewareVersion {
@@ -82,6 +89,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [components, setComponents] = useState<OfficialComponent[]>([]);
+  const [reviewOn, setReviewOn] = useState(false);
 
   const [history, setHistory] = useState<VePatch[][]>([[]]);
   const [hIndex, setHIndex] = useState(0);
@@ -528,6 +536,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   }
 
   const srcDoc = sourceHtml ? injectAgent(sourceHtml, channel) : "";
+  const consistency = project.source_meta?.consistency_review;
+  const reviewNotes = consistency?.structure_notes || [];
+  const reviewReplaced = consistency?.total_replaced || 0;
+  const hasReview = reviewNotes.length > 0 || reviewReplaced > 0;
   const overlayLabel = target
     ? `${target.tag}${target.component ? ` · ${target.component}` : ""}`
     : "";
@@ -563,6 +575,18 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             <span className="hidden md:inline rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[10px] text-amber-800">
               简化版生成
             </span>
+          )}
+          {hasReview && (
+            <button
+              onClick={() => setReviewOn(!reviewOn)}
+              className={`hidden sm:inline rounded-full px-2 py-0.5 text-[10px] border transition-colors ${
+                reviewOn
+                  ? "bg-teal-600 text-white border-teal-600"
+                  : "bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100"
+              }`}
+            >
+              AI 审校{reviewNotes.length > 0 ? ` · ${reviewNotes.length} 条建议` : reviewReplaced > 0 ? " · 已统一术语" : ""}
+            </button>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -723,6 +747,53 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {reviewOn && hasReview && (
+          <div className="absolute left-4 bottom-4 z-30 w-96 rounded-xl border border-teal-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-teal-100 px-4 py-2.5">
+              <span className="text-[10px] uppercase tracking-widest text-teal-700">
+                AI 全局审校意见（仅供参考，不自动改动结构）
+              </span>
+              <button
+                onClick={() => setReviewOn(false)}
+                className="text-xs text-slate-400 hover:text-slate-700"
+              >
+                收起
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto px-4 py-3 space-y-3 text-xs">
+              {reviewReplaced > 0 && (
+                <div>
+                  <p className="mb-1.5 font-medium text-slate-700">
+                    已自动统一术语 {reviewReplaced} 处：
+                  </p>
+                  <ul className="space-y-1 text-slate-500">
+                    {Object.entries(consistency?.replacements || {}).map(([variant, n]) => (
+                      <li key={variant} className="truncate">
+                        “{variant}” 等表述 × {n}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {consistency?.rolled_back && (
+                <p className="rounded bg-amber-50 px-2 py-1.5 text-amber-800">
+                  术语替换因结构校验未过已整体回滚，请人工核对术语一致性。
+                </p>
+              )}
+              {reviewNotes.length > 0 && (
+                <div>
+                  <p className="mb-1.5 font-medium text-slate-700">结构建议：</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600">
+                    {reviewNotes.map((note, i) => (
+                      <li key={i}>{note}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
