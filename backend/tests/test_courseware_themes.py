@@ -35,37 +35,48 @@ GOOD_BODY = (
 
 
 def test_all_themes_meet_wcag_aa_on_paper_and_card():
-    """每套主题：ink/text/muted 对 paper，四色强调色对 paper 与 card，全部 ≥4.5:1"""
+    """每套主题：ink/text/muted 对 paper 与 card ≥4.5:1；浅色主题全局四色强调色、深色主题专属强调色同样达标"""
     for theme in THEMES.values():
         paper, card = theme.tokens["paper"], theme.tokens["card"]
         for key in ("ink", "text", "muted"):
-            ratio = contrast_ratio(theme.tokens[key], paper)
-            assert ratio >= 4.5, f"{theme.id}.{key} 对 paper 仅 {ratio:.2f}:1"
-        for accent in ACCENT_PALETTE:
+            for bg in (paper, card):
+                ratio = contrast_ratio(theme.tokens[key], bg)
+                assert ratio >= 4.5, f"{theme.id}.{key} 对 {bg} 仅 {ratio:.2f}:1"
+        accents = (theme.default_accent,) if theme.dark else tuple(ACCENT_PALETTE)
+        for accent in accents:
             assert contrast_ratio(accent, paper) >= 4.5, f"{theme.id} 强调色 {accent} 对 paper 不足 4.5:1"
             assert contrast_ratio(accent, card) >= 4.5, f"{theme.id} 强调色 {accent} 对 card 不足 4.5:1"
 
 
+def test_dark_theme_flag_only_on_lecture():
+    assert [t.id for t in THEMES.values() if t.dark] == ["lecture"]
+
+
 def test_get_theme_falls_back_to_default():
     assert get_theme("humanities").id == "humanities"
+    assert get_theme("lecture").id == "lecture"
     assert get_theme("nonsense").id == "academic"
     assert get_theme(None).id == "academic"
 
 
 def test_theme_catalog_and_digest_shapes():
     catalog = theme_catalog()
-    assert [c["id"] for c in catalog] == ["academic", "humanities", "fresh"]
+    assert [c["id"] for c in catalog] == ["academic", "humanities", "fresh", "press", "inkwash", "lecture"]
     for c in catalog:
         assert {"id", "name", "tagline", "description", "default_accent", "colors"} <= set(c)
         assert c["colors"]["paper"].startswith("#") and len(c["colors"]["paper"]) == 7
     digest = themes_digest_for_planner()
-    assert "academic" in digest and "humanities" in digest and "fresh" in digest
+    for tid in ("academic", "humanities", "fresh", "press", "inkwash", "lecture"):
+        assert tid in digest
 
 
 def test_cold_start_recommend_by_course_type():
     assert cold_start_recommend("文学阅读") == "humanities"
     assert cold_start_recommend("视听说") == "fresh"
     assert cold_start_recommend("学术写作") == "academic"
+    assert cold_start_recommend("新闻评论") == "press"
+    assert cold_start_recommend("传统文化") == "inkwash"
+    assert cold_start_recommend("公开课") == "lecture"
     assert cold_start_recommend("离谱课型") == "academic"
     assert cold_start_recommend(None) == "academic"
 
@@ -151,6 +162,16 @@ def test_generate_invalid_theme_falls_back_to_default(fake_llm):
     assert result.self_check["theme"] == "academic"
 
 
+def test_generate_dark_theme_locks_accent(fake_llm):
+    """深色主题：LLM 声明的浅底色板色被忽略，强调色锁定主题专属暖金"""
+    fake_llm(_deck_answer())
+    result = _run_generate("lecture")
+    assert result.self_check["theme"] == "lecture"
+    assert result.self_check["accent"] == "#e3b341"
+    assert "深色主题" in (result.self_check.get("accent_note") or "")
+    assert "--paper:#232936" in result.html and "--ink:#e8dfcf" in result.html
+
+
 # ---- 风格规划 ----
 
 
@@ -225,7 +246,7 @@ async def test_theme_brief_endpoint_returns_catalog_and_records_event(test_db_se
     assert resp.status_code == 200
     body = resp.json()
     assert body["recommended_theme"] == "humanities"
-    assert [t["id"] for t in body["themes"]] == ["academic", "humanities", "fresh"]
+    assert [t["id"] for t in body["themes"]] == ["academic", "humanities", "fresh", "press", "inkwash", "lecture"]
 
     events = (await test_db_session.execute(select(TeacherStyleEvent))).scalars().all()
     assert len(events) == 1 and events[0].event_type == "recommended" and events[0].theme == "humanities"

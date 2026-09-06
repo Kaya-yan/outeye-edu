@@ -1525,7 +1525,7 @@ function PlanStep({
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {themeCards.map((t) => {
                 const selected = selectedTheme === t.id;
                 const recommended = themeBrief?.recommended_theme === t.id;

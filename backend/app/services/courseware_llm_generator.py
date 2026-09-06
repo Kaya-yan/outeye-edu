@@ -571,7 +571,12 @@ def generate_html_courseware(
 
                 if not fallback_used:
                     accent_note = None
-                    if accent not in ACCENT_PALETTE:
+                    if cw_theme.dark:
+                        # 深色主题：全局色板为浅底调色，对其底色不达对比度契约，锁定主题专属强调色
+                        if accent and accent != cw_theme.default_accent:
+                            accent_note = f"深色主题强调色锁定 {cw_theme.default_accent}（LLM 声明 {accent} 已忽略）"
+                        accent = cw_theme.default_accent
+                    elif accent not in ACCENT_PALETTE:
                         logger.warning(f"强调色 {accent or '未声明'} 不在色板内，回退默认 {DEFAULT_ACCENT}")
                         accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
                         accent = DEFAULT_ACCENT

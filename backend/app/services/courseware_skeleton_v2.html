@@ -63,12 +63,13 @@ ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
 .timer button:hover{background:var(--accent);color:var(--paper)}
 
 /* ============ 导航（框架层） ============ */
-#nav-prev,#nav-next{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.92);color:var(--ink);font-size:19px;cursor:pointer;z-index:40}
+#nav-prev,#nav-next{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:19px;cursor:pointer;z-index:40}
 #nav-prev{left:14px}
 #nav-next{right:14px}
 #nav-prev:disabled,#nav-next:disabled{opacity:.25;cursor:default}
 #page-indicator{position:absolute;right:22px;bottom:16px;font-size:14px;color:var(--muted);letter-spacing:.08em;z-index:40;font-variant-numeric:tabular-nums}
-#deck-title{position:absolute;left:96px;bottom:16px;font-size:12px;color:var(--muted);opacity:.75;z-index:40;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#deck-title{position:absolute;left:96px;bottom:16px;font-size:12px;color:var(--muted);opacity:.75;z-index:40;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#aigc-badge{position:absolute;right:96px;bottom:18px;font-size:11px;color:var(--muted);opacity:.7;z-index:40;letter-spacing:.05em}
 #aigc-badge{position:absolute;right:96px;bottom:18px;font-size:11px;color:var(--muted);opacity:.7;z-index:40;white-space:nowrap}
 
 /* 编辑器模式：V2 编辑器注入 body.oe-edit-all 时全页纵向平铺、隐藏放映导航（纯 CSS，零 JS 改动） */
