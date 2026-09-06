@@ -1,23 +1,28 @@
 """
-课件 LLM 生成引擎（FIX-3 · F3.1/F3.2；HTML 链路 ④a 升级为三层架构）
+课件 LLM 生成引擎（FIX-3 · F3.1/F3.2；HTML 链路 ④a 三层架构 + ③ 两阶段生成）
 
-HTML 链路（courseware_html_v2 · 三层）：框架层+主题层写死在
-courseware_skeleton_v2.html（16:9 舞台、翻页/键盘/页码、交互行为、学术讲义
-token 组），LLM 只生成逐页内容区 ```html 块 + 四选一强调色声明，后端拼装。
-程序自检只查内容页（页数/单焦点/交互数/禁忌/行内色值），单页不合格定向
-重生成 ≤2 轮，仍失败确定性净化；整副失败重试一次后回退 courseware_bootstrap，
-fallback=True 由前端标注"简化版生成"，绝不静默。
+HTML 链路（③ 两阶段 · 三层）：框架层+主题层写死在 courseware_skeleton_v2.html
+（16:9 舞台、翻页/键盘/页码、交互行为、逐段精讲组件），LLM 分两阶段工作——
+阶段一规划器（courseware_page_planner_v1）一次调用产出页面蓝图（页型/标题/
+意图/段落锚点/强调色），程序硬校验（段落全覆盖 + ≤25 页截断），失败带原因
+重试一次，仍失败确定性回退蓝图；阶段二按蓝图逐页生成
+（courseware_html_page_v2，含金标准 few-shot），3 路并发，每页带段落原文与
+白盒切片（难词归属小写化+词干匹配、长难句按长度+从句标记数加权排序）。
+逐页程序自检（单焦点/禁忌/行内色值），不合格定向重生成 ≤2 轮，仍失败确定
+性净化，完全无输出用程序兜底页保证整副不缺页；任意阶段异常回退
+courseware_bootstrap，fallback=True 由前端标注"简化版生成"，绝不静默。
 PPT 链路（F3.3）：LLM 逐页大纲 JSON（≤6 要点/页、口语化讲者备注）
 → python-pptx 渲染 16:9；校验失败重试一次，仍失败回退确定性大纲。
 Word 链路（F3.4）后续在此模块追加。
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from html import escape as _html_escape
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from uuid import uuid4
 from loguru import logger
 import json
@@ -29,7 +34,9 @@ from app.services.analysis.fusion_generator import _esc, prepare_text
 from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, get_theme
 from app.services.teacher_intent import intent_prompt_section
 
-PROMPT_NAME = "courseware_html_v2"
+PLANNER_PROMPT_NAME = "courseware_page_planner_v1"
+PAGE_PROMPT_NAME = "courseware_html_page_v2"
+MAX_BLUEPRINT_PAGES = 25
 
 _EXTERNAL_RE = re.compile(r"(?:src|href)\s*=\s*[\"']https?://|@import|<link[^>]+stylesheet", re.IGNORECASE)
 
@@ -185,6 +192,8 @@ _INTERACTION_MARKERS = {
     "timeline": re.compile(r"class\s*=\s*[\"'][^\"']*\btimeline\b", re.IGNORECASE),
     "vocab-card": re.compile(r"class\s*=\s*[\"'][^\"']*\bvocab-card\b", re.IGNORECASE),
     "timer": re.compile(r"class\s*=\s*[\"'][^\"']*\btimer\b|data-seconds\s*=", re.IGNORECASE),
+    "anatomy": re.compile(r"class\s*=\s*[\"'][^\"']*\banatomy-sentence\b", re.IGNORECASE),
+    "sent-walk": re.compile(r"class\s*=\s*[\"'][^\"']*\bsent-walk\b", re.IGNORECASE),
 }
 
 
@@ -250,16 +259,6 @@ def _validate_content_page(page: _ContentPage) -> List[str]:
     if _EXTERNAL_RE.search(page.html):
         problems.append("含外链资源，违反单文件约束")
     return problems
-
-
-def _validate_deck(pages: List[_ContentPage], min_pages: int) -> Optional[str]:
-    """整副课件结构性校验：返回 None 通过，否则失败原因（触发整体重试/回退）"""
-    if len(pages) < min_pages:
-        return f"页面数不足：需 ≥{min_pages} 页，实际 {len(pages)}"
-    types = _interaction_types(pages)
-    if len(types) < 3:
-        return f"交互类型不足：需 ≥3 种（reveal/timeline/vocab-card/timer），实际 {sorted(types) or '无'}"
-    return None
 
 
 def _sanitize_page(html_str: str) -> str:
@@ -346,8 +345,283 @@ def _regen_page(generator: Any, system_prompt: str, user_prompt: str, page: _Con
     return pages[0]
 
 
-def _build_prompt(
+# ============ ③ 两阶段：确定性切片（程序算，规划器与逐页提示词引用） ============
+
+_SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'A-Za-z一-鿿])")
+_CLAUSE_MARKER_RE = re.compile(
+    r"\b(?:which|that|who|whom|whose|where|when|while|although|though|whereas|because|since|unless|before|after|despite|whereby)\b|;",
+    re.IGNORECASE,
+)
+
+
+def _simple_stem(word: str) -> str:
+    """小写化 + 简单词干（难词段落归属用）：spreading/spreads → spread 类变形归并"""
+    w = re.sub(r"[^a-z\-]", "", word.lower())
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    for suf in ("ing", "ed", "es", "er", "est"):
+        if len(w) > 4 and w.endswith(suf):
+            return w[: -len(suf)]
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us")):
+        return w[:-1]
+    return w
+
+
+def _word_in_paragraph(word: str, tokens: List[str]) -> bool:
+    """难词归属匹配：小写化 + 词干相等，或共享 ≥4 字符前缀（note/notes 类屈折）"""
+    ws = _simple_stem(word)
+    for t in tokens:
+        if word.lower() == t.lower() or ws == _simple_stem(t):
+            return True
+        ts = _simple_stem(t)
+        if min(len(ws), len(ts)) >= 4 and (ws.startswith(ts) or ts.startswith(ws)):
+            return True
+    return False
+
+
+def _split_paragraphs(text: str) -> List[str]:
+    """确定性分段：≥1 个空行切段、段内空白归一；过短片段并入前段（开头则与后段合并），不丢内容"""
+    paras: List[str] = []
+    pending = ""
+    for raw in re.split(r"\n\s*\n", text or ""):
+        p = re.sub(r"\s+", " ", raw).strip()
+        if not p:
+            continue
+        if pending:
+            p = (pending + " " + p).strip()
+            pending = ""
+        if len(p.split()) >= 5:
+            paras.append(p)
+        elif paras:
+            paras[-1] = paras[-1] + " " + p
+        else:
+            pending = p
+    if pending:
+        paras.append(pending)
+    return paras
+
+
+def _split_sentences(paragraph: str) -> List[str]:
+    return [s.strip() for s in _SENT_SPLIT_RE.split(paragraph) if len(s.strip().split()) >= 3]
+
+
+def _long_sentence_score(sentence: str) -> int:
+    """长难句加权：长度 + 3×从句标记数（微调 a）"""
+    return len(sentence.split()) + 3 * len(_CLAUSE_MARKER_RE.findall(sentence))
+
+
+def _slice_analysis(paragraphs: List[str], analysis: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """白盒指标按段落归属切片：难词归属（小写化+词干匹配）、长难句（加权排序取前 2）"""
+    analysis = analysis or {}
+    difficult = [
+        str(d.get("word", "")).strip()
+        for d in ((analysis.get("vocabulary") or {}).get("difficult_words") or [])
+        if isinstance(d, dict) and d.get("word")
+    ]
+    slices: List[Dict[str, Any]] = []
+    for i, para in enumerate(paragraphs, 1):
+        tokens = [t for t in re.split(r"[^A-Za-z\-']+", para) if t]
+        words = [w for w in difficult if _word_in_paragraph(w, tokens)]
+        ranked = sorted(_split_sentences(para), key=_long_sentence_score, reverse=True)
+        long_sents = [s for s in ranked if _long_sentence_score(s) >= 24][:2]
+        slices.append({
+            "index": i,
+            "preview": (para[:120] + "…") if len(para) > 120 else para,
+            "word_count": len(para.split()),
+            "difficult_words": words,
+            "long_sentences": long_sents,
+        })
+    return slices
+
+
+# ============ ③ 两阶段：页面蓝图（规划器 LLM + 程序硬校验 + 确定性回退） ============
+
+PAGE_KINDS = ("cover", "agenda", "vocab", "deep_reading", "language_focus", "interaction", "summary")
+KIND_LABELS = {
+    "cover": "封面页",
+    "agenda": "目标页",
+    "vocab": "词汇预教页",
+    "deep_reading": "精讲页",
+    "language_focus": "语言聚焦页",
+    "interaction": "互动检测页",
+    "summary": "总结页",
+}
+
+
+def _page_progress_label(spec: Dict[str, Any]) -> str:
+    """进度文案显示当前页类型（微调 c），如「第 3 段精讲页」「目标页」"""
+    if spec.get("kind") == "deep_reading" and spec.get("para"):
+        idxs = spec["para"]
+        if len(idxs) > 1:
+            return f"第{idxs[0]}-{idxs[-1]}段精讲页"
+        return f"第{idxs[0]}段精讲页"
+    return KIND_LABELS.get(spec.get("kind", ""), "内容页")
+
+
+def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+    """规划器输出 → 合法蓝图，返回 (蓝图, 失败原因)。程序只管硬契约：页型合法、
+    段落全覆盖、首封面末总结、≤25 页截断；页数多少由 LLM 在区间内自主决定"""
+    if not isinstance(data, dict):
+        return None, "输出不是 JSON 对象"
+    pages_raw = data.get("pages")
+    if not isinstance(pages_raw, list) or not pages_raw:
+        return None, "pages 缺失或为空"
+    pages: List[Dict[str, Any]] = []
+    for p in pages_raw:
+        if not isinstance(p, dict):
+            continue
+        kind = str(p.get("kind", "")).strip()
+        if kind not in PAGE_KINDS:
+            continue
+        para: Optional[List[int]] = None
+        if kind in ("deep_reading", "language_focus"):
+            raw_para = p.get("para")
+            if isinstance(raw_para, int) and 1 <= raw_para <= n_paras:
+                para = [raw_para]
+            elif isinstance(raw_para, list):
+                para = sorted({x for x in raw_para if isinstance(x, int) and 1 <= x <= n_paras})
+            if kind == "deep_reading" and not para:
+                continue  # 精讲页必须有合法段落锚点
+        pages.append({
+            "kind": kind,
+            "title": str(p.get("title", "")).strip()[:40],
+            "intent": str(p.get("intent", "")).strip()[:120],
+            "para": para,
+        })
+    if not pages:
+        return None, "无合法页面"
+    covered = {x for spec in pages if spec["kind"] == "deep_reading" for x in (spec["para"] or [])}
+    missing = [i for i in range(1, n_paras + 1) if i not in covered]
+    if missing:
+        return None, f"段落未被精讲页覆盖：第 {missing[:8]} 段"
+    if pages[0]["kind"] != "cover":
+        pages.insert(0, {"kind": "cover", "title": "", "intent": "建立主题情境", "para": None})
+    if pages[-1]["kind"] != "summary":
+        pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None})
+    if len(pages) > MAX_BLUEPRINT_PAGES:
+        # 溢出裁剪优先级：互动 < 语言聚焦/词汇/目标 < 精讲 < 封面/总结
+        keep_priority = {"interaction": 0, "language_focus": 1, "vocab": 1, "agenda": 1, "deep_reading": 2, "cover": 3, "summary": 3}
+        overflow = len(pages) - MAX_BLUEPRINT_PAGES
+        drop = set(sorted(
+            range(len(pages)),
+            key=lambda i: (keep_priority.get(pages[i]["kind"], 0), -i),
+        )[:overflow])
+        pages = [spec for i, spec in enumerate(pages) if i not in drop]
+    return pages, ""
+
+
+def _fallback_blueprint(slices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """确定性回退蓝图：封面/目标/词汇预教/逐段精讲/检测/总结；段落多时并段保 25 页上限"""
+    pages: List[Dict[str, Any]] = [
+        {"kind": "cover", "title": "", "intent": "建立主题情境，激活已知", "para": None},
+        {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": None},
+    ]
+    if any(s["difficult_words"] for s in slices):
+        pages.append({"kind": "vocab", "title": "词汇预教", "intent": "预教难点词，先建立词形识别", "para": None})
+    budget = max(MAX_BLUEPRINT_PAGES - len(pages) - 2, 1)  # 给检测页与总结页留位
+    per_page = max(1, -(-len(slices) // budget))
+    for start in range(0, len(slices), per_page):
+        idxs = [s["index"] for s in slices[start:start + per_page]]
+        pages.append({
+            "kind": "deep_reading",
+            "title": f"第{idxs[0]}段精讲" if len(idxs) == 1 else f"第{idxs[0]}-{idxs[-1]}段精讲",
+            "intent": "逐段细读：原文、主旨、长难句、语言点、衔接",
+            "para": idxs,
+        })
+    pages.append({"kind": "interaction", "title": "理解检测", "intent": "基于课文命题，检验理解", "para": None})
+    pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None})
+    return pages
+
+
+def _paragraphs_digest(slices: List[Dict[str, Any]]) -> str:
+    lines = []
+    for s in slices:
+        line = f"- 第{s['index']}段（{s['word_count']}词）：{s['preview']}"
+        if s["difficult_words"]:
+            line += f"｜难点词：{'、'.join(s['difficult_words'][:6])}"
+        if s["long_sentences"]:
+            line += f"｜长难句：{s['long_sentences'][0][:70]}…"
+        lines.append(line)
+    return "\n".join(lines) or "-（无段落）"
+
+
+def _objectives_digest(plan: Dict[str, Any]) -> str:
+    lines = []
+    for i, o in enumerate(plan.get("objectives") or [], 1):
+        text = o.get("text", "") if isinstance(o, dict) else str(o)
+        lines.append(f"{i}. {text}")
+    return "\n".join(lines) or "（教案未提供目标列表）"
+
+
+def _plan_blueprint(
+    generator: Any,
     *,
+    title: str,
+    plan: Dict[str, Any],
+    analysis: Dict[str, Any],
+    slices: List[Dict[str, Any]],
+    language_name: str,
+    duration_minutes: int,
+    course_type: str,
+    teaching_intent: Optional[str],
+) -> Tuple[List[Dict[str, Any]], str, str, str]:
+    """阶段一：规划器一次调用出蓝图；未过校验带原因重试一次，仍失败确定性回退。
+    返回 (pages, accent, source, note)，source ∈ {"llm", "fallback"}"""
+    n_paras = len(slices)
+    system_prompt, _ = render_prompt(PLANNER_PROMPT_NAME)
+    _, user_prompt = render_prompt(
+        PLANNER_PROMPT_NAME,
+        title=_esc(title),
+        language_name=_esc(language_name),
+        duration_minutes=int(duration_minutes or 90),
+        course_type=_esc(course_type or "综合"),
+        n_paras=n_paras,
+        para_range=f"{n_paras}~{n_paras * 2}",
+        paragraphs_digest=_esc(_paragraphs_digest(slices)),
+        plan_digest=_esc(_format_plan_text(plan)[:3000]),
+        metrics_lines=_esc(_build_metrics_lines(analysis)),
+        teacher_requirements=intent_prompt_section(teaching_intent),
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    reason = "规划器无输出"
+    for _attempt in range(2):
+        answer, _usage = generator._generate_with_api(messages)
+        data = _extract_json_object(answer)
+        pages, reason = _normalize_blueprint(data, n_paras)
+        if pages is not None:
+            return pages, str(data.get("accent", "")).lower(), "llm", ""
+        logger.warning(f"课件蓝图校验失败（{reason}），重试一次")
+        messages = messages + [
+            {"role": "assistant", "content": answer[-1500:]},
+            {"role": "user", "content": f"蓝图未通过程序校验：{reason}。请重新输出完整蓝图 JSON（精讲页覆盖全部 {n_paras} 个段落）。"},
+        ]
+    return _fallback_blueprint(slices), DEFAULT_ACCENT, "fallback", f"规划器两次未通过校验（{reason}），已用确定性蓝图"
+
+
+def _page_spec_block(spec: Dict[str, Any], page_no: int, total: int) -> str:
+    anchor = ""
+    para = spec.get("para")
+    if para:
+        anchor = f"，锚定第 {para[0]}-{para[-1]} 段（共 {len(para)} 段）" if len(para) > 1 else f"，锚定第 {para[0]} 段"
+    return (
+        f"- 本页为全课件第 {page_no}/{total} 页\n"
+        f"- 页型：{spec['kind']}（{KIND_LABELS.get(spec['kind'], '')}）{anchor}\n"
+        f"- 页标题：{spec.get('title') or '（由你拟定）'}\n"
+        f"- 教学意图：{spec.get('intent') or '（由你拟定一句可执行意图）'}"
+    )
+
+
+def _build_page_prompt(
+    spec: Dict[str, Any],
+    *,
+    page_no: int,
+    total: int,
+    context_nav: str,
+    paragraphs: List[str],
+    slices: List[Dict[str, Any]],
     title: str,
     plan: Dict[str, Any],
     analysis: Dict[str, Any],
@@ -363,10 +637,23 @@ def _build_prompt(
     theme: Optional[CoursewareTheme] = None,
     teaching_intent: Optional[str] = None,
 ) -> str:
-    stages = plan.get("activity_designs") or []
     cw_theme = theme or _ACADEMIC
+    idxs = spec.get("para") or []
+    para_block = "（本页无段落锚点）"
+    slices_block = "-（本页无段落锚点）"
+    if idxs:
+        para_block = "\n\n".join(f"【第{i}段】\n{_esc(paragraphs[i - 1])}" for i in idxs)
+        parts = []
+        for s in (x for x in slices if x["index"] in idxs):
+            words = "、".join(s["difficult_words"][:8]) or "（无）"
+            sents = "\n  ".join(_esc(x) for x in s["long_sentences"]) or "（本段无超阈值长难句，可选次长句）"
+            parts.append(f"- 第{s['index']}段 难点词：{words}\n  长难句候选：\n  {sents}")
+        slices_block = "\n".join(parts)
+    text_block = ""
+    if spec["kind"] == "interaction":
+        text_block = "### 课文全文（命题依据，答案必须可在课文找到依据）\n<user_content>\n" + _esc(prepare_text(text or ""))[:6000] + "\n</user_content>"
     _, user_prompt = render_prompt(
-        PROMPT_NAME,
+        PAGE_PROMPT_NAME,
         title=_esc(title),
         language_name=_esc(language_name),
         text_level=_esc(text_level),
@@ -375,14 +662,107 @@ def _build_prompt(
         course_type=_esc(course_type or "综合"),
         class_size=int(class_size or 30),
         native_language=_esc(native_language or "中文"),
-        full_text=_esc(prepare_text(text or "")),
-        plan_text=_esc(_format_plan_text(plan)),
-        metrics_lines=_esc(_build_metrics_lines(analysis)),
-        components_digest=_esc(_build_components_digest(components)),
         theme_desc=f"「{cw_theme.name}」主题（{cw_theme.palette_desc}）",
         teacher_requirements=intent_prompt_section(teaching_intent),
+        page_spec=_page_spec_block(spec, page_no, total),
+        context_nav=_esc(context_nav),
+        para_block=para_block,
+        slices_block=slices_block,
+        paragraphs_digest=_esc(_paragraphs_digest(slices)),
+        plan_digest=_esc(_format_plan_text(plan)[:3000]),
+        objectives_digest=_esc(_objectives_digest(plan)),
+        components_digest=_esc(_build_components_digest(components)),
+        text_block=text_block,
     )
     return user_prompt
+
+
+def _stub_page(spec: Dict[str, Any]) -> _ContentPage:
+    """程序兜底页：LLM 完全无输出时保证整副不缺页"""
+    title = spec.get("title") or KIND_LABELS.get(spec.get("kind", ""), "内容页")
+    html = (
+        '<div class="kicker">本页生成受限</div>'
+        f"<h2>{_html_escape(title)}</h2>"
+        '<div class="accent-rule"></div>'
+        '<div class="page-focus"><p>本页由程序兜底生成，请在编辑器中补充内容。</p></div>'
+    )
+    return _ContentPage(title=title, intent=spec.get("intent") or "程序兜底页", html=html)
+
+
+def _generate_one_page(
+    generator: Any,
+    system_prompt: str,
+    spec: Dict[str, Any],
+    prompt_kwargs: Dict[str, Any],
+    page_no: int,
+    total: int,
+    context_nav: str,
+) -> Tuple[_ContentPage, Dict[str, Any]]:
+    """单页生成 + 程序自检 + 定向重生成 ≤2 轮 + 确定性净化 + 程序兜底"""
+    info: Dict[str, Any] = {"regens": 0, "sanitized": False, "stub": False}
+    user_prompt = _build_page_prompt(spec, page_no=page_no, total=total, context_nav=context_nav, **prompt_kwargs)
+    try:
+        answer, _usage = generator._generate_with_api([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ])
+        _, pages = _parse_pages(answer)
+        page = pages[0] if len(pages) == 1 else None
+        if page is not None:
+            page.title = page.title or spec.get("title") or ""
+            page.intent = page.intent or spec.get("intent") or ""
+            problems = _validate_content_page(page)
+        else:
+            problems = ["输出未包含恰好一个 ```html 页面块"]
+        for _round in range(2):
+            if not problems:
+                break
+            info["regens"] += 1
+            fixed = _regen_page(generator, system_prompt, user_prompt, page or _stub_page(spec), page_no, problems)
+            if fixed is None:
+                break
+            page = fixed
+            page.title = page.title or spec.get("title") or ""
+            page.intent = page.intent or spec.get("intent") or ""
+            problems = _validate_content_page(page)
+        if problems and page is not None:
+            page.html = _sanitize_page(page.html)
+            info["sanitized"] = True
+        if page is None:
+            page = _stub_page(spec)
+            info["stub"] = True
+        return page, info
+    except Exception as e:
+        logger.warning(f"课件第 {page_no} 页生成异常，程序兜底: {e}")
+        return _stub_page(spec), {"regens": 0, "sanitized": False, "stub": True}
+
+
+def _generate_pages(
+    generator: Any,
+    blueprint: List[Dict[str, Any]],
+    prompt_kwargs: Dict[str, Any],
+    progress_cb: Optional[Callable[[str], None]] = None,
+) -> Tuple[List[_ContentPage], Dict[int, Dict[str, Any]]]:
+    """阶段二：蓝图逐页生成，3 路有限并发；进度文案含页类型（微调 c）"""
+    system_prompt, _ = render_prompt(PAGE_PROMPT_NAME)
+    total = len(blueprint)
+    results: Dict[int, _ContentPage] = {}
+    infos: Dict[int, Dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {}
+        for i, spec in enumerate(blueprint):
+            prev_t = (blueprint[i - 1].get("title") or KIND_LABELS.get(blueprint[i - 1]["kind"], "未知")) if i else "（无）"
+            next_t = (blueprint[i + 1].get("title") or KIND_LABELS.get(blueprint[i + 1]["kind"], "未知")) if i + 1 < total else "（无）"
+            context_nav = f"前一页「{prev_t}」，后一页「{next_t}」"
+            futures[pool.submit(_generate_one_page, generator, system_prompt, spec, prompt_kwargs, i + 1, total, context_nav)] = i
+        for fut in as_completed(futures):
+            i = futures[fut]
+            page, info = fut.result()
+            results[i] = page
+            infos[i] = info
+            if progress_cb:
+                progress_cb(f"正在生成：{_page_progress_label(blueprint[i])}（{i + 1}/{total}）")
+    return [results[i] for i in range(total)], infos
 
 
 def _wrap_llm_schema(title: str, html: str, source_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -457,19 +837,22 @@ def generate_html_courseware(
     enhancement_tags: Optional[List[str]] = None,
     theme: Optional[str] = None,
     teaching_intent: Optional[str] = None,
+    progress_cb: Optional[Callable[[str], None]] = None,
 ) -> HTMLCoursewareResult:
     """
-    生成单文件交互 HTML 课件（④a 三层架构）。
+    生成单文件交互 HTML 课件（③ 两阶段 + ④a 三层架构）。
 
-    内容层 LLM 输出（逐页 ```html 块 + ACCENT 声明）经程序自检：
-    整副失败自动重试一次（携带原因）；单页不合格定向重生成（≤2 轮），
-    仍失败则确定性净化保底线；全部失败回退 courseware_bootstrap，fallback=True。
+    阶段一 规划器：LLM 一次调用产出页面蓝图（页型/标题/意图/段落锚点/强调色），
+    程序硬校验（页型合法 + 段落全覆盖 + ≤25 页截断），失败带原因重试一次，
+    仍失败确定性回退蓝图。阶段二 逐页生成：按蓝图 3 路并发，每页带段落原文与
+    白盒切片；逐页程序自检，不合格定向重生成 ≤2 轮，仍失败确定性净化，完全
+    无输出用程序兜底页，整副不缺页。任意阶段异常回退 courseware_bootstrap，
+    fallback=True 由前端标注"简化版生成"，绝不静默。
     """
     start_time = time.time()
-    version = prompt_version(PROMPT_NAME)
+    version = prompt_version(PAGE_PROMPT_NAME)
     components = components or []
     cw_theme = get_theme(theme)
-    min_pages = max(3, len(plan.get("activity_designs") or []) + 1)
 
     model_name = "template-fallback"
     fallback_used = True
@@ -477,29 +860,18 @@ def generate_html_courseware(
     html = ""
     accent = DEFAULT_ACCENT
     pages: List[_ContentPage] = []
-    regenerated: List[int] = []
-    sanitized: List[int] = []
+    blueprint: List[Dict[str, Any]] = []
+    blueprint_source = ""
     self_check: Dict[str, Any] = {}
-    raw_answer = ""
+
+    def _progress(msg: str) -> None:
+        if progress_cb:
+            try:
+                progress_cb(msg)
+            except Exception:
+                pass
 
     try:
-        user_prompt = _build_prompt(
-            title=title,
-            plan=plan,
-            analysis=analysis or {},
-            text=text,
-            language_name=language_name,
-            text_level=text_level,
-            student_level=student_level,
-            duration_minutes=duration_minutes,
-            course_type=course_type,
-            class_size=class_size,
-            native_language=native_language,
-            components=components,
-            theme=cw_theme,
-            teaching_intent=teaching_intent,
-        )
-
         from app.services.rag import RAGGenerator
         from app.core.config import settings
 
@@ -508,92 +880,84 @@ def generate_html_courseware(
             api_key=getattr(settings, "LLM_API_KEY", None),
             api_base=getattr(settings, "LLM_BASE_URL", None),
             model=model_name,
-            max_tokens=8000,
+            max_tokens=4000,
             temperature=0.7,
         )
 
         if generator.use_api:
-            system_prompt, _ = render_prompt(PROMPT_NAME)
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
+            paragraphs = _split_paragraphs(text)
+            slices = _slice_analysis(paragraphs, analysis)
+            _progress("正在规划课件页面结构…")
+            blueprint, accent, blueprint_source, blueprint_note = _plan_blueprint(
+                generator,
+                title=title,
+                plan=plan,
+                analysis=analysis or {},
+                slices=slices,
+                language_name=language_name,
+                duration_minutes=duration_minutes,
+                course_type=course_type or "综合",
+                teaching_intent=teaching_intent,
+            )
+            retries = 1 if blueprint_source == "fallback" else 0
+            _progress(
+                f"页面蓝图完成（{len(blueprint)} 页，{'AI 规划' if blueprint_source == 'llm' else '模板规划'}），开始逐页生成…"
+            )
+            prompt_kwargs = dict(
+                paragraphs=paragraphs,
+                slices=slices,
+                title=title,
+                plan=plan,
+                analysis=analysis or {},
+                text=text,
+                language_name=language_name,
+                text_level=text_level or "",
+                student_level=student_level or "",
+                duration_minutes=duration_minutes,
+                course_type=course_type or "综合",
+                class_size=class_size or 30,
+                native_language=native_language or "中文",
+                components=components,
+                theme=cw_theme,
+                teaching_intent=teaching_intent,
+            )
+            pages, page_infos = _generate_pages(generator, blueprint, prompt_kwargs, _progress)
 
-            answer, _usage = generator._generate_with_api(messages)
-            raw_answer = answer
-            accent, pages = _parse_pages(answer)
-            reason = _validate_deck(pages, min_pages)
-
-            if reason:
-                # F3.5：整副失败自动重试一次，携带失败原因
-                retries = 1
-                logger.warning(f"HTML 课件内容层首次校验失败（{reason}），重试一次")
-                messages += [
-                    {"role": "assistant", "content": answer[-2000:]},
-                    {"role": "user", "content": f"上一次输出未通过结构校验：{reason}。请重新按输出契约输出：ACCENT 首行声明 + 逐页 ```html 块 + 自检 JSON。"},
-                ]
-                answer, _usage = generator._generate_with_api(messages)
-                raw_answer = answer
-                accent, pages = _parse_pages(answer)
-                reason = _validate_deck(pages, min_pages)
-
-            if reason:
-                logger.warning(f"HTML 课件重试仍失败（{reason}），回退模板拼装")
-            else:
-                fallback_used = False
-
-                # 逐页程序自检：定向重生成 ≤2 轮，仍失败则确定性净化保硬性红线
-                for round_no in range(2):
-                    failing = [(i, probs) for i, p in enumerate(pages) if (probs := _validate_content_page(p))]
-                    if not failing:
-                        break
-                    if len(failing) > 4:
-                        reason = "不合格页过多（>4），整体质量不足：" + "；".join(
-                            f"第{i + 1}页({'/'.join(probs[:2])})" for i, probs in failing[:3]
-                        )
-                        logger.warning(f"HTML 课件{reason}，回退模板拼装")
-                        fallback_used = True
-                        break
-                    logger.info(f"内容页自检第{round_no + 1}轮：第 {[i + 1 for i, _ in failing]} 页需重写")
-                    for i, probs in failing:
-                        fixed = _regen_page(generator, system_prompt, user_prompt, pages[i], i + 1, probs)
-                        if fixed is not None:
-                            pages[i] = fixed
-                            if i + 1 not in regenerated:
-                                regenerated.append(i + 1)
-
-                if not fallback_used:
-                    residual = [(i, probs) for i, p in enumerate(pages) if (probs := _validate_content_page(p))]
-                    for i, probs in residual:
-                        logger.warning(f"第{i + 1}页重生成后仍不合格（{'；'.join(probs)}），确定性净化保底线")
-                        pages[i].html = _sanitize_page(pages[i].html)
-                        sanitized.append(i + 1)
-
-                if not fallback_used:
-                    accent_note = None
-                    if cw_theme.dark:
-                        # 深色主题：全局色板为浅底调色，对其底色不达对比度契约，锁定主题专属强调色
-                        if accent and accent != cw_theme.default_accent:
-                            accent_note = f"深色主题强调色锁定 {cw_theme.default_accent}（LLM 声明 {accent} 已忽略）"
-                        accent = cw_theme.default_accent
-                    elif accent not in ACCENT_PALETTE:
-                        logger.warning(f"强调色 {accent or '未声明'} 不在色板内，回退默认 {DEFAULT_ACCENT}")
-                        accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
-                        accent = DEFAULT_ACCENT
-                    self_check = {
-                        "prompt_version": version,
-                        "accent": accent,
-                        "accent_note": accent_note,
-                        "theme": cw_theme.id,
-                        "pages_count": len(pages),
-                        "page_intents": [
-                            {"page": i + 1, "title": p.title, "intent": p.intent} for i, p in enumerate(pages)
-                        ],
-                        "interaction_types": sorted(_interaction_types(pages)),
-                        "regenerated_pages": regenerated,
-                        "sanitized_pages": sanitized,
-                        "llm_self_check": _extract_selfcheck(raw_answer),
-                    }
+            fallback_used = False
+            accent_note = None
+            if cw_theme.dark:
+                # 深色主题：全局色板为浅底调色，对其底色不达对比度契约，锁定主题专属强调色
+                if accent and accent != cw_theme.default_accent:
+                    accent_note = f"深色主题强调色锁定 {cw_theme.default_accent}（规划器声明 {accent} 已忽略）"
+                accent = cw_theme.default_accent
+            elif accent not in ACCENT_PALETTE:
+                logger.warning(f"强调色 {accent or '未声明'} 不在色板内，回退默认 {DEFAULT_ACCENT}")
+                accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
+                accent = DEFAULT_ACCENT
+            self_check = {
+                "prompt_version": version,
+                "planner_version": prompt_version(PLANNER_PROMPT_NAME),
+                "generation_mode": "two_stage",
+                "accent": accent,
+                "accent_note": accent_note,
+                "theme": cw_theme.id,
+                "pages_count": len(pages),
+                "blueprint": {
+                    "source": blueprint_source,
+                    "note": blueprint_note or None,
+                    "pages": [
+                        {"page": i + 1, "kind": spec["kind"], "para": spec.get("para"), "title": spec.get("title")}
+                        for i, spec in enumerate(blueprint)
+                    ],
+                },
+                "page_intents": [
+                    {"page": i + 1, "title": p.title, "intent": p.intent} for i, p in enumerate(pages)
+                ],
+                "interaction_types": sorted(_interaction_types(pages)),
+                "regenerated_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["regens"]],
+                "sanitized_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["sanitized"]],
+                "stub_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["stub"]],
+            }
         else:
             logger.warning("LLM 不可用，HTML 课件回退模板拼装")
     except Exception as e:
@@ -621,7 +985,12 @@ def generate_html_courseware(
         source_meta = {"generated_by": "template_fallback", "prompt_version": version}
     else:
         html = _assemble_skeleton(title, accent, pages, theme=cw_theme)
-        source_meta = {"generated_by": "llm_html_v2", "prompt_version": version, "theme": cw_theme.id}
+        source_meta = {
+            "generated_by": "llm_html_two_stage",
+            "prompt_version": version,
+            "theme": cw_theme.id,
+            "page_blueprint": blueprint,
+        }
         schema = _wrap_llm_schema(title, html, source_meta)
         sync = _structure_sync_from_pages(schema)
 
@@ -636,12 +1005,6 @@ def generate_html_courseware(
         retries=retries,
         generation_duration=round(time.time() - start_time, 2),
     )
-
-
-def _extract_selfcheck(answer: str) -> Dict[str, Any]:
-    from app.services.analysis.fusion_generator import _extract_self_check
-
-    return _extract_self_check(answer)
 
 
 # ============ F3.3 PPT 链路 ============

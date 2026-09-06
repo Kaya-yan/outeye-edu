@@ -62,6 +62,37 @@ ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
 .timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
 .timer button:hover{background:var(--accent);color:var(--paper)}
 
+/* ============ 逐段精讲组件（③ 两阶段 · 逐页生成契约） ============ */
+.para-original{margin:0 0 18px;padding:16px 22px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 10px 10px 0}
+.para-original p{font-size:19px;line-height:1.9}
+.para-original footer{font-size:var(--fs-caption);color:var(--muted);margin-top:8px}
+mark.kw{background:var(--accent-soft);color:var(--ink);padding:1px 4px;border-radius:4px;font-weight:600}
+.para-gist{margin:0 0 16px;padding:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.para-gist h3{margin-bottom:6px}
+.sentence-anatomy{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.sentence-anatomy h3{margin-bottom:8px}
+.anatomy-sentence{font-size:20px;line-height:2;color:var(--ink);margin:6px 0 12px}
+.anatomy-sentence .cl{cursor:pointer;border-bottom:2px dotted var(--line);transition:background .2s,opacity .2s;border-radius:3px}
+.anatomy-sentence .cl.lit{background:var(--accent-soft);border-bottom-color:var(--accent)}
+.anatomy-sentence.x-ray .cl-core{background:var(--accent-soft);border-bottom-color:var(--accent);font-weight:700}
+.anatomy-sentence.x-ray .cl-mod{opacity:.4}
+.anatomy-legend{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:17px}
+.anatomy-legend li{padding-left:0;line-height:1.7}
+.anatomy-legend .cl{cursor:default;border-bottom:none;padding:0 2px}
+.anatomy-legend .cl-core{background:var(--accent-soft);border-radius:3px}
+.anatomy-legend .cl-mod{color:var(--muted)}
+.anatomy-tip{font-size:17px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.sent-walk details{border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:var(--card);margin-top:10px}
+.sent-walk summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.sent-walk details[open] summary{margin-bottom:8px}
+.lang-points{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.lang-points ol{margin-left:24px;display:flex;flex-direction:column;gap:12px}
+.lang-points li{line-height:1.75}
+.cohesion-note{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
+.cohesion-note h3{margin-bottom:6px}
+.teaching-intent{display:none}
+body.oe-edit-all .teaching-intent{display:block;margin-top:16px;padding:10px 14px;border:1px dashed var(--line);border-radius:8px;font-size:15px;color:var(--muted)}
+
 /* ============ 导航（框架层） ============ */
 #nav-prev,#nav-next{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:19px;cursor:pointer;z-index:40}
 #nav-prev{left:14px}
@@ -128,6 +159,10 @@ __THEME_EXTRA__
   });
 
   document.addEventListener('click', function (e) {
+    var cl = e.target.closest ? e.target.closest('.anatomy-sentence .cl') : null;
+    if (cl) { cl.classList.toggle('lit'); return; }
+    var sent = e.target.closest ? e.target.closest('.anatomy-sentence') : null;
+    if (sent) { sent.classList.toggle('x-ray'); return; }
     var li = e.target.closest ? e.target.closest('ol.timeline li') : null;
     if (li) { li.classList.toggle('lit'); return; }
     var btn = e.target.closest ? e.target.closest('.timer button') : null;

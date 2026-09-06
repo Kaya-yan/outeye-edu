@@ -9,7 +9,14 @@ from app.models.analysis import AnalysisIntent, AnalysisRecord
 from app.models.courseware import TeacherStyleEvent
 from app.api.api_v1.endpoints.analysis_whitebox import _persist_plan_version
 from app.services.analysis.fusion_generator import build_fusion_prompt
-from app.services.courseware_llm_generator import _assemble_skeleton, _build_prompt, _ContentPage, _render_docx, _render_pptx
+from app.services.courseware_llm_generator import (
+    _assemble_skeleton,
+    _build_page_prompt,
+    _ContentPage,
+    _render_docx,
+    _render_pptx,
+    _slice_analysis,
+)
 from app.services.teacher_intent import (
     DEFENSE_NOTE,
     MAX_INTENT_LENGTH,
@@ -88,12 +95,19 @@ def test_fusion_prompt_without_intent_uses_placeholder():
     assert "（教师未填写补充要求，按默认教学设计判断执行）" in prompt
 
 
-def test_courseware_html_prompt_contains_intent_section():
-    prompt = _build_prompt(
+def test_courseware_html_page_prompt_contains_intent_section():
+    para = "word " * 30
+    prompt = _build_page_prompt(
+        {"kind": "deep_reading", "title": "第1段精讲", "intent": "细读", "para": [1]},
+        page_no=1,
+        total=5,
+        context_nav="前一页「词汇预教」，后一页「第2段精讲」",
+        paragraphs=[para.strip()],
+        slices=_slice_analysis([para.strip()], {}),
         title="T",
         plan={"activity_designs": []},
         analysis={},
-        text="word " * 60,
+        text=para,
         language_name="英语",
         text_level="B1",
         student_level="B1",

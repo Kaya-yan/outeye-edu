@@ -112,19 +112,26 @@ class _FakeRAG:
         return reply, {}
 
 
-def _deck_answer(n_pages=5):
-    interactions = [
-        '<details class="reveal"><summary>Q1</summary><p>A1</p></details>',
-        '<div class="vocab-grid"><div class="vocab-card"><div class="inner"><div class="front">word</div><div class="back">释义（第1段）</div></div></div></div>',
-        '<ol class="timeline"><li>step one</li><li>step two</li></ol>',
+def _planner_answer(accent: str = "#3e6b5a") -> str:
+    import json
+
+    pages = [
+        {"kind": "cover", "title": "", "intent": "建立情境", "para": None},
+        {"kind": "vocab", "title": "词汇预教", "intent": "预教难点词", "para": None},
+        {"kind": "deep_reading", "title": "第1段精讲", "intent": "细读第1段", "para": 1},
+        {"kind": "interaction", "title": "理解检测", "intent": "检验理解", "para": None},
+        {"kind": "summary", "title": "总结与作业", "intent": "回收目标", "para": None},
     ]
-    parts = ["ACCENT: #3e6b5a\n"]
-    for i in range(n_pages):
-        parts.append(
-            f"```html\n<!--page: {i + 1} | Page {i + 1}-->\n<!--intent: 意图{i + 1}-->\n{GOOD_BODY + interactions[i % 3]}\n```\n"
-        )
-    parts.append('```json\n{"prompt_version": "v2", "pages_count": %d}\n```\n' % n_pages)
-    return "\n".join(parts)
+    return "```json\n" + json.dumps({"accent": accent, "pages": pages, "notes": "n"}, ensure_ascii=False) + "\n```"
+
+
+def _deck_answer():
+    return (
+        "```html\n<!--page: 1 | Page 1-->\n<!--intent: 意图1-->\n"
+        + GOOD_BODY
+        + '<div class="sentence-anatomy"><p class="anatomy-sentence"><span class="cl cl-core">Core</span> <span class="cl cl-mod">mod</span>.</p></div>'
+        + "\n```\n"
+    )
 
 
 def _run_generate(theme=None):
@@ -147,24 +154,29 @@ def fake_llm(monkeypatch):
     return install
 
 
+def _two_stage_replies(accent="#3e6b5a"):
+    return [_planner_answer(accent)] + [_deck_answer() for _ in range(5)]
+
+
 def test_generate_with_theme_applies_tokens(fake_llm):
-    fake_llm(_deck_answer())
+    fake_llm(*_two_stage_replies(accent="#b5493e"))
     result = _run_generate("humanities")
     assert result.fallback is False
     assert "--paper:#fbf6ed" in result.html
     assert result.self_check["theme"] == "humanities"
+    assert result.self_check["accent"] == "#b5493e"
     assert result.editor_schema["meta"]["source_meta"]["theme"] == "humanities"
 
 
 def test_generate_invalid_theme_falls_back_to_default(fake_llm):
-    fake_llm(_deck_answer())
+    fake_llm(*_two_stage_replies())
     result = _run_generate("retro")
     assert result.self_check["theme"] == "academic"
 
 
 def test_generate_dark_theme_locks_accent(fake_llm):
-    """深色主题：LLM 声明的浅底色板色被忽略，强调色锁定主题专属暖金"""
-    fake_llm(_deck_answer())
+    """深色主题：规划器声明的浅底色板色被忽略，强调色锁定主题专属暖金"""
+    fake_llm(*_two_stage_replies(accent="#3e6b5a"))
     result = _run_generate("lecture")
     assert result.self_check["theme"] == "lecture"
     assert result.self_check["accent"] == "#e3b341"

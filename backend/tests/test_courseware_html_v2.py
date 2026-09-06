@@ -1,26 +1,16 @@
-"""④a 三层架构 HTML 课件生成测试：内容层解析/程序自检/逐页重生成/拼装/回退"""
-
-import pytest
+"""④a 三层架构 HTML 课件单元测试：内容层解析/程序自检/净化/拼装/对比度
+（③ 起整副生成改为两阶段：规划器+逐页，端到端用例见 test_courseware_two_stage.py）"""
 
 from app.services.courseware_llm_generator import (
     ACCENT_PALETTE,
-    DEFAULT_ACCENT,
     THEME_TOKENS,
     _assemble_skeleton,
     _ContentPage,
     _parse_pages,
     _sanitize_page,
     _validate_content_page,
-    _validate_deck,
     contrast_ratio,
-    generate_html_courseware,
 )
-
-
-def _page(title: str, body: str, intent: str = "教学意图示例文本") -> str:
-    return (
-        f"```html\n<!--page: 1 | {title}-->\n<!--intent: {intent}-->\n{body}\n```\n"
-    )
 
 
 GOOD_BODY = (
@@ -45,46 +35,6 @@ def _deck_answer(n_pages: int = 5, accent: str = "#35507a", *, page_bodies=None)
         parts.append(f"```html\n<!--page: {i + 1} | {title}-->\n<!--intent: 意图{i + 1}-->\n{body}\n```\n")
     parts.append('```json\n{"prompt_version": "v2", "pages_count": %d}\n```\n' % n_pages)
     return "\n".join(parts)
-
-
-class _FakeRAG:
-    use_api = True
-    replies: list = []
-
-    def __init__(self, **kwargs):
-        pass
-
-    def _generate_with_api(self, messages):
-        reply = type(self).replies.pop(0) if type(self).replies else _deck_answer()
-        return reply, {}
-
-
-@pytest.fixture()
-def fake_llm(monkeypatch):
-    def install(*replies: str):
-        _FakeRAG.replies = list(replies)
-        monkeypatch.setattr("app.services.rag.RAGGenerator", _FakeRAG)
-
-    return install
-
-
-def _plan(n_activities: int = 4) -> dict:
-    return {
-        "activity_designs": [
-            {"name": f"环节{i}", "duration": "10 分钟", "objective": "obj", "steps": "steps"}
-            for i in range(1, n_activities + 1)
-        ],
-        "objectives": [{"text": "read"}],
-    }
-
-
-def _run(monkeypatch_install=None):
-    return generate_html_courseware(
-        title="测试课件",
-        plan=_plan(),
-        analysis={},
-        text="A" * 200,
-    )
 
 
 # ---- 主题与对比度 ----
@@ -112,6 +62,17 @@ def test_skeleton_assembly_replaces_all_markers():
     # 框架层要素写死在骨架，拼装后必须存在
     for marker in ('id="nav-prev"', 'id="nav-next"', 'id="page-indicator"', "--fs-body:21px", "--lh-body:1.8"):
         assert marker in html, marker
+
+
+def test_skeleton_carries_close_reading_components():
+    """③ 骨架必须内置逐段精讲组件样式与解剖交互脚本（含放映隐藏教学意图）"""
+    pages = [_ContentPage(title="p", intent="i", html='<div class="page-focus"><p class="anatomy-sentence"><span class="cl cl-core">x</span></p></div>')]
+    html = _assemble_skeleton("T", "#35507a", pages)
+    for marker in (".para-original", "mark.kw", ".para-gist", ".sentence-anatomy", ".anatomy-sentence .cl", ".anatomy-legend", ".anatomy-tip", ".sent-walk", ".lang-points", ".cohesion-note", ".teaching-intent"):
+        assert marker in html, marker
+    assert "anatomy-sentence .cl" in html and "classList.toggle('lit')" in html
+    assert "x-ray" in html
+    assert "body.oe-edit-all .teaching-intent{display:block" in html
 
 
 # ---- 解析与自检 ----
@@ -158,98 +119,23 @@ def test_validate_content_page_allows_layout_inline_style():
     assert _validate_content_page(ok) == []
 
 
-def test_validate_deck_requires_pages_and_interactions():
-    single = [_ContentPage("t", "i", GOOD_BODY)]
-    reason = _validate_deck(single, min_pages=3)
-    assert reason and "页面数不足" in reason
-    pages = [_ContentPage("t", "i", GOOD_BODY) for _ in range(4)]
-    reason = _validate_deck(pages, min_pages=3)
-    assert reason and "交互类型不足" in reason
+def test_validate_content_page_accepts_close_reading_components():
+    body = (
+        '<div class="kicker">课文精讲</div><h2>T</h2><div class="page-focus">'
+        '<blockquote class="para-original"><p>Text with <mark class="kw">word</mark>.</p><footer>—— Para. 1</footer></blockquote>'
+        '<div class="para-gist"><h3>主旨</h3><p>概括。</p></div>'
+        '<div class="sentence-anatomy"><p class="anatomy-sentence"><span class="cl cl-core">Core</span> <span class="cl cl-mod">mod</span>.</p>'
+        '<ul class="anatomy-legend"><li>说明</li></ul><p class="anatomy-tip">翻译。</p></div>'
+        '<div class="sent-walk"><details><summary>句 1</summary><p>讲解。</p></details></div>'
+        '<div class="lang-points"><ol><li>point</li></ol></div>'
+        '<div class="cohesion-note"><h3>衔接</h3><p>功能。</p></div>'
+        '<aside class="teaching-intent">意图。</aside>'
+        "</div>"
+    )
+    assert _validate_content_page(_ContentPage(title="x", intent="i", html=body)) == []
 
 
 def test_sanitize_page_strips_hard_violations():
     dirty = '<div class="page-focus"><p style="color:#ff0000;background:#eee">a</p><span onclick="x()">go</span></div><iframe src="http://evil"></iframe>'
     clean = _sanitize_page(dirty)
     assert "<iframe" not in clean and "#ff0000" not in clean and "onclick" not in clean and "background" not in clean
-
-
-# ---- 端到端（fake LLM）----
-
-
-def test_happy_path_assembles_skeleton(fake_llm):
-    fake_llm(_deck_answer(6))
-    result = _run()
-    assert result.fallback is False
-    assert result.prompt_version == "v2"
-    assert result.html.startswith("<!DOCTYPE html>")
-    assert result.html.count('<section class="page"') == 6
-    assert result.self_check["pages_count"] == 6
-    assert result.self_check["accent"] == "#35507a"
-    assert result.self_check["regenerated_pages"] == []
-    assert result.self_check["llm_self_check"].get("pages_count") == 6
-
-
-def test_invalid_accent_falls_back_to_default(fake_llm):
-    fake_llm(_deck_answer(5, accent="#ff00ff"))
-    result = _run()
-    assert result.fallback is False
-    assert result.self_check["accent"] == DEFAULT_ACCENT
-    assert result.self_check["accent_note"]
-
-
-def test_bad_page_regenerated(fake_llm):
-    bad_body = (
-        '<div class="page-focus"><p style="color:#ff0000">raw color here</p></div>'
-        '<div class="page-focus"></div>'
-    )
-    bodies = [
-        GOOD_BODY + '<ol class="timeline"><li>step one</li><li>step two</li></ol>',
-        bad_body,
-        GOOD_BODY + '<details class="reveal"><summary>Q</summary><p>A</p></details>',
-        GOOD_BODY + '<div class="vocab-card"><div class="inner"><div class="front">w</div><div class="back">释义</div></div></div>',
-        GOOD_BODY,
-    ]
-    first = _deck_answer(5, page_bodies=bodies)
-    # 第一次：整副应答；第二次：单页重生成返回合规页
-    fixed_page = (
-        "```html\n<!--page: 2 | Page 2-->\n<!--intent: 意图2-->\n"
-        '<div class="page-focus"><p>fixed page content that is comfortably long enough to pass '
-        "the minimum length validation rule for a single content page in this deck.</p>"
-        '<p class="quote-src">from paragraph 2</p></div>\n```\n'
-    )
-    fake_llm(first, fixed_page)
-    result = _run()
-    assert result.fallback is False
-    assert result.self_check["regenerated_pages"] == [2]
-    assert 'style="color:#ff0000"' not in result.html
-
-
-def test_deck_failure_retries_then_falls_back(fake_llm):
-    too_few = _deck_answer(2)
-    fake_llm(too_few, too_few)
-    result = _run()
-    assert result.fallback is True
-    assert result.retries == 1
-    assert result.self_check.get("prompt_version") == "fallback"
-    assert result.model == "template-fallback"
-
-
-def test_regen_failure_sanitizes(fake_llm):
-    bad_body = '<div class="page-focus"><p style="color:#ff0000">raw color</p></div>'
-    bodies = [
-        GOOD_BODY + '<ol class="timeline"><li>step one</li><li>step two</li></ol>',
-        bad_body,
-        GOOD_BODY + '<details class="reveal"><summary>Q</summary><p>A</p></details>',
-        GOOD_BODY + '<div class="vocab-card"><div class="inner"><div class="front">w</div><div class="back">释义</div></div></div>',
-        GOOD_BODY,
-    ]
-    first = _deck_answer(5, page_bodies=bodies)
-    # 重生成两轮都失败（返回同样违规的页）→ 轮次用尽后走确定性净化
-    bad_regen = (
-        "```html\n<!--page: 2 | Page 2-->\n<!--intent: 意图2-->\n" + bad_body + "\n```\n"
-    )
-    fake_llm(first, bad_regen, bad_regen)
-    result = _run()
-    assert result.fallback is False
-    assert result.self_check["sanitized_pages"] == [2]
-    assert "#ff0000" not in result.html

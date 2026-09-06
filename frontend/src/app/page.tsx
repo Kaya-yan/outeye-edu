@@ -1187,8 +1187,8 @@ function PlanStep({
         theme: format === "html" && selectedTheme ? selectedTheme : undefined,
         teaching_intent: intent.trim() || undefined,
       });
-      // 轮询生成状态（上限 5 分钟）
-      for (let i = 0; i < 100; i++) {
+      // 轮询生成状态（上限 10 分钟：HTML 两阶段逐页生成耗时更长）
+      for (let i = 0; i < 200; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const st = await apiGet<{
           status: string;
@@ -1230,7 +1230,7 @@ function PlanStep({
         }
         if (st.status === "error") throw new Error(st.error || "课件生成失败，请重试");
       }
-      throw new Error("生成超时（超过 5 分钟），请重试");
+      throw new Error("生成超时（超过 10 分钟），请重试");
     } catch (e: unknown) {
       setRevisionError(e instanceof Error ? e.message : "课件生成失败，请重试");
     } finally {

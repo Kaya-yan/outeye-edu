@@ -145,7 +145,7 @@ async def _next_generate_event_type(db: AsyncSession, user_id: str, analysis_id:
 async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest, current_user: dict) -> None:
     state = _GENERATION_TASKS[task_id]
     try:
-        state.update(status="generating", progress="AI 正在设计课件页面…（约 1-2 分钟）")
+        state.update(status="generating", progress="AI 正在规划课件页面…（两阶段逐页生成，约 2-8 分钟）")
 
         from app.services.courseware_llm_generator import generate_html_courseware
 
@@ -154,6 +154,9 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
                 await db.execute(select(ComponentDefinition).where(ComponentDefinition.scope == "official"))
             ).scalars().all()
             components = [c.to_dict() for c in comps]
+
+        def on_progress(msg: str) -> None:
+            state.update(progress=msg)
 
         result = await asyncio.to_thread(
             generate_html_courseware,
@@ -173,6 +176,7 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
             enhancement_tags=payload.enhancement_tags,
             theme=payload.theme,
             teaching_intent=payload.teaching_intent,
+            progress_cb=on_progress,
         )
 
         state.update(status="saving", progress="正在保存课件项目…")
@@ -204,7 +208,7 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
                     user_id=current_user["user_id"],
                     analysis_id=None,
                     stage="courseware_html",
-                    prompt_name="courseware_html_v2",
+                    prompt_name="courseware_html_page_v2",
                     prompt_version=result.prompt_version,
                     model=result.model,
                     fallback="yes" if result.fallback else "no",
