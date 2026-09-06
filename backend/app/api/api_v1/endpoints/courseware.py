@@ -76,6 +76,23 @@ class CoursewareGenerateRequest(BaseModel):
     theme: Optional[str] = None                     # HTML 链路视觉主题（④b，缺省 academic）
     analysis_id: Optional[str] = None               # 风格档案关联（同 ③ 的 analysis_id）
     teaching_intent: Optional[str] = Field(None, description="教师自定义教学意图（可选，进入提示词前截断+防注入包裹）", max_length=2000)
+    blueprint: Optional[List[Dict[str, Any]]] = None    # 教师确认后的页面蓝图（S4：提供则跳过内部规划）
+    blueprint_edits: Optional[Dict[str, Any]] = None    # 教师编辑摘要（计数等），随确认事件入风格档案
+    accent: Optional[str] = None                        # 教师蓝图对应强调色（蓝图端点返回带回）
+
+
+class BlueprintPlanRequest(BaseModel):
+    """页面蓝图规划请求（S4 蓝图可编辑）：字段与 /generate 对齐，只规划不生成"""
+    title: str = Field(..., max_length=200)
+    plan: Dict[str, Any]
+    analysis: Optional[Dict[str, Any]] = None
+    text: str = Field(..., min_length=10)
+    language_name: str = "英语"
+    text_level: Optional[str] = None
+    student_level: Optional[str] = None
+    duration_minutes: int = Field(90, ge=5, le=180)
+    course_type: Optional[str] = None
+    teaching_intent: Optional[str] = Field(None, max_length=2000)
 
 
 class ThemeBriefRequest(BaseModel):
@@ -176,6 +193,8 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
             enhancement_tags=payload.enhancement_tags,
             theme=payload.theme,
             teaching_intent=payload.teaching_intent,
+            blueprint=payload.blueprint,
+            accent=payload.accent,
             progress_cb=on_progress,
         )
 
@@ -226,6 +245,19 @@ async def _run_html_generation(task_id: str, payload: CoursewareGenerateRequest,
                 theme=resolved_theme.id,
                 extra={"format": "html", "fallback": result.fallback, "requested": payload.theme or ""},
             )
+            if payload.blueprint:
+                await _record_style_event(
+                    db,
+                    user_id=current_user["user_id"],
+                    analysis_id=payload.analysis_id,
+                    event_type="blueprint_confirmed",
+                    theme=resolved_theme.id,
+                    extra={
+                        "source": "teacher_confirmed",
+                        "edits": payload.blueprint_edits or {},
+                        "pages_final": len(payload.blueprint),
+                    },
+                )
 
         state.update(
             status="done",
@@ -756,6 +788,69 @@ async def create_theme_brief(
     return {**brief, "themes": theme_catalog()}
 
 
+async def _run_blueprint_planning(task_id: str, payload: BlueprintPlanRequest) -> None:
+    state = _GENERATION_TASKS[task_id]
+    try:
+        state.update(status="generating", progress="AI 正在规划课件页面结构…（约 10-40 秒）")
+
+        def _plan() -> Dict[str, Any]:
+            from app.core.config import settings
+            from app.services.rag import RAGGenerator
+            from app.services.courseware_llm_generator import (
+                _plan_blueprint,
+                _slice_analysis,
+                _split_paragraphs,
+            )
+
+            generator = RAGGenerator(
+                api_key=getattr(settings, "LLM_API_KEY", None),
+                api_base=getattr(settings, "LLM_BASE_URL", None),
+                model=getattr(settings, "LLM_MODEL", "deepseek-chat"),
+                max_tokens=2500,
+                temperature=0.5,
+            )
+            if not generator.use_api:
+                raise RuntimeError("LLM 不可用，无法规划页面蓝图，请稍后重试")
+            paragraphs = _split_paragraphs(payload.text)
+            slices = _slice_analysis(paragraphs, payload.analysis or {})
+            pages, accent, source, note = _plan_blueprint(
+                generator,
+                title=payload.title,
+                plan=payload.plan,
+                analysis=payload.analysis or {},
+                slices=slices,
+                language_name=payload.language_name,
+                duration_minutes=payload.duration_minutes,
+                course_type=payload.course_type or "综合",
+                teaching_intent=payload.teaching_intent,
+            )
+            return {"blueprint": pages, "source": source, "note": note, "n_paras": len(paragraphs), "accent": accent}
+
+        result = await asyncio.to_thread(_plan)
+        state.update(status="done", progress=None, result=result)
+    except Exception as e:
+        logger.error(f"页面蓝图规划任务失败: {e}")
+        state.update(status="error", error=str(e)[:300], progress=None)
+
+
+@router.post("/blueprint", status_code=status.HTTP_202_ACCEPTED)
+async def start_blueprint_planning(
+    request: BlueprintPlanRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """页面蓝图规划（S4 蓝图可编辑）：教师先看/改蓝图再确认生成；复用生成任务轮询，done.result 携带蓝图"""
+    _prune_generation_tasks()
+    task_id = uuid4().hex
+    _GENERATION_TASKS[task_id] = {
+        "status": "pending",
+        "progress": "已排队",
+        "user_id": current_user["user_id"],
+        "created_ts": time.time(),
+    }
+    asyncio.create_task(_run_blueprint_planning(task_id, request))
+    return {"task_id": task_id}
+
+
 @router.post("/generate", status_code=status.HTTP_202_ACCEPTED)
 async def start_courseware_generation(
     request: CoursewareGenerateRequest,
@@ -788,6 +883,7 @@ async def get_courseware_generation_status(
         "task_id": task_id,
         "status": state.get("status"),
         "progress": state.get("progress"),
+        "result": state.get("result"),
         "project_id": state.get("project_id"),
         "artifact_id": state.get("artifact_id"),
         "download_url": state.get("download_url"),

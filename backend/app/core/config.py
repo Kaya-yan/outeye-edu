@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 2000
 
+    # 课件质检链路回滚开关（S5-S7 通用底座：关闭即跳过对应环节，只走基础生成）
+    PAGE_REVIEWER_ENABLED: bool = True        # S5 教研员评审（逐页内容复核）
+    VISUAL_QC_ENABLED: bool = True            # S6 视觉质检（截图 + 多模态模型）
+    CONSISTENCY_REVIEW_ENABLED: bool = True   # S7 全局一致性审校（术语统一）
+
     # Embedding模型配置
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_DIMENSION: int = 384

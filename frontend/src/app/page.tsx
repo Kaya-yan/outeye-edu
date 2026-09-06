@@ -9,6 +9,7 @@ import TeachingPlanView from "@/components/TeachingPlanView";
 import FileUploadZone from "@/components/FileUploadZone";
 import BlueprintOverview from "@/components/BlueprintOverview";
 import PlanEvaluationForm from "@/components/PlanEvaluationForm";
+import PageBlueprintEditor, { BlueprintPage, BlueprintMeta } from "@/components/PageBlueprintEditor";
 import { Blueprint, TeachingContext } from "@/lib/analysis";
 import { CEFR_LEVELS, cefrLabel } from "@/lib/cefr";
 
@@ -1084,6 +1085,12 @@ function PlanStep({
   const [selectedTheme, setSelectedTheme] = useState("");
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefRequested, setBriefRequested] = useState(false);
+  const [pageBlueprint, setPageBlueprint] = useState<BlueprintPage[] | null>(null);
+  const [blueprintMeta, setBlueprintMeta] = useState<BlueprintMeta | null>(null);
+  const [blueprintEdits, setBlueprintEdits] = useState(0);
+  const [blueprintBusy, setBlueprintBusy] = useState(false);
+  const [blueprintProgress, setBlueprintProgress] = useState("");
+  const [blueprintError, setBlueprintError] = useState("");
 
   // 确认教案 → 平滑滚到课件入口（intent/主题/生成按钮区）；恢复场景挂载即 confirmed 不滚
   const coursewareEntryRef = useRef<HTMLDivElement>(null);
@@ -1134,6 +1141,17 @@ function PlanStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planConfirmed, briefRequested]);
 
+  // S4：页面蓝图规划完成 → 编辑器挂载，平滑滚到蓝图面板
+  const blueprintPanelRef = useRef<HTMLDivElement>(null);
+  const prevBlueprintRef = useRef<BlueprintPage[] | null>(null);
+  useEffect(() => {
+    const prev = prevBlueprintRef.current;
+    prevBlueprintRef.current = pageBlueprint;
+    if (!prev && pageBlueprint) {
+      blueprintPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [pageBlueprint]);
+
   // 确认教案：先亮 UI，再后台落库（幂等）；失败不影响课堂侧使用
   const confirmPlan = () => {
     setPlanConfirmed(true);
@@ -1155,40 +1173,91 @@ function PlanStep({
     setPlanConfirmed(false);
   };
 
-  const handleCreateCourseware = async (format: "html" | "ppt" | "word") => {
-    if (!text) {
-      setRevisionError("课文内容缺失，无法生成课件，请重新分析");
-      return;
+  // S4 蓝图可编辑：HTML 链路先规划蓝图给教师确认，PPT/Word 直接生成
+  const buildPlanPayload = () => {
+    if (!text) throw new Error("课文内容缺失，无法生成课件，请重新分析");
+    const settings = result.generation_settings;
+    return {
+      title: result.text_title || "教学课件",
+      plan: result.teaching_plan,
+      analysis: {
+        vocabulary: result.vocabulary,
+        syntax: result.syntax,
+        discourse: result.discourse,
+      },
+      text,
+      language_name: result.language_name || "英语",
+      text_level: result.text_level,
+      student_level: result.student_level || studentLevel,
+      duration_minutes: settings?.duration_minutes ?? 90,
+      course_type: settings?.course_type,
+      class_size: settings?.class_size,
+      native_language: settings?.native_language,
+      analysis_id: analysisId || undefined,
+      teaching_intent: intent.trim() || undefined,
+    };
+  };
+
+  const startBlueprintPlanning = async () => {
+    setBlueprintError("");
+    setBlueprintBusy(true);
+    setBlueprintProgress("正在启动页面规划…");
+    try {
+      const start = await apiPost<{ task_id: string }>("/courseware/blueprint", buildPlanPayload());
+      // 轮询蓝图规划（上限 3 分钟）
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const st = await apiGet<{
+          status: string;
+          progress?: string | null;
+          error?: string;
+          result?: {
+            blueprint: BlueprintPage[];
+            source: string;
+            note?: string | null;
+            n_paras: number;
+            accent: string;
+          } | null;
+        }>(`/courseware/generate/${start.task_id}`);
+        if (st.progress) setBlueprintProgress(st.progress);
+        if (st.status === "done" && st.result?.blueprint) {
+          setPageBlueprint(st.result.blueprint);
+          setBlueprintMeta({
+            source: st.result.source,
+            note: st.result.note || null,
+            n_paras: st.result.n_paras,
+            accent: st.result.accent,
+          });
+          setBlueprintEdits(0);
+          return;
+        }
+        if (st.status === "error") throw new Error(st.error || "页面规划失败，请重试");
+      }
+      throw new Error("页面规划超时（超过 3 分钟），请重试");
+    } catch (e: unknown) {
+      setBlueprintError(e instanceof Error ? e.message : "页面规划失败，请重试");
+    } finally {
+      setBlueprintBusy(false);
+      setBlueprintProgress("");
     }
+  };
+
+  const runGenerate = async (format: "html" | "ppt" | "word") => {
     setCreatingCourseware(true);
     setCoursewareProgress("正在启动 AI 生成…");
     try {
-      const settings = result.generation_settings;
       const start = await apiPost<{ task_id: string }>("/courseware/generate", {
         format,
-        title: result.text_title || "教学课件",
-        plan: result.teaching_plan,
-        analysis: {
-          vocabulary: result.vocabulary,
-          syntax: result.syntax,
-          discourse: result.discourse,
-        },
-        text,
-        language_name: result.language_name || "英语",
-        text_level: result.text_level,
-        student_level: result.student_level || studentLevel,
-        duration_minutes: settings?.duration_minutes ?? 90,
-        course_type: settings?.course_type,
-        class_size: settings?.class_size,
-        native_language: settings?.native_language,
+        ...buildPlanPayload(),
         learner_gap: result.learner_gap,
         enhancement_tags: result.enhancement_tags,
-        analysis_id: analysisId || undefined,
         theme: format === "html" && selectedTheme ? selectedTheme : undefined,
-        teaching_intent: intent.trim() || undefined,
+        blueprint: format === "html" && pageBlueprint ? pageBlueprint : undefined,
+        blueprint_edits: format === "html" ? { count: blueprintEdits } : undefined,
+        accent: format === "html" && blueprintMeta?.accent ? blueprintMeta.accent : undefined,
       });
-      // 轮询生成状态（上限 10 分钟：HTML 两阶段逐页生成耗时更长）
-      for (let i = 0; i < 200; i++) {
+      // 轮询生成状态（上限 20 分钟：两阶段逐页生成 + 质检链路耗时更长）
+      for (let i = 0; i < 400; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const st = await apiGet<{
           status: string;
@@ -1230,13 +1299,25 @@ function PlanStep({
         }
         if (st.status === "error") throw new Error(st.error || "课件生成失败，请重试");
       }
-      throw new Error("生成超时（超过 10 分钟），请重试");
+      throw new Error("生成超时（超过 20 分钟），请重试");
     } catch (e: unknown) {
       setRevisionError(e instanceof Error ? e.message : "课件生成失败，请重试");
     } finally {
       setCreatingCourseware(false);
       setCoursewareProgress("");
     }
+  };
+
+  const handleCreateCourseware = (format: "html" | "ppt" | "word") => {
+    if (format === "html") {
+      void startBlueprintPlanning();
+      return;
+    }
+    void runGenerate(format);
+  };
+
+  const handleConfirmBlueprint = () => {
+    void runGenerate("html");
   };
 
   const handleRevise = async (instruction: string, section?: string) => {
@@ -1479,17 +1560,17 @@ function PlanStep({
               <div className="section-title mb-2">Courseware Generation</div>
               <h3 className="text-lg font-semibold text-ink-900">AI 三链路课件生成</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                同一确认教案，三种独立产物：HTML 交互课件（进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成，所有产物均标注「AI 生成」。
+                同一确认教案，三种独立产物：HTML 交互课件（先出页面蓝图，确认后逐页生成，进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成，所有产物均标注「AI 生成」。
               </p>
             </div>
           </div>
           <div className="grid gap-2 lg:w-[360px]">
             <button
               onClick={() => handleCreateCourseware("html")}
-              disabled={creatingCourseware}
+              disabled={creatingCourseware || blueprintBusy}
               className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creatingCourseware ? "AI 生成中…" : "生成 HTML 课件（约 1-2 分钟）"}
+              {blueprintBusy ? "AI 规划页面中…" : pageBlueprint ? "重新规划页面蓝图" : "生成 HTML 课件（先出页面蓝图）"}
             </button>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1569,6 +1650,17 @@ function PlanStep({
             )}
           </div>
         )}
+        {blueprintBusy && blueprintProgress && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl bg-canvas-200/60 px-4 py-3 text-sm text-ink-600">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ink-300 border-t-primary-600" />
+            {blueprintProgress}
+          </div>
+        )}
+        {blueprintError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {blueprintError}
+          </div>
+        )}
         {creatingCourseware && coursewareProgress && (
           <div className="mt-4 flex items-center gap-3 rounded-xl bg-canvas-200/60 px-4 py-3 text-sm text-ink-600">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ink-300 border-t-primary-600" />
@@ -1593,6 +1685,22 @@ function PlanStep({
           </div>
         </div>
       </div>
+      )}
+
+      {/* S4 页面蓝图编辑器：规划完成后展示，教师确认才逐页生成 */}
+      {planConfirmed && pageBlueprint && (
+        <div ref={blueprintPanelRef} className="scroll-mt-4">
+          <PageBlueprintEditor
+            pages={pageBlueprint}
+            meta={blueprintMeta}
+            edits={blueprintEdits}
+            busy={creatingCourseware || blueprintBusy}
+            onPagesChange={setPageBlueprint}
+            onEdit={() => setBlueprintEdits((n) => n + 1)}
+            onConfirm={handleConfirmBlueprint}
+            onReplan={() => void startBlueprintPlanning()}
+          />
+        </div>
       )}
 
       <PlanEvaluationForm chosenVersion={activeVersion} />

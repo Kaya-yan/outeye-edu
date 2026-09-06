@@ -710,7 +710,8 @@ def _generate_one_page(
         page = pages[0] if len(pages) == 1 else None
         if page is not None:
             page.title = page.title or spec.get("title") or ""
-            page.intent = page.intent or spec.get("intent") or ""
+            # 蓝图意图是权威任务描述（S4 教师可编辑），LLM 页内注释只是复述
+            page.intent = spec.get("intent") or page.intent or ""
             problems = _validate_content_page(page)
         else:
             problems = ["输出未包含恰好一个 ```html 页面块"]
@@ -723,7 +724,7 @@ def _generate_one_page(
                 break
             page = fixed
             page.title = page.title or spec.get("title") or ""
-            page.intent = page.intent or spec.get("intent") or ""
+            page.intent = spec.get("intent") or page.intent or ""
             problems = _validate_content_page(page)
         if problems and page is not None:
             page.html = _sanitize_page(page.html)
@@ -837,6 +838,8 @@ def generate_html_courseware(
     enhancement_tags: Optional[List[str]] = None,
     theme: Optional[str] = None,
     teaching_intent: Optional[str] = None,
+    blueprint: Optional[List[Dict[str, Any]]] = None,
+    accent: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
 ) -> HTMLCoursewareResult:
     """
@@ -844,7 +847,8 @@ def generate_html_courseware(
 
     阶段一 规划器：LLM 一次调用产出页面蓝图（页型/标题/意图/段落锚点/强调色），
     程序硬校验（页型合法 + 段落全覆盖 + ≤25 页截断），失败带原因重试一次，
-    仍失败确定性回退蓝图。阶段二 逐页生成：按蓝图 3 路并发，每页带段落原文与
+    仍失败确定性回退蓝图。教师传入已确认蓝图时（S4）跳过规划器直接采用
+    （同样过校验，未过则带原因回退内部规划）。阶段二 逐页生成：按蓝图 3 路并发，每页带段落原文与
     白盒切片；逐页程序自检，不合格定向重生成 ≤2 轮，仍失败确定性净化，完全
     无输出用程序兜底页，整副不缺页。任意阶段异常回退 courseware_bootstrap，
     fallback=True 由前端标注"简化版生成"，绝不静默。
@@ -858,10 +862,11 @@ def generate_html_courseware(
     fallback_used = True
     retries = 0
     html = ""
-    accent = DEFAULT_ACCENT
+    accent = accent or DEFAULT_ACCENT
     pages: List[_ContentPage] = []
-    blueprint: List[Dict[str, Any]] = []
+    blueprint = list(blueprint) if blueprint else []
     blueprint_source = ""
+    blueprint_note: Optional[str] = None
     self_check: Dict[str, Any] = {}
 
     def _progress(msg: str) -> None:
@@ -887,22 +892,39 @@ def generate_html_courseware(
         if generator.use_api:
             paragraphs = _split_paragraphs(text)
             slices = _slice_analysis(paragraphs, analysis)
-            _progress("正在规划课件页面结构…")
-            blueprint, accent, blueprint_source, blueprint_note = _plan_blueprint(
-                generator,
-                title=title,
-                plan=plan,
-                analysis=analysis or {},
-                slices=slices,
-                language_name=language_name,
-                duration_minutes=duration_minutes,
-                course_type=course_type or "综合",
-                teaching_intent=teaching_intent,
-            )
+            teacher_note = ""
+            if blueprint:
+                normalized, reject = _normalize_blueprint({"pages": blueprint}, len(paragraphs))
+                if normalized is None:
+                    teacher_note = f"教师蓝图未过校验（{reject}），已改用内部规划"
+                    logger.warning(teacher_note)
+                    blueprint = []
+                else:
+                    blueprint = normalized
+            if blueprint:
+                # S4 蓝图可编辑：教师已确认，跳过内部规划直接逐页生成
+                blueprint_source = "teacher"
+                _progress(f"已采用教师确认蓝图（{len(blueprint)} 页），开始逐页生成…")
+            else:
+                _progress("正在规划课件页面结构…")
+                blueprint, accent, blueprint_source, planner_note = _plan_blueprint(
+                    generator,
+                    title=title,
+                    plan=plan,
+                    analysis=analysis or {},
+                    slices=slices,
+                    language_name=language_name,
+                    duration_minutes=duration_minutes,
+                    course_type=course_type or "综合",
+                    teaching_intent=teaching_intent,
+                )
+                notes = [n for n in (teacher_note, planner_note) if n]
+                blueprint_note = "；".join(notes) or None
             retries = 1 if blueprint_source == "fallback" else 0
-            _progress(
-                f"页面蓝图完成（{len(blueprint)} 页，{'AI 规划' if blueprint_source == 'llm' else '模板规划'}），开始逐页生成…"
-            )
+            if blueprint_source != "teacher":
+                _progress(
+                    f"页面蓝图完成（{len(blueprint)} 页，{'AI 规划' if blueprint_source == 'llm' else '模板规划'}），开始逐页生成…"
+                )
             prompt_kwargs = dict(
                 paragraphs=paragraphs,
                 slices=slices,
