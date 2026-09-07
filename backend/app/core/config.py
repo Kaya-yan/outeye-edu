@@ -43,10 +43,11 @@ class Settings(BaseSettings):
 
     # 课件质检链路回滚开关（S5-S7 通用底座：关闭即跳过对应环节，只走基础生成）
     PAGE_REVIEWER_ENABLED: bool = True        # S5 教研员评审（逐页内容复核）
-    VISUAL_QC_ENABLED: bool = True            # S6 视觉质检（截图 + 多模态模型）
+    VISUAL_QC_ENABLED: bool = True            # S6 VL 多模态视觉检查（仅门控视觉模型相，外部依赖 DashScope）
+    OVERFLOW_GATE_ENABLED: bool = True        # S6 溢出硬关卡（本地几何检测，零外部依赖；chromium 为部署硬依赖）
     CONSISTENCY_REVIEW_ENABLED: bool = True   # S7 全局一致性审校（术语统一）
 
-    # 视觉质检多模态模型（S6：DashScope OpenAI 兼容模式；未配 key 时整层优雅跳过）
+    # 视觉质检多模态模型（S6 相 B：DashScope OpenAI 兼容模式；未配 key 时 VL 检查跳过，溢出硬关卡不受影响）
     VISION_API_KEY: str = ""
     VISION_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     VISION_MODEL: str = "qwen-vl-plus"

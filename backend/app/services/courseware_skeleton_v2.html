@@ -27,7 +27,7 @@ html,body{height:100%;background:var(--backdrop);font-family:var(--font-body);co
 .page h3{font-size:24px;color:var(--ink);line-height:1.4}
 .kicker{font-size:var(--fs-caption);letter-spacing:.32em;color:var(--accent);font-weight:600;margin-bottom:12px}
 .accent-rule{width:64px;height:3px;background:var(--accent);margin:16px 0 24px}
-.page-focus{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.page-focus{flex:1;display:flex;flex-direction:column;justify-content:center;justify-content:safe center;min-height:0}
 .caption{font-size:var(--fs-caption);color:var(--muted)}
 .quote-src{font-size:var(--fs-caption);color:var(--muted);margin-top:10px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 24px}
@@ -49,14 +49,14 @@ details.reveal[open] summary::before{content:"点击收起　"}
 ol.timeline{list-style:none;display:flex;flex-direction:column;gap:14px}
 ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:var(--card);opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
 ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
-.vocab-grid{display:flex;flex-wrap:wrap;gap:18px}
+.vocab-grid{display:grid;grid-template-columns:repeat(4,196px);grid-auto-rows:128px;gap:18px;justify-content:center}
 .vocab-card{width:196px;height:128px;perspective:900px;cursor:default}
 .vocab-card .inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s}
 .vocab-card:hover .inner,.vocab-card.flip .inner{transform:rotateY(180deg)}
-.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;border:1px solid var(--line);background:var(--card);text-align:center}
-.vocab-card .front{font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
+.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;padding:12px;border:1px solid var(--line);background:var(--card);text-align:center;overflow:hidden}
+.vocab-card .front{display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
 .vocab-card .front .phonetic{font-family:var(--font-body);font-size:var(--fs-caption);font-weight:400;color:var(--muted);margin-top:6px}
-.vocab-card .back{transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:16px;line-height:1.7}
+.vocab-card .back{transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:15px;line-height:1.6;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5}
 .timer{display:inline-flex;align-items:center;gap:16px}
 .timer .timer-display{font-family:var(--font-title);font-size:50px;font-weight:700;color:var(--accent);min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
 .timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}

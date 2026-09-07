@@ -41,6 +41,7 @@ ${metrics_lines}
 2. 按教学顺序排页：cover → agenda（学习目标）→ vocab（预教难点词，必须排在精读前）→ deep_reading（逐段）→ language_focus（跨段语言点归纳，可选）→ interaction（检测/讨论，配计时）→ summary。
 3. 段落分配：一个长难段独占一页；两三个短段可合并到一页（para 用数组列出）；绝不遗漏段落。
 4. 页数控制在区间内：环节数多的教案每环节配 1 页 interaction；总页数不超过 25。
+5. 单页容量上限（一屏 720px 铁律，下游页面超出一屏会被裁剪）：学习目标 ≤3 条 / 词卡 ≤4 张 / 逐句细读 ≤4 句 / 语言点 ≤3 条。某环节内容量放不下时，宁可拆成两页（interaction / language_focus / vocab 允许同型多页），不要让单页溢出；总页数仍在 ≤25 内。
 
 ## 三、页型枚举（kind 只能取这七个值）
 - `cover` 封面页（para 为 null）
@@ -60,7 +61,7 @@ ${metrics_lines}
   "pages": [
     {"kind": "cover", "title": "", "intent": "建立主题情境，激活学生已知", "para": null},
     {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": null},
-    {"kind": "vocab", "title": "词汇预教", "intent": "预教 6 个难点词，建立词形识别", "para": null},
+    {"kind": "vocab", "title": "词汇预教", "intent": "预教 4 个难点词，建立词形识别", "para": null},
     {"kind": "deep_reading", "title": "悬念式开头", "intent": "细读排除法修辞与核心词汇", "para": 1},
     {"kind": "deep_reading", "title": "起源与传播", "intent": "把握时间线与因果衔接", "para": [2, 3]},
     {"kind": "interaction", "title": "理解检测", "intent": "四道细节题检验课文理解", "para": null},
@@ -76,4 +77,5 @@ ${metrics_lines}
 - [ ] 第一页是 cover，最后一页是 summary？
 - [ ] 每页 intent 是一句可执行的教学意图（不是标题复读）？
 - [ ] 页数在建议区间内且 ≤25？
+- [ ] 没有任何一页的内容量超出单页容量上限（放不下已拆页）？
 - [ ] accent 在四色色板内？

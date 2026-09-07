@@ -970,9 +970,11 @@ def generate_html_courseware(
                 accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
                 accent = DEFAULT_ACCENT
 
-            # S6 视觉质检：截图 + 多模态查缺陷 + 问题页重生成一轮；异常降级不阻塞
+            # S6 视觉质检（两相）：溢出硬关卡（OVERFLOW_GATE_ENABLED，本地几何）+ VL 检查（VISUAL_QC_ENABLED）
             visual_qc_summary: Optional[Dict[str, Any]] = None
-            if getattr(settings, "VISUAL_QC_ENABLED", True):
+            _vl_on = getattr(settings, "VISUAL_QC_ENABLED", True)
+            _gate_on = getattr(settings, "OVERFLOW_GATE_ENABLED", True)
+            if _vl_on or _gate_on:
                 try:
                     from app.services.courseware_visual_qc import run_visual_qc
 
@@ -1001,6 +1003,8 @@ def generate_html_courseware(
                         regen_page=_regen_for_visual,
                         kind_labels=KIND_LABELS,
                         progress_cb=_progress,
+                        vl_enabled=_vl_on,
+                        gate_enabled=_gate_on,
                     )
                 except Exception as qc_e:
                     logger.warning(f"视觉质检整体异常，跳过: {qc_e}")

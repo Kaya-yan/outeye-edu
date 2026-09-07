@@ -57,17 +57,19 @@ ${text_block}
 
 ## 三、按页型的内容要求（只执行本页页型对应的条目）
 
+**一屏铁律**：本页版心为 1280×720，超出一屏的内容会被裁剪不可见。任何页型内容量超预算时，宁可建议拆成两页，不要塞进一页。
+
 - **cover 封面页**：kicker + h1 主标题 + accent-rule + 一句导语（对话式语气）+ caption（课时/班级）。建立情境，不展开知识点。
-- **agenda 学习目标页**：把教案目标改写为学生视角的 3-4 条"能做什么"，用 ul.plain 或 .card；一条目标配一句达成方式。
-- **vocab 词汇预教页**：从白盒难点词选 4-6 个，用 `.vocab-grid` + `.vocab-card`（front：词 + 音标；back：词性释义 + 简短例句出处第N段）。这是预教，例句可用课文原句。
+- **agenda 学习目标页**：把教案目标改写为学生视角的目标，**最多 3 条**"能做什么"（超出时合并同类或删次重），用 ul.plain 或 .card；一条目标配一句达成方式。
+- **vocab 词汇预教页**：从白盒难点词选**最多 4 个**（教学权重优先，其余留给精讲页语境处理），用 `.vocab-grid` + `.vocab-card`（front：词 + 音标；back：词性释义 + 简短例句出处第N段）。这是预教，例句可用课文原句。
 - **deep_reading 逐段精讲页（五要素硬契约，缺一判不合格）**：
   1. 原文段落：`<blockquote class="para-original"><p>…（重点词用 <mark class="kw"> 高亮，与语言点一一对应）…</p><footer>—— 课文标题, Para. N</footer></blockquote>`
   2. 段落主旨：`<div class="para-gist"><h3>段落主旨</h3><p>一句话概括 + 一句"怎么读懂它"</p></div>`
   3. 长难句解剖：`<div class="sentence-anatomy">` 内放 `<p class="anatomy-sentence">`（句中用 `<span class="cl cl-core">` 标主干、`<span class="cl cl-mod">` 标修饰，句尾标点留在 span 外）+ `<ul class="anatomy-legend">`（■ 图例逐条说明成分）+ `<p class="anatomy-tip">`（翻译示范）。主干提取必须正确，成分说明落到具体词。
-  4. 语言点：`<div class="lang-points"><h3>语言点</h3><ol>` 每条 = 词/修辞 + 读音或结构 + 原文锚点 + 可直用的例句（含中文译文）。2-3 条为宜。
+  4. 语言点：`<div class="lang-points"><h3>语言点</h3><ol>` 每条 = 词/修辞 + 读音或结构 + 原文锚点 + 可直用的例句（含中文译文）。最多 3 条。
   5. 衔接点评：`<div class="cohesion-note"><h3>衔接点评</h3><p>说明本段在全文中承担什么功能、如何与前后段衔接（不是复述内容）</p></div>`
   页尾加 `<aside class="teaching-intent">本页教学意图：…</aside>`（放映时自动隐藏，编辑器中可见）。
-  取材克制：逐句细读（`sent-walk` 内 `<details><summary>句 N：原文</summary><p>讲解</p></details>`）最多 3 句；整页一屏放得下，宁可少讲不可拥挤。
+  取材克制：逐句细读（`sent-walk` 内 `<details><summary>句 N：原文</summary><p>讲解</p></details>`）**最多 4 句**；语言点**最多 3 条**；整页一屏放得下，宁可少讲不可拥挤。
 - **language_focus 语言聚焦页**：跨段归纳一个语法/词汇/修辞主题：规则呈现（.card）+ 原文例证（注明第N段）+ 一个 details.reveal 练习。
 - **interaction 互动检测页**：3-4 题基于课文命题（细节/推断/讨论），答案用 `details.reveal` 折叠；讨论题配 `<div class="timer" data-seconds="90">` 计时器。
 - **summary 总结与作业页**：回顾要点（ul.plain）+ 作业（.callout 强调）+ 一句收束语。
