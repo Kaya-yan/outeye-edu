@@ -283,7 +283,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     (enabled: boolean) => {
       setPickOn(enabled);
       sendRpc("ve:pick:set", { enabled });
-      if (!enabled) setTarget(null);
+      if (!enabled) {
+        setTarget(null);
+        setRect(null);
+      }
     },
     [sendRpc]
   );
@@ -627,34 +630,52 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPickMode(!pickOn)}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-              pickOn
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+          <div
+            className="flex rounded-full border border-slate-200 bg-slate-100 p-0.5"
+            role="group"
+            aria-label="查看模式"
           >
-            {pickOn ? "拾取中 · 点击页面元素（Esc 退出）" : "选取元素"}
-          </button>
-          <div className="flex rounded border border-slate-200 overflow-hidden">
             <button
-              onClick={undo}
-              disabled={hIndex === 0}
-              className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              title="撤销 (Ctrl+Z)"
+              onClick={() => setPickMode(false)}
+              className={`rounded-full px-4 py-1 text-xs font-medium transition-colors ${
+                pickOn
+                  ? "text-slate-500 hover:text-slate-800"
+                  : "bg-white text-slate-900 shadow-sm"
+              }`}
             >
-              撤销
+              显示
             </button>
             <button
-              onClick={redo}
-              disabled={hIndex >= history.length - 1}
-              className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 border-l border-slate-200"
-              title="重做 (Ctrl+Shift+Z)"
+              onClick={() => setPickMode(true)}
+              className={`rounded-full px-4 py-1 text-xs font-medium transition-colors ${
+                pickOn
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
             >
-              重做
+              编辑
             </button>
           </div>
+          {pickOn && (
+            <div className="flex rounded border border-slate-200 overflow-hidden">
+              <button
+                onClick={undo}
+                disabled={hIndex === 0}
+                className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                title="撤销 (Ctrl+Z)"
+              >
+                撤销
+              </button>
+              <button
+                onClick={redo}
+                disabled={hIndex >= history.length - 1}
+                className="px-2.5 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 border-l border-slate-200"
+                title="重做 (Ctrl+Shift+Z)"
+              >
+                重做
+              </button>
+            </div>
+          )}
           {savedMsg && <span className="text-xs text-emerald-600">{savedMsg}</span>}
           <Link
             href={`/courseware/${projectId}/edit`}
@@ -714,9 +735,12 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           </div>
         )}
 
-        {pickOn && !target && (
-          <div className="absolute left-1/2 top-4 -translate-x-1/2 z-20 rounded-full bg-blue-600/90 px-4 py-1.5 text-xs text-white shadow">
-            点击课件中的任意元素开始编辑
+        {pickOn && (
+          <div className="pointer-events-none absolute inset-0 z-10">
+            <div className="absolute inset-2 rounded-xl border-2 border-dashed border-blue-400/60" />
+            <span className="absolute left-5 top-5 rounded-full bg-blue-600/90 px-3 py-1 text-[11px] text-white shadow">
+              {target ? "编辑中" : "编辑中 · 点击页面元素开始编辑，Esc 退出"}
+            </span>
           </div>
         )}
 
@@ -738,7 +762,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           />
         )}
 
-        {patches.length > 0 && (
+        {pickOn && patches.length > 0 && (
           <div className="absolute right-4 bottom-4 z-30 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
             <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] uppercase tracking-widest text-slate-400">
               调整记录（保存后生效于展示与导出）
