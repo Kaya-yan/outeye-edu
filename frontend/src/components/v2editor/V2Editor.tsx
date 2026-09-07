@@ -6,6 +6,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import {
   createHostBridge,
   type HostBridge,
+  type VeMoveCommit,
   type VePageInfo,
   type VeRect,
   type VeTarget,
@@ -228,6 +229,9 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         const text = typeof payload.text === "string" ? payload.text : "";
         if (sel) upsertTextRef.current(sel, text);
       }
+      if (type === "ve:move:commit") {
+        moveCommitRef.current(payload as unknown as VeMoveCommit);
+      }
       if (type === "ve:export:result" && exportResolveRef.current) {
         exportResolveRef.current(String(payload.html || ""));
         exportResolveRef.current = null;
@@ -357,6 +361,42 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   useEffect(() => {
     upsertTextRef.current = upsertTextPatch;
   }, [upsertTextPatch]);
+
+  const moveCommitRef = useRef<(m: VeMoveCommit) => void>(() => {});
+
+  const onMoveCommit = useCallback(
+    (m: VeMoveCommit) => {
+      const byOeId = m.oeId
+        ? patches.find((p) => p.kind === "move" && p.moveId === m.oeId)
+        : undefined;
+      const exists =
+        byOeId || patches.find((p) => p.kind === "move" && p.id === patchId(m.selector, "move"));
+      if (exists && exists.targetIndex === m.targetIndex) return;
+      const moveId = exists?.moveId || m.oeId || nextOeId(patches, "oe-mv");
+      const next: VePatch = {
+        id: exists ? exists.id : patchId(m.selector, "move"),
+        kind: "move",
+        selector: exists ? exists.selector : m.selector,
+        label: `${m.tag}${m.component ? ` · ${m.component}` : ""} · 拖拽调序`,
+        targetIndex: m.targetIndex,
+        moveId,
+        fingerprint: {
+          tag: m.tag,
+          childCount: m.childCount | 0,
+          text: (m.text || "").slice(0, 40),
+          w: Math.round(m.w || 0),
+          h: Math.round(m.h || 0),
+        },
+      };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === exists.id ? next : p)) : patches.concat([next])
+      );
+    },
+    [patches, mutatePatches]
+  );
+  useEffect(() => {
+    moveCommitRef.current = onMoveCommit;
+  }, [onMoveCommit]);
 
   const onImageReplace = useCallback(
     (selector: string, src: string) => {

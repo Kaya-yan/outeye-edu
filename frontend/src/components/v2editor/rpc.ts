@@ -56,6 +56,18 @@ export interface VePageInfo {
   component: string;
 }
 
+export interface VeMoveCommit {
+  selector: string;
+  oeId: string;
+  targetIndex: number;
+  tag: string;
+  component: string;
+  childCount: number;
+  text: string;
+  w: number;
+  h: number;
+}
+
 export function createHostBridge(channel: string, onMessage: (type: string, payload: Record<string, unknown>) => void) {
   const handler = (e: MessageEvent) => {
     const d = e.data as VeEnvelope | undefined;
