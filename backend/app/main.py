@@ -73,6 +73,11 @@ async def lifespan(app: FastAPI):
     # 启动时执行
     setup_logging()
     logger.info("Starting OutEye Edu API...")
+    # 视觉质检配置可见性（只打加载状态，绝不打印 Key 值）：线上排查「VL 检查没跑」先看这一行
+    if settings.VISION_API_KEY:
+        logger.info("VISION_API_KEY 已加载（VL 视觉检查可用）")
+    else:
+        logger.info("VISION_API_KEY 未配置：VL 视觉检查将跳过（页面溢出硬关卡不受影响）")
     init_directories()
 
     # 创建数据库表

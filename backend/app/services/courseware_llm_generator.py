@@ -1009,6 +1009,8 @@ def generate_html_courseware(
                 except Exception as qc_e:
                     logger.warning(f"视觉质检整体异常，跳过: {qc_e}")
                     visual_qc_summary = {"enabled": True, "error": str(qc_e)[:200]}
+            else:
+                logger.info("视觉质检环节跳过：VISUAL_QC_ENABLED 与 OVERFLOW_GATE_ENABLED 均为 false")
             self_check = {
                 "prompt_version": version,
                 "planner_version": prompt_version(PLANNER_PROMPT_NAME),

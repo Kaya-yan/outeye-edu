@@ -161,10 +161,16 @@ def run_visual_qc(
     total = len(pages)
     deadline = time.time() + budget_seconds
     try:
+        logger.info(
+            f"视觉质检环节开始：{total} 页，预算 {budget_seconds:.0f}s，"
+            f"溢出硬关卡={'开' if gate_enabled else '关'}，VL 检查={'开' if vl_enabled else '关'}，"
+            f"VISION_API_KEY={'已加载' if getattr(settings, 'VISION_API_KEY', '') else '未配置'}"
+        )
         shots: List[Optional[bytes]] = [None] * total
 
         # ---- 相 A：溢出硬关卡（独立于 VISION_API_KEY / VL 开关）----
         if not gate_enabled:
+            logger.info("溢出硬关卡跳过：OVERFLOW_GATE_ENABLED=false")
             summary["overflow"]["skipped"] = "OVERFLOW_GATE_ENABLED=false"
         else:
             gate_shots, overflows, gate_err = _screenshot_pages([make_doc(pg) for pg in pages], deadline)
@@ -176,6 +182,7 @@ def run_visual_qc(
                 summary["overflow"]["skipped"] = gate_err
             else:
                 shots = gate_shots
+                logger.info(f"溢出硬关卡：截图测量 {total} 页")
                 summary["overflow"]["checked_pages"] = [i + 1 for i in range(total) if overflows[i] is not None]
                 for i in range(total):
                     px = overflows[i]
@@ -209,15 +216,23 @@ def run_visual_qc(
                             summary["deadline_hit"] = True
                     if px > OVERFLOW_PX_THRESHOLD:
                         summary["overflow"]["still_overflowing"][str(i + 1)] = _overflow_pct(px)
+                logger.info(
+                    f"溢出硬关卡结果：超页 {summary['overflow']['overflow_pages'] or '无'}，"
+                    f"重生成轮次 {summary['overflow']['regenerated'] or '无'}，"
+                    f"仍超（已保留并记录）{summary['overflow']['still_overflowing'] or '无'}"
+                )
 
         # ---- 相 B：VL 多模态视觉检查 ----
         if not vl_enabled:
+            logger.info("VL 视觉检查跳过：VISUAL_QC_ENABLED=false（溢出硬关卡独立运行）")
             summary["skipped"] = "VISUAL_QC_ENABLED=false（仅关 VL 检查，溢出硬关卡独立运行）"
             return pages, summary
         if not getattr(settings, "VISION_API_KEY", ""):
+            logger.info("VL 视觉检查跳过：未配置 VISION_API_KEY（溢出硬关卡不受影响）")
             summary["skipped"] = "未配置 VISION_API_KEY（溢出硬关卡不受影响）"
             return pages, summary
         if all(s is None for s in shots):  # 相 A 未产出截图（关闭或失败）→ 为 VL 现补
+            logger.info(f"VL 检查：相 A 无可用截图，补拍 {total} 页")
             shots, _, shot_err = _screenshot_pages([make_doc(pg) for pg in pages], deadline)
             if shot_err:
                 summary["error"] = shot_err
@@ -256,6 +271,7 @@ def run_visual_qc(
             if time.time() >= deadline:
                 summary["deadline_hit"] = True
                 continue
+            logger.info(f"VL 触发重生成：第 {i + 1} 页（{len(issues)} 处视觉问题）")
             _progress(f"视觉质检：第 {i + 1} 页发现 {len(issues)} 处视觉问题，正在重新生成…")
             try:
                 rewritten = regen_page(i, pages[i], issues)
@@ -265,6 +281,11 @@ def run_visual_qc(
             if rewritten is not None:
                 pages[i] = rewritten
                 summary["regenerated_pages"].append(i + 1)
+        logger.info(
+            f"VL 检查完成：已检 {len(summary['checked_pages'])} 页，"
+            f"未检 {summary['unchecked_pages'] or '无'}，问题页 {summary['issue_pages'] or '无'}，"
+            f"重生成 {summary['regenerated_pages'] or '无'}"
+        )
         return pages, summary
     except Exception as e:
         logger.warning(f"视觉质检整体异常，跳过: {e}")

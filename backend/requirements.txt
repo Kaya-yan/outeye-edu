@@ -41,6 +41,9 @@ Pillow>=10.0
 # 阿里云 OCR
 alibabacloud-ocr-api20210707>=1.0.0
 
+# 视觉质检截图/溢出几何检测（部署硬依赖：pip install 后还需 playwright install chromium 与中文字体）
+playwright>=1.50
+
 # 语言检测
 langdetect>=1.0.9
 

@@ -68,8 +68,12 @@ for p in rv.get("pages", []):
     problems = "；".join(p.get("problems") or [])[:80]
     print(f"  第{p['page']}页 score={p.get('score')} verdict={p.get('verdict')} rewrites={p.get('rewrites')} {problems}")
 vq = sc.get("visual_qc") or {}
+of = vq.get("overflow") or {}
 print("visual_qc enabled:", vq.get("enabled"), "| skipped:", vq.get("skipped"), "| error:", vq.get("error"),
-      "| checked:", vq.get("checked_pages"), "| issues:", vq.get("issue_pages"))
+      "| vl_checked:", vq.get("checked_pages"), "| vl_issues:", vq.get("issue_pages"))
+print("overflow gate skipped:", of.get("skipped"), "| measured:", len(of.get("checked_pages") or []),
+      "| overflow_pages:", of.get("overflow_pages"), "| regenerated:", of.get("regenerated"),
+      "| still_overflowing:", of.get("still_overflowing"))
 cr = sc.get("consistency_review") or {}
 print("consistency enabled:", cr.get("enabled"), "| replaced:", cr.get("total_replaced"),
       "| rolled_back:", cr.get("rolled_back"), "| note:", cr.get("note"), "| error:", cr.get("error"))
