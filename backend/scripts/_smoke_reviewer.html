@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<!-- courseware_skeleton_v2 · 框架层 + 主题层（三层架构 ④a；④b 主题库 token 化）
+     框架层（本文件写死，模型不生成）：16:9 舞台、翻页导航、键盘事件、页码指示、交互组件 JS。
+     主题层：:root 整块 token 组与主题微调样式由后端按所选主题注入（courseware_themes.py），
+     内容层只写 var(--token)，换主题对 LLM 透明。
+     拼装标记（课件标题、token 组、主题微调样式、页面区注入点）由后端替换——
+     注意：本注释不得出现这些标记的字面形式，否则会被 str.replace 误替换。
+     对比度契约（WCAG）：每套主题的 ink/text/muted 与四色强调色对该主题 paper/card ≥4.5:1，
+     由 tests/test_courseware_themes.py 断言。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Jeaning of America（节选）</title>
+<style>
+:root{
+  --paper:#fbf6ed;
+  --ink:#4e3527;
+  --text:#33291f;
+  --muted:#6e6152;
+  --line:#e9ddc8;
+  --card:#fffdf6;
+  --backdrop:#ece4d4;
+  --font-title:'Noto Serif SC','Source Han Serif SC','Songti SC',serif;
+  --font-body:'Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif;
+  --fs-title:44px;
+  --fs-h2:32px;
+  --fs-body:21px;
+  --fs-caption:16px;
+  --lh-body:1.8;
+  --accent:#35507a;
+  --accent-soft:#e3e2df;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--backdrop);font-family:var(--font-body);color:var(--text)}
+#stage-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:1280px;height:720px;background:var(--paper);transform:scale(var(--fit,1));transform-origin:center;box-shadow:0 12px 48px rgba(30,58,95,.18);overflow:hidden}
+.page{position:absolute;inset:0;padding:72px 96px 64px;display:none;flex-direction:column;font-size:var(--fs-body);line-height:var(--lh-body);overflow:hidden}
+.page.active{display:flex}
+.page h1{font-family:var(--font-title);font-size:var(--fs-title);color:var(--ink);line-height:1.35}
+.page h2{font-family:var(--font-title);font-size:var(--fs-h2);color:var(--ink);line-height:1.35}
+.page h3{font-size:24px;color:var(--ink);line-height:1.4}
+.kicker{font-size:var(--fs-caption);letter-spacing:.32em;color:var(--accent);font-weight:600;margin-bottom:12px}
+.accent-rule{width:64px;height:3px;background:var(--accent);margin:16px 0 24px}
+.page-focus{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.caption{font-size:var(--fs-caption);color:var(--muted)}
+.quote-src{font-size:var(--fs-caption);color:var(--muted);margin-top:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 24px}
+.callout{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
+.hl{background:var(--accent-soft);padding:2px 6px;border-radius:4px}
+.cols{display:flex;gap:36px;min-height:0}
+.cols>.col{flex:1;min-width:0}
+ul.plain{list-style:none}
+ul.plain li{padding-left:22px;position:relative}
+ul.plain li::before{content:"";position:absolute;left:2px;top:.72em;width:8px;height:8px;background:var(--accent);border-radius:50%}
+
+/* ============ 交互组件（类契约：内容层只写结构，行为全在骨架） ============ */
+details.reveal{border:1px solid var(--line);border-radius:10px;padding:16px 20px;background:var(--card)}
+details.reveal summary{cursor:pointer;font-weight:600;color:var(--ink);list-style:none;font-size:19px}
+details.reveal summary::-webkit-details-marker{display:none}
+details.reveal summary::before{content:"点击展开　";color:var(--accent);font-size:var(--fs-caption)}
+details.reveal[open] summary{margin-bottom:10px}
+details.reveal[open] summary::before{content:"点击收起　"}
+ol.timeline{list-style:none;display:flex;flex-direction:column;gap:14px}
+ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:var(--card);opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
+ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
+.vocab-grid{display:flex;flex-wrap:wrap;gap:18px}
+.vocab-card{width:196px;height:128px;perspective:900px;cursor:default}
+.vocab-card .inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s}
+.vocab-card:hover .inner,.vocab-card.flip .inner{transform:rotateY(180deg)}
+.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;border:1px solid var(--line);background:var(--card);text-align:center}
+.vocab-card .front{font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
+.vocab-card .front .phonetic{font-family:var(--font-body);font-size:var(--fs-caption);font-weight:400;color:var(--muted);margin-top:6px}
+.vocab-card .back{transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:16px;line-height:1.7}
+.timer{display:inline-flex;align-items:center;gap:16px}
+.timer .timer-display{font-family:var(--font-title);font-size:50px;font-weight:700;color:var(--accent);min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
+.timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.timer button:hover{background:var(--accent);color:var(--paper)}
+
+/* ============ 逐段精讲组件（③ 两阶段 · 逐页生成契约） ============ */
+.para-original{margin:0 0 18px;padding:16px 22px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 10px 10px 0}
+.para-original p{font-size:19px;line-height:1.9}
+.para-original footer{font-size:var(--fs-caption);color:var(--muted);margin-top:8px}
+mark.kw{background:var(--accent-soft);color:var(--ink);padding:1px 4px;border-radius:4px;font-weight:600}
+.para-gist{margin:0 0 16px;padding:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.para-gist h3{margin-bottom:6px}
+.sentence-anatomy{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.sentence-anatomy h3{margin-bottom:8px}
+.anatomy-sentence{font-size:20px;line-height:2;color:var(--ink);margin:6px 0 12px}
+.anatomy-sentence .cl{cursor:pointer;border-bottom:2px dotted var(--line);transition:background .2s,opacity .2s;border-radius:3px}
+.anatomy-sentence .cl.lit{background:var(--accent-soft);border-bottom-color:var(--accent)}
+.anatomy-sentence.x-ray .cl-core{background:var(--accent-soft);border-bottom-color:var(--accent);font-weight:700}
+.anatomy-sentence.x-ray .cl-mod{opacity:.4}
+.anatomy-legend{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:17px}
+.anatomy-legend li{padding-left:0;line-height:1.7}
+.anatomy-legend .cl{cursor:default;border-bottom:none;padding:0 2px}
+.anatomy-legend .cl-core{background:var(--accent-soft);border-radius:3px}
+.anatomy-legend .cl-mod{color:var(--muted)}
+.anatomy-tip{font-size:17px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.sent-walk details{border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:var(--card);margin-top:10px}
+.sent-walk summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.sent-walk details[open] summary{margin-bottom:8px}
+.lang-points{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.lang-points ol{margin-left:24px;display:flex;flex-direction:column;gap:12px}
+.lang-points li{line-height:1.75}
+.cohesion-note{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
+.cohesion-note h3{margin-bottom:6px}
+.teaching-intent{display:none}
+body.oe-edit-all .teaching-intent{display:block;margin-top:16px;padding:10px 14px;border:1px dashed var(--line);border-radius:8px;font-size:15px;color:var(--muted)}
+
+/* ============ 导航（框架层） ============ */
+#nav-prev,#nav-next{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:19px;cursor:pointer;z-index:40}
+#nav-prev{left:14px}
+#nav-next{right:14px}
+#nav-prev:disabled,#nav-next:disabled{opacity:.25;cursor:default}
+#page-indicator{position:absolute;right:22px;bottom:16px;font-size:14px;color:var(--muted);letter-spacing:.08em;z-index:40;font-variant-numeric:tabular-nums}
+#deck-title{position:absolute;left:96px;bottom:16px;font-size:12px;color:var(--muted);opacity:.75;z-index:40;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#aigc-badge{position:absolute;right:96px;bottom:18px;font-size:11px;color:var(--muted);opacity:.7;z-index:40;letter-spacing:.05em}
+#aigc-badge{position:absolute;right:96px;bottom:18px;font-size:11px;color:var(--muted);opacity:.7;z-index:40;white-space:nowrap}
+
+/* 编辑器模式：V2 编辑器注入 body.oe-edit-all 时全页纵向平铺、隐藏放映导航（纯 CSS，零 JS 改动） */
+body.oe-edit-all #stage-wrap{position:static;display:block;background:var(--paper)}
+body.oe-edit-all #stage{width:100%;height:auto;transform:none;box-shadow:none}
+body.oe-edit-all .page{position:relative;inset:auto;display:flex;min-height:720px;border-bottom:1px solid var(--line)}
+body.oe-edit-all #nav-prev,body.oe-edit-all #nav-next,body.oe-edit-all #page-indicator,body.oe-edit-all #deck-title,body.oe-edit-all #aigc-badge{display:none}
+
+/* 主题级组件微调（后端按所选主题注入，默认空） */
+.page h1,.page h2{letter-spacing:.02em}
+.kicker{letter-spacing:.4em}
+.accent-rule{width:56px;height:2px}
+ul.plain li::before{border-radius:2px}
+.vocab-card .back{background:var(--ink)}
+</style>
+</head>
+<body>
+<div id="stage-wrap"><div id="stage">
+<section class="page" data-page="1" data-title="The Jeaning of America——封面页" data-intent="展示牛仔布纹理背景与标题，引导学生预测“牛仔裤如何成为美国象征”并激活既有背景知识">
+<div class="page-focus">
+  <div class="kicker">精读 · 人文叙事 · B2</div>
+  <h1>The Jeaning of America</h1>
+  <div class="accent-rule"></div>
+  <p class="lead">一条蓝色牛仔裤，如何从矿工工装变成美国的象征？在翻开课文之前，先想一想：你身边的牛仔裤，承载着怎样的故事？</p>
+  <div class="caption">课时 50 分钟 · 班级 32 人 · 课文节选精读</div>
+</div>
+</section>
+<section class="page" data-page="2" data-title="学习目标" data-intent="明确本课结束时学生能复述牛仔裤的象征演变、解析长难句，并运用排除法修辞完成迁移写作">
+<div class="kicker">精读课 · 目标导航</div>
+<h2>学习目标</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <p class="caption">本课结束时，你将能够……</p>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <h3>1. 复述象征的演变</h3>
+        <p>用 3–4 句话讲清牛仔裤如何从矿工工装一步步变成美国象征，并说明它在欧洲和亚洲被赋予的新含义。</p>
+        <p class="caption">达成方式：逐段精读第 1–2 段，抓住"工装 → 时尚 → 身份符号"这条演变线索。</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>2. 解析长难句</h3>
+        <p>面对一个包含多个修饰成分的句子，能快速找出主干（主谓宾/主系表），再理清定语、状语等修饰层。</p>
+        <p class="caption">达成方式：用"解剖法"拆解课文第 2 段中的长句，逐层标注成分。</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>3. 迁移写作：排除法修辞</h3>
+        <p>模仿课文开头的"排除法"——先否定几个常见选项，再揭晓真正的主角——写一个 2–3 句的悬念式开头。</p>
+        <p class="caption">达成方式：分析第 1 段"不是美元，甚至不是可口可乐"的修辞结构，再套用到自己的主题上。</p>
+      </div>
+    </div>
+  </div>
+  <div class="callout">
+    <p><strong>本课主线：</strong>一条牛仔裤，从旧金山的矿坑走向世界衣橱。我们不仅要读懂它的故事，更要学会作者讲故事的手法。</p>
+  </div>
+</div>
+</section>
+<section class="page" data-page="3" data-title="核心词汇预热" data-intent="预教 sturdy 与 rivet 两个难点词，通过图片与例句建立词义、搭配与发音的初步识别">
+<div class="kicker">词汇预热 · 第 1–2 段</div>
+<h2>核心词汇预热</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <p class="lead-in">精读之前，先认识两个“拦路虎”。它们都藏在课文前两段里——一个形容象征的品格，一个关乎牛仔裤的工艺。</p>
+  <div class="vocab-grid">
+    <div class="vocab-card">
+      <div class="vocab-front">
+        <span class="vocab-word">sturdy</span>
+        <span class="vocab-phonetic">/ˈstɜːdi/</span>
+      </div>
+      <div class="vocab-back">
+        <span class="vocab-pos">adj. 结实的；坚固的</span>
+        <p class="vocab-example">原文：This is the story of a <strong>sturdy</strong> American symbol…（第1段）</p>
+        <p class="vocab-note">搭配：a sturdy pair of jeans / sturdy furniture</p>
+      </div>
+    </div>
+    <div class="vocab-card">
+      <div class="vocab-front">
+        <span class="vocab-word">rivet</span>
+        <span class="vocab-phonetic">/ˈrɪvɪt/</span>
+      </div>
+      <div class="vocab-back">
+        <span class="vocab-pos">n. 铆钉；vt. 铆接</span>
+        <p class="vocab-example">原文：…they are held together by <strong>rivets</strong>（第2段）</p>
+        <p class="vocab-note">搭配：copper rivets / to rivet two pieces of metal</p>
+      </div>
+    </div>
+  </div>
+  <div class="card vocab-tip">
+    <h3>为什么先学这两个词？</h3>
+    <p><strong>sturdy</strong> 在第 1 段修饰 symbol，是全文的“题眼”之一——它暗示这个象征经得起时间考验；<strong>rivet</strong> 出现在第 2 段讲牛仔裤工艺的部分，是理解“牛仔裤为何结实”的关键实物。两词都指向同一个主题：这条裤子凭什么能成为“坚固的美国象征”。</p>
+  </div>
+  <div class="card vocab-practice">
+    <h3>小试身手</h3>
+    <p>根据语境选择正确的词填空：</p>
+    <ol class="practice-list">
+      <li>The old oak table is still ____ enough to last another generation.</li>
+      <li>The metal plates were joined with strong ____.</li>
+    </ol>
+    <details class="reveal">
+      <summary>查看答案</summary>
+      <p>1. sturdy（桌子“结实”）；2. rivets（用“铆钉”连接金属板）。</p>
+    </details>
+  </div>
+  <aside class="teaching-intent">本页教学意图：在进入课文细读前，用词卡翻转与微型练习激活学生对 sturdy 和 rivet 的形、音、义认知，并建立“词汇—主题”的初步联结，为第 1、2 段的精读扫清障碍。教师可在此页快速带读发音，并提示学生留意这两个词在课文中的具体语境。</aside>
+</div>
+</section>
+<section class="page" data-page="4" data-title="一个坚固的美国象征" data-intent="精读第1段，解剖“This is the story of...”长句结构，分析“sturdy American symbol”的定冠词与形容词功能，并点明“not the dollar...not the car...”的排除法开头如何制">
+<div class="kicker">课文精讲 · 第 1 段</div>
+<h2>一个坚固的美国象征</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <blockquote class="para-original">
+    <p>This is the story of a <mark class="kw">sturdy</mark> American symbol which has now spread throughout most of the world. The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans.</p>
+    <footer>—— The Jeaning of America, Para. 1</footer>
+  </blockquote>
+  <div class="para-gist">
+    <h3>段落主旨</h3>
+    <p>作者用一个"排除法"悬念开场：先说这是一个已传遍世界的美国象征，接着逐一否定美元和可口可乐，最后揭晓谜底——一条简单的蓝色牛仔裤。读懂本段的关键在于识别"先设悬念、后给答案"的修辞节奏。</p>
+  </div>
+  <div class="sentence-anatomy">
+    <h3>长难句解剖</h3>
+    <p class="anatomy-sentence"><span class="cl cl-core">This is the story</span> <span class="cl cl-mod">of a sturdy American symbol</span> <span class="cl cl-mod">which has now spread throughout most of the world</span>.</p>
+    <ul class="anatomy-legend">
+      <li><span class="cl cl-core">■</span> 主干：This is the story（主系表结构，仅 5 个词——长句的骨架往往很短）</li>
+      <li><span class="cl cl-mod">■</span> 修饰①：of a sturdy American symbol，介词短语作后置定语，限定 story 的内容范围；其中 sturdy 修饰 symbol，是理解全句的关键形容词</li>
+      <li><span class="cl cl-mod">■</span> 修饰②：which has now spread throughout most of the world，定语从句修饰 symbol；has spread 用现在完成时，强调"从过去扩散至今"的持续影响</li>
+    </ul>
+    <p class="anatomy-tip">翻译示范：这是一个关于一个坚固的美国象征的故事，而这个象征如今已传播到世界大部分地区。</p>
+  </div>
+  <div class="sent-walk">
+    <h3>逐句细读</h3>
+    <details>
+      <summary>句 1：This is the story of a sturdy American symbol which has now spread throughout most of the world.</summary>
+      <p>以"This is the story of..."的口吻开篇，把说明文包装成叙事，拉近读者距离。sturdy 本义指物体"结实、耐用"，此处移用于抽象名词 symbol，属于移就修辞——暗示这个象征经得起时间考验，为后文"牛仔裤征服世界"埋下伏笔。</p>
+    </details>
+    <details>
+      <summary>句 2-4：The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans.</summary>
+      <p>连续两个否定句（not the dollar / not even Coca-Cola）制造悬念，第三句才揭晓答案。注意 even 一词强化了排除力度——连可口可乐都不算，那会是什么？simple 与 sturdy 形成反差：越朴素的事物，越可能成为持久的象征。</p>
+    </details>
+  </div>
+  <div class="lang-points">
+    <h3>语言点</h3>
+    <ol>
+      <li><strong>sturdy</strong> /ˈstɜːdi/ adj. 结实的，坚固的；（引申）坚定的<br>原文：a sturdy American symbol<br>例句：The little boat is sturdy enough to cross the lake.（这条小船足够结实，可以横渡湖泊。）<br>讲解：本词修饰抽象名词 symbol 时，属于移就修辞，把"耐用"的品质投射到象征意义上，暗示其生命力。</li>
+      <li><strong>定冠词 the 的特指功能</strong><br>原文：This is the story of... / The symbol is not the dollar.<br>讲解：句首 the story 用定冠词，暗示"这个故事独一无二、值得一听"；第二句 The symbol 回指前文的 symbol，形成指代链。对比：若用 a symbol 则失去这种"已知信息"的衔接感。写作迁移：用 the + 名词回指上文的中心词，能让段落更紧凑。</li>
+      <li><strong>修辞：排除法（negative-definition opening）</strong><br>原文：The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans.<br>讲解：两个否定短句 + 一个肯定短句，先抑后扬，制造悬念并强化最终答案的冲击力。写作迁移：介绍任何"出人意料的事物"时，可先用 2 个常见候选者作否定，再亮出真正的主角。</li>
+    </ol>
+  </div>
+  <div class="cohesion-note">
+    <h3>衔接点评</h3>
+    <p>本段是全文的"引子"：用悬念式排除法提出核心话题（牛仔裤 = 美国象征），但并未展开任何历史或细节。第 2 段开头即承接本段末尾的 blue jeans，转而介绍其起源与普及过程——这是典型的"悬念开篇、下段展开"结构。教师在过渡时可提问：第 2 段第一句是如何接住"blue jeans"这个接力棒的？</p>
+  </div>
+  <aside class="teaching-intent">本页教学意图：通过第 1 段的精读，让学生掌握"排除法悬念开头"的写作策略，理解定冠词 the 的指代衔接功能，并完成 sturdy 一词的语境教学与迁移运用。</aside>
+</div>
+</section>
+<section class="page" data-page="5" data-title="从矿工到全球：牛仔裤的征服" data-intent="精读第2段，按时间线梳理牛仔裤从矿工工装到全球时尚符号的演变，解剖“In Europe and Asia...”长难句的插入语与同位语结构，并分析“bureaucrats and cowboys”“Vogue and backs”等对立并列">
+<div class="kicker">课文精讲 · 第 2 段</div>
+<h2>从矿工到全球：牛仔裤的征服</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <blockquote class="para-original">
+    <p>Blue jeans are favored equally by <mark class="kw">bureaucrats</mark> and <mark class="kw">cowboys</mark>; they appear on the pages of <mark class="kw">Vogue</mark> as well as on the backs of Iowa farmers. In Europe and Asia, they are a status symbol of the "American way of life." Yet their origins are humble: they were born in the gold camps of the California Gold Rush, <mark class="kw">stitched</mark> together by a peddler named Levi Strauss and a tailor named Jacob Davis, who patented the idea of <mark class="kw">riveting</mark> the pockets so that miners could carry nuggets without tearing the cloth.</p>
+    <footer>—— The Jeaning of America, Para. 2</footer>
+  </blockquote>
+
+  <div class="para-gist">
+    <h3>段落主旨</h3>
+    <p>本段先铺陈牛仔裤今日的"全球征服"（从官僚到牛仔、从时尚杂志到农夫），随即笔锋一转，揭示其卑微出身——诞生于加州淘金热，由一位小贩和一位裁缝联手缝制。</p>
+    <p>读懂本段的关键在于抓住"反差"：前两句极尽广阔（全球、各阶层），末句极尽具体（淘金营、两个小人物），一放一收，为后文展开故事蓄势。</p>
+  </div>
+
+  <div class="sentence-anatomy">
+    <h3>长难句解剖</h3>
+    <p class="anatomy-sentence">In Europe and Asia, <span class="cl cl-core">they are a status symbol</span> <span class="cl cl-mod">of the "American way of life."</span> Yet <span class="cl cl-core">their origins are humble</span>: <span class="cl cl-mod">they were born in the gold camps of the California Gold Rush, stitched together by a peddler named Levi Strauss and a tailor named Jacob Davis, who patented the idea of riveting the pockets so that miners could carry nuggets without tearing the cloth.</span></p>
+    <ul class="anatomy-legend">
+      <li><span class="cl cl-core">■</span> 主干①：they are a status symbol（主系表，they 指代前句的 blue jeans）</li>
+      <li><span class="cl cl-mod">■</span> 修饰①：of the "American way of life."——介词短语作后置定语，说明"什么的"身份象征；引号暗示这是外部视角的标签</li>
+      <li><span class="cl cl-core">■</span> 主干②：their origins are humble（主系表，Yet 表转折，与前半句的"身份象征"形成反差）</li>
+      <li><span class="cl cl-mod">■</span> 修饰②：冒号后为同位语从句，具体解释 origins（出身）；其中 born in…（地点）+ stitched by…（方式）+ who patented…（定语从句修饰 Jacob Davis）+ so that…（目的状语从句）层层嵌套，构成一条完整的"身世链"</li>
+    </ul>
+    <p class="anatomy-tip">翻译示范：在欧洲和亚洲，它们是"美国生活方式"的一种身份象征。然而它们的出身却十分卑微：它们诞生于加州淘金热的金矿营地里，由一位名叫利维·斯特劳斯的小贩和一位名叫雅各布·戴维斯的裁缝共同缝制而成——正是戴维斯申请了加固口袋的铆接专利，让矿工们可以装金块而不撕破布料。</p>
+  </div>
+
+  <div class="sent-walk">
+    <h3>逐句细读</h3>
+    <details>
+      <summary>句 1：Blue jeans are favored equally by bureaucrats and cowboys; they appear on the pages of Vogue as well as on the backs of Iowa farmers.</summary>
+      <p>分号连接两个并列分句，形成两组对立并列：bureaucrats（官僚，城市精英）与 cowboys（牛仔，西部粗犷）相对；Vogue（时尚杂志，高端文化符号）与 Iowa farmers（衣阿华农夫，乡土日常）相对。作者刻意把"最不搭"的两端并置，证明牛仔裤的普适性——这正是"征服"的第一层含义。</p>
+    </details>
+    <details>
+      <summary>句 3：Yet their origins are humble: they were born in the gold camps of the California Gold Rush, stitched together by a peddler named Levi Strauss and a tailor named Jacob Davis, who patented the idea of riveting the pockets so that miners could carry nuggets without tearing the cloth.</summary>
+      <p>Yet 是全文最重要的转折词之一：前两句讲"征服全球"，这句陡然拉回"卑微起点"。humble（卑微的）与 gold camps（淘金营）形成内在呼应——最简陋的工装，后来成了最广为人知的时尚。born 和 stitched 两个动词把牛仔裤拟人化，暗示它有"生命史"。</p>
+    </details>
+  </div>
+
+  <div class="lang-points">
+    <h3>语言点</h3>
+    <ol>
+      <li><strong>对立并列（Antithetical Pairing）</strong>：bureaucrats / cowboys；Vogue / Iowa farmers<br>原文：favored equally by bureaucrats and cowboys; on the pages of Vogue as well as on the backs of Iowa farmers.<br>作用：用两个极端群体/场景的并置，强调"无差别接受"。写作迁移：想证明某物"人人都爱"，就找最不可能的两个例子并列。</li>
+      <li><strong>rivet</strong> /ˈrɪv.ɪt/ v. 铆接；n. 铆钉（此处为动词，指用金属钉固定）<br>原文：who patented the idea of riveting the pockets<br>例句：The worker riveted the metal plates together.（工人把金属板铆接在一起。）<br>引申：riveting 作形容词时意为"引人入胜的"（a riveting story），词源相通——被"钉住"注意力。</li>
+      <li><strong>stitch</strong> /stɪtʃ/ v. 缝；缝合<br>原文：stitched together by a peddler named Levi Strauss and a tailor named Jacob Davis<br>例句：She stitched the two pieces of fabric together by hand.（她用手工把两块布料缝在一起。）<br>注意与 sew 近义，但 stitch 更强调"一针一针地缝"，画面感更强。</li>
+    </ol>
+  </div>
+
+  <div class="cohesion-note">
+    <h3>衔接点评</h3>
+    <p>本段是全文的"展开段"：第 1 段用悬念式开头抛出"牛仔裤是美国象征"的结论，本段则承接这一结论，先铺陈其"征服全球"的现状（第 1-2 句），再以 Yet 转折，引出其"卑微出身"（第 3 句）。这个"现状→起源"的转折，为第 3 段详细讲述 Levi Strauss 的故事提供了叙事动力——读者此刻已知道"结果"，自然想知道"过程"。留意下段开头如何从"出身卑微"继续推进到具体人物与时间。</p>
+  </div>
+
+  <aside class="teaching-intent">本页教学意图：通过第 2 段的精读，让学生掌握"先扬后抑"的段落结构（现状铺陈→出身转折），学会识别对立并列修辞（bureaucrats/cowboys、Vogue/backs），并完成对长难句（含同位语从句、定语从句、目的状语从句嵌套）的拆解训练。时间线梳理帮助学生建立"工装→全球符号"的演变框架，为后续段落的细节阅读做铺垫。</aside>
+</div>
+</section>
+<section class="page" data-page="6" data-title="排除法修辞工作坊" data-intent="跨段归纳“not X...not Y...but Z”与对立并列的排除法修辞模式，引导学生识别其制造悬念、层层逼近核心的功能，并为迁移写作搭建句式支架">
+<div class="kicker">语言聚焦 · 跨段归纳</div>
+<h2>排除法修辞工作坊</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <div class="card">
+    <h3>修辞模式：排除法（Negative Definition）</h3>
+    <p>作者不直接说"它是什么"，而是先否定一系列容易混淆的选项（not X... not Y...），最后亮出真正的主角（but Z）。这种"排除法"制造悬念、层层收窄，让核心概念在读者心中留下更深的烙印。</p>
+    <p>本课两处关键例证：</p>
+    <ul class="plain">
+      <li><strong>例证一（第1段）</strong>：The symbol is <em>not</em> the dollar. It is <em>not even</em> Coca-Cola. It is a simple pair of American blue jeans.</li>
+      <li><strong>例证二（第2段）</strong>：Blue jeans are favored equally by bureaucrats and cowboys; they appear on the pages of Vogue as well as on the backs of Iowa farmers.</li>
+    </ul>
+  </div>
+
+  <div class="sentence-anatomy">
+    <h3>长难句解剖（第2段）</h3>
+    <p class="anatomy-sentence"><span class="cl cl-core">Blue jeans are favored equally</span> <span class="cl cl-mod">by bureaucrats and cowboys</span>; <span class="cl cl-core">they appear</span> <span class="cl cl-mod">on the pages of Vogue as well as on the backs of Iowa farmers</span>.</p>
+    <ul class="anatomy-legend">
+      <li><span class="cl cl-core">■</span> 主干①：Blue jeans are favored equally（被动语态，主系表结构；equally 修饰 favored，强调"一视同仁"）</li>
+      <li><span class="cl cl-mod">■</span> 修饰①：by bureaucrats and cowboys（介词短语表施动者，官僚与牛仔——两个极端身份并置）</li>
+      <li><span class="cl cl-core">■</span> 主干②：they appear（分号连接并列分句，they 指代 blue jeans）</li>
+      <li><span class="cl cl-mod">■</span> 修饰②：on the pages of Vogue as well as on the backs of Iowa farmers（两个 on 介词短语并列，as well as 连接"时尚杂志"与"农民后背"——高雅与乡土的对立并置）</li>
+    </ul>
+    <p class="anatomy-tip">翻译示范：蓝牛仔裤受到官僚和牛仔的同等青睐；它们既出现在《时尚》杂志的页面上，也出现在爱荷华州农民的背上。</p>
+  </div>
+
+  <div class="lang-points">
+    <h3>语言点</h3>
+    <ol>
+      <li><strong>排除法结构：not... not even... but...</strong>（第1段）<br>原文：The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans.<br>功能：两个否定句步步紧逼，not even 比 not 语气更强，最后 but 转折揭晓答案。写作迁移：介绍任何反常识事物皆可套用。</li>
+      <li><strong>对立并列：equally... and...；as well as</strong>（第2段）<br>原文：favored equally by bureaucrats and cowboys; on the pages of Vogue as well as on the backs of Iowa farmers.<br>功能：把两个极端群体/场景并置，用并列结构强调"跨越阶层与地域的普适性"。写作迁移：论证某物受众广泛时，可选取两个反差最大的例子。</li>
+      <li><strong>分号连接两个独立分句</strong>（第2段）<br>原文：Blue jeans are favored equally by bureaucrats and cowboys; they appear on the pages of Vogue...<br>功能：分号替代句号，让两个对仗式分句在节奏上更紧凑，强化"双重证据"的力度。</li>
+    </ol>
+  </div>
+
+  <details class="reveal">
+    <summary>迁移练习：用排除法改写下面这句话</summary>
+    <p>原句：智能手机是现代人最离不开的发明。</p>
+    <p><strong>示范</strong>：现代人最离不开的发明不是汽车，不是互联网，甚至不是电——而是一块可以放进口袋的玻璃屏幕。</p>
+    <p><strong>结构拆解</strong>：not A（汽车）→ not even B（互联网）→ but C（玻璃屏幕）。注意 C 的表述要出人意料但准确，才能达到"恍然大悟"的效果。</p>
+  </details>
+
+  <div class="cohesion-note">
+    <h3>衔接点评</h3>
+    <p>第1段用"排除法"完成悬念铺设，第2段开头用"对立并列"承接并展开——两段共享同一种修辞基因：先制造张力，再收束于牛仔裤本身。第2段末尾的 Yet their origins are humble 又用转折引出历史叙事，为第3段起的时间线叙述埋下伏笔。本页聚焦的两处修辞，正是理解全文"象征如何被建构"的钥匙。</p>
+  </div>
+
+  <aside class="teaching-intent">本页教学意图：跨段归纳排除法修辞的两种变体（否定排除与对立并列），通过长难句解剖让学生看到"分号 + 并列结构"如何服务于修辞目的，最终以迁移写作练习检验学生能否自主运用该句式支架。</aside>
+</div>
+</section>
+<section class="page" data-page="7" data-title="象征的解读与迁移" data-intent="小组讨论“牛仔裤在今天是否仍是美国象征”，并仿照课文排除法句式口头描述另一个文化符号，检验理解并预热写作任务">
+<div class="kicker">读后讨论 · 象征的迁移</div>
+<h2>象征的解读与迁移</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+  <div class="card">
+    <h3>讨论 · 牛仔裤在今天是否仍是美国象征？</h3>
+    <p>课文第 1 段说牛仔裤是 "a sturdy American symbol which has now spread throughout most of the world"；第 2 段又说在欧亚它是 "a status symbol of the 'American way of life.'" 但今天，牛仔裤已是全球随处可见的日常穿着。</p>
+    <p>小组讨论（4 人一组，3 分钟）：牛仔裤在今天是否仍是"美国象征"？请至少给出一个支持或反对的理由，并尝试用课文中的证据支撑。</p>
+    <div class="timer" data-seconds="180">讨论计时 3:00</div>
+    <details class="reveal">
+      <summary>参考思路（讨论后展开）</summary>
+      <p>支持：牛仔裤的"起源故事"（矿工工装、Levi Strauss、Jacob Davis、专利 riveting）仍被广泛讲述，它承载着美国西进与拓荒的历史记忆，因此即便普及全球，其"象征美国"的文化基因并未消失。</p>
+      <p>反对：当一个物品在全球范围内被普遍消费、生产与穿着时，它原有的国族象征意义可能被稀释，更多成为一种"全球大众文化"或"休闲风格"的符号，而非特指美国。</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <h3>口头迁移 · 用排除法描述另一个文化符号</h3>
+    <p>课文第 1 段用"排除法"引出主题：先说是象征，再否定美元和可口可乐，最后揭晓牛仔裤。请仿照这个句式，口头描述另一个你认为具有代表性的文化符号（可以是中国的，也可以是世界的）。</p>
+    <p class="quote-src">参考句式（来自课文 Para. 1）：<br>"This is the story of a sturdy American symbol… The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans."</p>
+    <p>你的任务：选定一个符号（如：茶、长城、乒乓球、筷子、功夫……），用"它不是……它甚至不是……它就是……"的结构说给同桌听。</p>
+    <details class="reveal">
+      <summary>示范（以"茶"为例）</summary>
+      <p>This is the story of a resilient Chinese symbol which has now spread throughout most of the world. The symbol is not the panda. It is not even kung fu. It is a simple cup of Chinese tea.</p>
+    </details>
+  </div>
+
+  <div class="callout">
+    <p><strong>写作预热：</strong>你刚才口头描述的句式，正是下一篇写作任务的核心结构。请保留你的口头草稿，课后将其扩展为一段 80 词左右的短文。</p>
+  </div>
+
+  <aside class="teaching-intent">本页教学意图：通过小组讨论检验学生对"牛仔裤作为美国象征"这一核心概念的理解（目标1），并借助课文第1段的排除法句式进行口头迁移，为最后的写作任务搭建脚手架。</aside>
+</div>
+</section>
+<section class="page" data-page="8" data-title="总结与迁移写作" data-intent="回收三个学习目标，布置课后写作任务：运用排除法修辞写一段介绍某文化符号的短文，并预告下节课互评要点">
+<div class="kicker">收束 · 迁移写作</div>
+<h2>总结与迁移写作</h2>
+<div class="accent-rule"></div>
+<div class="page-focus">
+
+  <h3>本课回顾：三个目标，一次旅程</h3>
+  <ul class="plain">
+    <li><strong>目标一：理解</strong> 牛仔裤如何从矿工工装变成美国象征——一条"排除法"悬念开篇，一段从工装到时尚的历史。</li>
+    <li><strong>目标二：分析</strong> 细读课文中的排除法修辞与长难句，看到作者如何用"不是…也不是…而是…"制造张力。</li>
+    <li><strong>目标三：迁移</strong> 把"排除法"从阅读中抽出来，变成你自己的写作工具。</li>
+  </ul>
+
+  <div class="callout">
+    <h3>课后写作任务</h3>
+    <p><strong>题目：</strong>运用课文第 1 段学到的<strong>排除法修辞</strong>，写一段介绍一个你熟悉的中国文化符号的短文（120–150 词）。</p>
+    <p><strong>要求：</strong></p>
+    <ul class="plain">
+      <li>用"它不是…，也不是…，而是…"结构制造悬念（至少一个完整的排除句）；</li>
+      <li>模仿课文"故事化开头"（This is the story of…）的叙述口吻；</li>
+      <li>至少使用 2 个本课学过的词汇（如 sturdy, spread, symbol, favor）。</li>
+    </ul>
+    <p><strong>提示：</strong>可选符号——茶、长城、汉字、筷子、瓷器。想想它们为什么"看似普通却意味深长"。</p>
+  </div>
+
+  <div class="card">
+    <h3>下节课预告：互评要点</h3>
+    <ul class="plain">
+      <li><strong>悬念感：</strong>开头是否有效制造了"到底是什么？"的好奇？</li>
+      <li><strong>排除法结构：</strong>否定项是否典型、有冲击力？肯定项是否出人意料又在情理之中？</li>
+      <li><strong>语言质量：</strong>词汇是否准确多样？是否自然嵌入了本课所学？</li>
+    </ul>
+  </div>
+
+  <p class="quote-src">"The symbol is not the dollar. It is not even Coca-Cola. It is a simple pair of American blue jeans." —— 好文章，是让读者在结尾说"原来如此"。</p>
+
+  <aside class="teaching-intent">本页教学意图：通过回顾三个学习目标，帮助学生建立完整的知识框架；布置迁移写作任务，将课文中的排除法修辞转化为学生的主动输出；预告互评要点，为下节课的同伴反馈搭建脚手架，形成"阅读—分析—写作—互评"的学习闭环。</aside>
+</div>
+</section>
+<button id="nav-prev" aria-label="上一页" type="button">&#8592;</button>
+<button id="nav-next" aria-label="下一页" type="button">&#8594;</button>
+<div id="page-indicator">1 / 1</div>
+<div id="deck-title">The Jeaning of America（节选）</div>
+<div id="aigc-badge">AI 生成内容 · 仅供教学参考</div>
+</div></div>
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  function fit() {
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    stage.style.setProperty('--fit', s);
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  var pages = [].slice.call(document.querySelectorAll('.page'));
+  var cur = 0;
+  var prev = document.getElementById('nav-prev');
+  var next = document.getElementById('nav-next');
+  var ind = document.getElementById('page-indicator');
+
+  function show(i) {
+    cur = Math.max(0, Math.min(pages.length - 1, i));
+    pages.forEach(function (p, j) { p.classList.toggle('active', j === cur); });
+    prev.disabled = cur === 0;
+    next.disabled = cur === pages.length - 1;
+    ind.textContent = (cur + 1) + ' / ' + pages.length;
+  }
+  prev.addEventListener('click', function () { show(cur - 1); });
+  next.addEventListener('click', function () { show(cur + 1); });
+  window.addEventListener('keydown', function (e) {
+    var t = e.target;
+    var inControl = t && t.closest && t.closest('button,summary,input,textarea');
+    if (inControl) return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { e.preventDefault(); show(cur + 1); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); show(cur - 1); }
+    else if (k === 'Home') { show(0); }
+    else if (k === 'End') { show(pages.length - 1); }
+  });
+
+  document.addEventListener('click', function (e) {
+    var cl = e.target.closest ? e.target.closest('.anatomy-sentence .cl') : null;
+    if (cl) { cl.classList.toggle('lit'); return; }
+    var sent = e.target.closest ? e.target.closest('.anatomy-sentence') : null;
+    if (sent) { sent.classList.toggle('x-ray'); return; }
+    var li = e.target.closest ? e.target.closest('ol.timeline li') : null;
+    if (li) { li.classList.toggle('lit'); return; }
+    var btn = e.target.closest ? e.target.closest('.timer button') : null;
+    if (!btn) return;
+    var wrap = btn.closest('.timer');
+    var disp = wrap.querySelector('.timer-display');
+    function fmt(s) {
+      var m = Math.floor(s / 60), ss = s % 60;
+      return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss;
+    }
+    if (wrap._running) {
+      clearInterval(wrap._timer);
+      wrap._running = false;
+      btn.textContent = '继续计时';
+      return;
+    }
+    var total = parseInt(wrap.getAttribute('data-seconds') || '60', 10);
+    var left = total;
+    wrap._running = true;
+    disp.textContent = fmt(left);
+    btn.textContent = '暂停';
+    wrap._timer = setInterval(function () {
+      left--;
+      if (left <= 0) {
+        clearInterval(wrap._timer);
+        wrap._running = false;
+        disp.textContent = '00:00';
+        btn.textContent = '再计时一次';
+        return;
+      }
+      disp.textContent = fmt(left);
+    }, 1000);
+  });
+
+  show(0);
+})();
+</script>
+</body>
+</html>
