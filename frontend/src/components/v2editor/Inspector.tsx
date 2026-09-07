@@ -33,6 +33,7 @@ export default function Inspector({
   onStyleChange,
   onStartTextEdit,
   onImageReplace,
+  onMoveElement,
   components,
   onInsertComponent,
   onInsertTextBox,
@@ -45,6 +46,7 @@ export default function Inspector({
   onStyleChange: (prop: string, value: string | null) => void;
   onStartTextEdit: (selector: string) => void;
   onImageReplace: (selector: string, src: string) => void;
+  onMoveElement: (dir: 1 | -1) => void;
   components: InspectorComponent[];
   onInsertComponent: (component: InspectorComponent, position: "after" | "before" | "append") => void;
   onInsertTextBox: (position: "after" | "before" | "append") => void;
@@ -112,6 +114,31 @@ export default function Inspector({
               </span>
             );
           })}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 border-b border-slate-100">
+        <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-2">同级排序</div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-500">
+            {target.siblingCount > 0 ? `同级第 ${target.siblingIndex + 1} / ${target.siblingCount} 位` : "无同级元素"}
+          </span>
+          <div className="flex rounded border border-slate-200 overflow-hidden">
+            <button
+              onClick={() => onMoveElement(-1)}
+              disabled={target.siblingIndex <= 0}
+              className="px-3 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              ↑ 上移
+            </button>
+            <button
+              onClick={() => onMoveElement(1)}
+              disabled={target.siblingIndex >= target.siblingCount - 1}
+              className="px-3 py-1 text-xs bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 border-l border-slate-200"
+            >
+              ↓ 下移
+            </button>
+          </div>
         </div>
       </div>
 

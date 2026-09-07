@@ -2,7 +2,7 @@ import type { VeTarget } from "./rpc";
 
 export const EXPORT_STYLE_ID = "ve-export-patches";
 
-export type VePatchKind = "css" | "text" | "image" | "insert";
+export type VePatchKind = "css" | "text" | "image" | "insert" | "move";
 
 export type VeInsertPosition = "after" | "before" | "append";
 
@@ -26,7 +26,13 @@ export interface VePatch {
   position?: VeInsertPosition;
   html?: string;
   oeId?: string;
+  moveId?: string;
+  targetIndex?: number;
   fingerprint: VePatchFingerprint;
+}
+
+export function moveSelector(moveId: string): string {
+  return `[data-oe-id="${moveId}"]`;
 }
 
 export function normalizePatch(p: VePatch): VePatch {
@@ -86,7 +92,7 @@ export function cssPatches(patches: VePatch[]): VePatch[] {
 }
 
 export function hasDomPatches(patches: VePatch[]): boolean {
-  return patches.some((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert");
+  return patches.some((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move");
 }
 
 export function buildPatchCss(patches: VePatch[]): string {

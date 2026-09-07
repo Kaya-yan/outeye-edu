@@ -39,10 +39,13 @@ export interface VeTarget {
   page: string;
   pageTitle: string;
   selector: string;
+  oeId: string;
   src: string;
   rect: VeRect;
   text: string;
   childCount: number;
+  siblingIndex: number;
+  siblingCount: number;
   styles: VeTargetStyles;
   chain: VeChainNode[];
 }

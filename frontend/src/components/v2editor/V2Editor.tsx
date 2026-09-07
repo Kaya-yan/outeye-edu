@@ -20,6 +20,7 @@ import {
   insertPatchId,
   insertWrapperSelector,
   makeFingerprint,
+  moveSelector,
   nextInsertSeq,
   nextOeId,
   normalizePatch,
@@ -99,7 +100,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   const css = useMemo(() => buildPatchCss(patches), [patches]);
   const domPatches = useMemo(
-    () => patches.filter((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert"),
+    () => patches.filter((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move"),
     [patches]
   );
   const patchesRef = useRef<VePatch[]>([]);
@@ -191,6 +192,13 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                     id: p.id,
                     selector: insertWrapperSelector(p.id),
                     tag: "div",
+                    skipDetail: true,
+                  }
+                : p.kind === "move"
+                ? {
+                    id: p.id,
+                    selector: moveSelector(p.moveId || ""),
+                    tag: p.fingerprint.tag,
                     skipDetail: true,
                   }
                 : {
@@ -364,6 +372,35 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           };
       mutatePatches(
         exists ? patches.map((p) => (p.id === pid ? next : p)) : patches.concat([next])
+      );
+    },
+    [target, patches, mutatePatches]
+  );
+
+  const onMoveElement = useCallback(
+    (dir: 1 | -1) => {
+      if (!target) return;
+      const byOeId = target.oeId
+        ? patches.find((p) => p.kind === "move" && p.moveId === target.oeId)
+        : undefined;
+      const exists =
+        byOeId || patches.find((p) => p.kind === "move" && p.id === patchId(target.selector, "move"));
+      // targetIndex 语义：同级列表（同标签、排除插入元素、不含自身）中的绝对位置，重放幂等
+      const base =
+        exists && typeof exists.targetIndex === "number" ? exists.targetIndex : target.siblingIndex;
+      const nextIndex = Math.max(0, base + dir);
+      const moveId = exists?.moveId || nextOeId(patches, "oe-mv");
+      const next: VePatch = {
+        id: exists ? exists.id : patchId(target.selector, "move"),
+        kind: "move",
+        selector: exists ? exists.selector : target.selector,
+        label: `${targetLabel(target)} · ${dir < 0 ? "上移" : "下移"}`,
+        targetIndex: nextIndex,
+        moveId,
+        fingerprint: makeFingerprint(target),
+      };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === exists.id ? next : p)) : patches.concat([next])
       );
     },
     [target, patches, mutatePatches]
@@ -691,6 +728,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             onStyleChange={onStyleChange}
             onStartTextEdit={(sel) => sendRpc("ve:text:edit", { selector: sel })}
             onImageReplace={onImageReplace}
+            onMoveElement={onMoveElement}
             components={components}
             onInsertComponent={onInsertComponent}
             onInsertTextBox={onInsertTextBox}
@@ -720,6 +758,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                       </span>
                     ) : p.kind === "image" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">图片已替换</span>
+                    ) : p.kind === "move" ? (
+                      <span className="ml-1.5 text-[11px] text-slate-400">
+                        移至同级第 {(p.targetIndex ?? 0) + 1} 位
+                      </span>
                     ) : p.kind === "insert" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">
                         {p.position === "append" ? "插入内部末尾" : p.position === "before" ? "插入之前" : "插入之后"}
