@@ -82,14 +82,14 @@ ${text_block}
   5. 衔接点评：`<div class="cohesion-note"><h3>衔接点评</h3><p>说明本段在全文中承担什么功能、如何与前后段衔接（不是复述内容）</p></div>`
   页尾加 `<aside class="teaching-intent">本页教学意图：…</aside>`（放映时自动隐藏，编辑器中可见）。
   取材克制：逐句细读（`sent-walk` 内 `<details><summary>句 N：原文</summary><p>讲解</p></details>`）**最多 4 句**；语言点**最多 3 条**；整页一屏放得下，宁可少讲不可拥挤。
-- **language_focus 语言聚焦页**：跨段归纳一个语法/词汇/修辞主题：规则呈现（.card）+ 原文例证（注明第N段）+ 一个 details.reveal 练习。
-- **interaction 互动检测页**：3-4 题基于课文命题（细节/推断/讨论），答案用 `details.reveal` 折叠；讨论题配 `<div class="timer" data-seconds="90">` 计时器。
+- **language_focus 语言聚焦页**：跨段归纳一个语法/词汇/修辞主题：规则呈现（.card）+ 原文例证（注明第N段）+ 一个练习组件——优先 `.mark-words` 点击标词（辨词性/找修辞）或 `.fill-blanks` 语境填空（词形变化），简单答案也可用 `details.reveal` 折叠。
+- **interaction 互动检测页**：3-4 题基于课文命题（细节/推断/讨论），答案用 `details.reveal` 折叠；语篇结构/时序题用 `.sort-paragraphs` 段落排序卡；讨论题配 `<div class="timer" data-seconds="90">` 计时器。
 - **summary 总结与作业页**：回顾要点（ul.plain）+ 作业（.callout 强调）+ 一句收束语。
 
 ## 四、骨架类契约（框架已内置样式与行为，你只写结构；颜色一律 var(--token)）
 结构类：`.kicker`（页眉小字）/ `h1` 封面主标题 / `h2` 页标题 / `h3` 小节标题 / `.accent-rule` / `.page-focus`（每页恰好一个焦点容器）/ `.card` / `.callout` / `.hl` / `.cols>.col` / `ul.plain>li` / `.caption` / `.quote-src`
 精讲组件类：`blockquote.para-original` + `mark.kw` / `.para-gist` / `.sentence-anatomy` + `.anatomy-sentence` + `.cl cl-core/cl-mod` + `.anatomy-legend` + `.anatomy-tip` / `.sent-walk`（内放 details/summary）/ `.lang-points` / `.cohesion-note` / `aside.teaching-intent`
-交互类：`details.reveal` 答案折叠 / `ol.timeline>li` 时间线点亮 / `.vocab-grid`+`.vocab-card` 词卡翻转 / `.timer[data-seconds]` 计时器
+交互类：`details.reveal` 答案折叠 / `ol.timeline>li` 时间线点亮 / `.vocab-grid`+`.vocab-card` 词卡翻转 / `.timer[data-seconds]` 计时器 / `.mark-words` 点击标词（`<div class="mark-words" data-answer="2,4">`，data-answer 为正确词的序号列表从 1 起；正文放 `p.mw-text` 内逐词 `span.mw-w`，检查按钮 `.ix-actions>button.mw-check`）/ `.fill-blanks` 语境填空（`<div class="fill-blanks">` 内 `p.fb-text` 中挖空 `span.fb-blank[data-answers="答案1|答案2"]`，同义答案用竖线分隔；检查按钮 `.ix-actions>button.fb-check`）/ `.sort-paragraphs` 段落排序（`<div class="sort-paragraphs">` 内 `ol.sp-list>li.sp-item[data-order="N"]`，N 为该卡正确位次，**呈现时故意打乱顺序**；检查按钮 `.ix-actions>button.sp-check`）。三个练习组件的判定、点亮与反馈全部由骨架负责，你只填数据；空态挖空 span 内不写内容。
 
 ## 五、禁忌清单（程序扫描，触碰即退回重写）
 - 任何渐变、emoji 及装饰性符号、行内色值（#hex/rgb/hsl）、行内 font-family / line-height
@@ -167,6 +167,7 @@ ${text_block}
 
 ## 八、自检清单（输出前逐项核对）
 - [ ] 恰好一个 .page-focus？颜色全部 var(--token)、零行内色值、零渐变、零 emoji、零外链、零 script/style/事件属性？
+- [ ] 练习组件数据契约正确：mark-words 的 data-answer 序号 ≤ 词数、fill-blanks 的 data-answers 非空、sort-paragraphs 的 data-order 是 1..N 连续序号且卡片已打乱，且都配了 .ix-actions 检查按钮？
 - [ ] 本页页型契约齐全（原文解剖页三要素 / 语言点页三要素 / 旧精讲页五要素），且原文引用与本页锚定段落逐字一致？
 - [ ] 长难句解剖有主干提取 + 成分说明 + 图例 + 翻译示范？
 - [ ] 语言点每条都落到原文具体词句并给出处？

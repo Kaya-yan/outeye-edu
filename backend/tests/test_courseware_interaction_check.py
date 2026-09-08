@@ -170,3 +170,79 @@ def test_clean_diverse_deck_never_regenerates():
     assert summary["structural_problem_pages"] == {} and summary["regenerated"] == {}
     assert summary["diversity_ok"] is True and len(summary["types_found"]) == 3
     assert out == pages
+
+
+# ---- 任务B 练习型组件：mark-words / fill-blanks / sort-paragraphs ----
+
+MW_OK = (
+    '<div class="mark-words" data-answer="2,4">'
+    '<p class="mw-text">Click the past-tense verbs: The news <span class="mw-w">spread</span> quickly, '
+    'everyone <span class="mw-w">knows</span> it, and the symbol <span class="mw-w">grew</span> '
+    'with each <span class="mw-w">year</span>.</p>'
+    '<div class="ix-actions"><button type="button" class="mw-check">检查</button></div>'
+    "</div>"
+)
+FB_OK = (
+    '<div class="fill-blanks">'
+    '<p class="fb-text">The symbol has now <span class="fb-blank" data-answers="spread"></span> '
+    "throughout most of the world.</p>"
+    '<div class="ix-actions"><button type="button" class="fb-check">检查</button></div>'
+    "</div>"
+)
+SP_OK = (
+    '<div class="sort-paragraphs"><ol class="sp-list">'
+    '<li class="sp-item" data-order="2">Levi Strauss arrived in San Francisco.</li>'
+    '<li class="sp-item" data-order="1">The gold rush drew people west.</li>'
+    '<li class="sp-item" data-order="3">Miners asked for sturdy trousers.</li>'
+    '</ol><div class="ix-actions"><button type="button" class="sp-check">检查</button></div></div>'
+)
+
+
+def test_mark_words_contract():
+    assert page_interaction_problems(MW_OK) == []
+    no_answer = MW_OK.replace(' data-answer="2,4"', "")
+    assert any("data-answer" in p for p in page_interaction_problems(no_answer))
+    bad_idx = MW_OK.replace('data-answer="2,4"', 'data-answer="2,9"')
+    assert any("序号" in p for p in page_interaction_problems(bad_idx))
+    no_check = MW_OK.replace('class="mw-check"', 'class="other"')
+    assert any("mw-check" in p for p in page_interaction_problems(no_check))
+
+
+def test_fill_blanks_contract():
+    assert page_interaction_problems(FB_OK) == []
+    empty = FB_OK.replace('data-answers="spread"', 'data-answers=""')
+    assert any("data-answers" in p and "空" in p for p in page_interaction_problems(empty))
+    no_check = FB_OK.replace('class="fb-check"', 'class="other"')
+    assert any("fb-check" in p for p in page_interaction_problems(no_check))
+    no_blank = FB_OK.replace('<span class="fb-blank" data-answers="spread"></span>', "spread")
+    assert any("fb-blank" in p for p in page_interaction_problems(no_blank))
+
+
+def test_sort_paragraphs_contract():
+    assert page_interaction_problems(SP_OK) == []
+    bad_orders = SP_OK.replace('data-order="3"', 'data-order="4"')
+    assert any("data-order" in p for p in page_interaction_problems(bad_orders))
+    no_check = SP_OK.replace('class="sp-check"', 'class="other"')
+    assert any("sp-check" in p for p in page_interaction_problems(no_check))
+    single = SP_OK.replace('<li class="sp-item" data-order="2">Levi Strauss arrived in San Francisco.</li>', "")
+    single = single.replace('<li class="sp-item" data-order="3">Miners asked for sturdy trousers.</li>', "")
+    assert any("2 个" in p for p in page_interaction_problems(single))
+
+
+def test_exercise_components_counted_as_interaction_types():
+    types = page_interaction_types(MW_OK + FB_OK + SP_OK)
+    assert {"mark-words", "fill-blanks", "sort-paragraphs"} <= types
+    # 三组件一页即可满足多样性门槛
+    pages = [SimpleNamespace(html=MW_OK + FB_OK + SP_OK)]
+    out, summary = run_interaction_check(
+        pages, blueprint=[{"kind": "language_focus"}], regen_page=lambda i, pg, pr: None
+    )
+    assert summary["diversity_ok"] is True and len(summary["types_found"]) >= 3
+
+
+def test_skeleton_has_exercise_component_hooks():
+    from app.services.courseware_llm_generator import _load_skeleton
+
+    html = _load_skeleton()
+    for hook in (".mark-words", ".fill-blanks", ".sort-paragraphs", ".mw-check", ".fb-check", ".sp-check", "data-answer", "data-answers", "data-order", "oe-shake"):
+        assert hook in html, f"骨架缺少练习组件钩子 {hook}"

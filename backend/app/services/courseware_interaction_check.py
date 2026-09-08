@@ -24,9 +24,12 @@ INTERACTION_TYPE_MARKERS: Dict[str, re.Pattern[str]] = {
     "reveal": re.compile(r"<details[^>]*class\s*=\s*[\"'][^\"']*\breveal\b", re.IGNORECASE),
     "timeline": re.compile(r"class\s*=\s*[\"'][^\"']*\btimeline\b", re.IGNORECASE),
     "vocab-card": re.compile(r"class\s*=\s*[\"'][^\"']*\bvocab-card\b", re.IGNORECASE),
-    "timer": re.compile(r"class\s*=\s*[\"'][^\"']*\btimer\b|data-seconds\s*=", re.IGNORECASE),
+    "timer": re.compile(r"class\s*=\s*[\"'][^\"']*\btimer\b(?!-)|data-seconds\s*=", re.IGNORECASE),
     "anatomy": re.compile(r"class\s*=\s*[\"'][^\"']*\banatomy-sentence\b", re.IGNORECASE),
     "sent-walk": re.compile(r"class\s*=\s*[\"'][^\"']*\bsent-walk\b", re.IGNORECASE),
+    "mark-words": re.compile(r"class\s*=\s*[\"'][^\"']*\bmark-words\b", re.IGNORECASE),
+    "fill-blanks": re.compile(r"class\s*=\s*[\"'][^\"']*\bfill-blanks\b", re.IGNORECASE),
+    "sort-paragraphs": re.compile(r"class\s*=\s*[\"'][^\"']*\bsort-paragraphs\b", re.IGNORECASE),
 }
 
 # 多样性补齐提示（重生成时告知 LLM 缺失类型的骨架用法）
@@ -37,6 +40,9 @@ TYPE_USAGE_HINTS: Dict[str, str] = {
     "timer": ".timer[data-seconds] 计时器（内含 .timer-display 与 button）",
     "anatomy": ".anatomy-sentence 长难句点亮/X 光（cl cl-core/cl-mod 钩子）",
     "sent-walk": ".sent-walk 内 details/summary 逐句折叠细读",
+    "mark-words": "「点击标词」.mark-words[data-answer=正确词序号列表] 内 p.mw-text 里逐词 span.mw-w + .ix-actions 内 button.mw-check",
+    "fill-blanks": "「语境填空」.fill-blanks 内 p.fb-text 里 span.fb-blank[data-answers=答案1|答案2] 挖空 + .ix-actions 内 button.fb-check",
+    "sort-paragraphs": "「段落排序」.sort-paragraphs 内 ol.sp-list>li.sp-item[data-order=正确序号]（呈现时打乱）+ .ix-actions 内 button.sp-check",
 }
 
 
@@ -79,6 +85,36 @@ def page_interaction_problems(html: str) -> List[str]:
         problems.append("ol.timeline 至少要有 2 个 li（时间线逐条点亮）")
     if _cls_count(html, "sent-walk") and _tag_count(html, "details") > _tag_count(html, "summary"):
         problems.append("sent-walk 内每个 details 必须配 summary（点击展开依赖 summary）")
+    n_mw = _cls_count(html, "mark-words")
+    if n_mw:
+        n_mw_words, n_mw_check = _cls_count(html, "mw-w"), _cls_count(html, "mw-check")
+        m_ans = re.search(r'data-answer\s*=\s*["\']([^"\']*)["\']', html, re.IGNORECASE)
+        answer_idx = [int(x) for x in re.findall(r"\d+", m_ans.group(1))] if m_ans else []
+        if n_mw_words < 2:
+            problems.append(f".mark-words 至少要有 2 个可点的 .mw-w 词 span（当前 {n_mw_words} 个），否则点击标词无从谈起")
+        if n_mw_check < n_mw:
+            problems.append("每个 .mark-words 需在 .ix-actions 内配 button.mw-check（检查按钮），否则无法判定对错")
+        if not answer_idx or not all(1 <= v <= n_mw_words for v in answer_idx):
+            problems.append('mark-words 的 data-answer 必须是正确词的序号列表（如 "2,4"，1 起），且序号不能超过 .mw-w 数量')
+    n_fb = _cls_count(html, "fill-blanks")
+    if n_fb:
+        n_fb_blank, n_fb_check = _cls_count(html, "fb-blank"), _cls_count(html, "fb-check")
+        if n_fb_blank < 1:
+            problems.append(".fill-blanks 至少要有 1 个 .fb-blank[data-answers] 挖空")
+        if n_fb_check < n_fb:
+            problems.append("每个 .fill-blanks 需在 .ix-actions 内配 button.fb-check（检查按钮），否则无法判定对错")
+        if re.search(r'data-answers\s*=\s*(["\'])\s*\1', html):
+            problems.append("每个 .fb-blank 的 data-answers 不能为空（可接受答案用 | 分隔，如 \"spread|spread out\"）")
+    n_sp = _cls_count(html, "sort-paragraphs")
+    if n_sp:
+        n_sp_item, n_sp_check = _cls_count(html, "sp-item"), _cls_count(html, "sp-check")
+        orders = [int(o) for o in re.findall(r'data-order\s*=\s*["\'](\d+)["\']', html, re.IGNORECASE)]
+        if n_sp_item < 2:
+            problems.append(".sort-paragraphs 的 ol.sp-list 至少要有 2 个 .sp-item 卡片，否则排序无意义")
+        if n_sp_check < n_sp:
+            problems.append("每个 .sort-paragraphs 需在 .ix-actions 内配 button.sp-check（检查按钮），否则无法判定对错")
+        if not orders or sorted(orders) != list(range(1, n_sp_item + 1)):
+            problems.append(f"sp-item 的 data-order 必须是 1..{max(n_sp_item, 2)} 的连续正确序号（各卡唯一），骨架据此判定位置对错")
     return problems
 
 

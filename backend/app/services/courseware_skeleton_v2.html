@@ -62,6 +62,29 @@ ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
 .timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
 .timer button:hover{background:var(--accent);color:var(--paper)}
 
+/* ---- 练习型组件（任务B 对标 H5P：内容层只填数据，判定与反馈全在骨架） ---- */
+.ix-actions{margin-top:14px;display:flex;align-items:center;gap:12px}
+.ix-actions button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.ix-actions button:hover{background:var(--accent);color:var(--paper)}
+.ix-feedback{margin-top:10px;font-size:17px;color:var(--muted)}
+@keyframes oe-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.mark-words .mw-text{font-size:20px;line-height:2.1;color:var(--ink)}
+.mark-words .mw-w{cursor:pointer;border-bottom:2px dotted var(--line);border-radius:3px;padding:1px 3px;transition:background .2s}
+.mark-words .mw-w.picked{background:var(--accent-soft)}
+.mark-words .mw-w.hit{background:var(--accent-soft);border-bottom-color:var(--accent);font-weight:700}
+.mark-words .mw-w.miss{border-bottom-style:solid;border-bottom-color:var(--ink)}
+.mark-words .mw-w.shake{animation:oe-shake .35s}
+.fill-blanks .fb-text{font-size:20px;line-height:2.2;color:var(--ink)}
+.fill-blanks .fb-blank{display:inline-block;min-width:104px;border:0;border-bottom:2px solid var(--accent);background:var(--accent-soft);border-radius:6px 6px 0 0;padding:2px 10px;font:inherit;font-size:18px;color:var(--ink);text-align:center;outline:none}
+.fill-blanks .fb-blank.hit{background:var(--accent);color:var(--paper);font-weight:600}
+.fill-blanks .fb-blank.miss{border-bottom-color:var(--ink)}
+.fill-blanks .fb-blank.shake{animation:oe-shake .35s}
+.sort-paragraphs .sp-list{list-style:none;display:flex;flex-direction:column;gap:12px}
+.sort-paragraphs .sp-item{cursor:grab;padding:12px 18px;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:10px;background:var(--card);font-size:18px;line-height:1.7;user-select:none;touch-action:none}
+.sort-paragraphs .sp-item.dragging{opacity:.45;pointer-events:none;cursor:grabbing}
+.sort-paragraphs .sp-item.hit{border-left-color:var(--accent)}
+.sort-paragraphs .sp-item.miss{border-left-color:var(--ink)}
+
 /* ============ 逐段精讲组件（③ 两阶段 · 逐页生成契约） ============ */
 .para-original{margin:0 0 18px;padding:16px 22px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 10px 10px 0}
 .para-original p{font-size:19px;line-height:1.9}
@@ -159,6 +182,10 @@ __THEME_EXTRA__
   });
 
   document.addEventListener('click', function (e) {
+    var mwW = e.target.closest ? e.target.closest('.mark-words .mw-w') : null;
+    if (mwW && !mwW.classList.contains('hit')) { mwW.classList.toggle('picked'); return; }
+    var exBtn = e.target.closest ? e.target.closest('.mw-check, .fb-check, .sp-check') : null;
+    if (exBtn) { runExercise(exBtn); return; }
     var cl = e.target.closest ? e.target.closest('.anatomy-sentence .cl') : null;
     if (cl) { cl.classList.toggle('lit'); return; }
     var sent = e.target.closest ? e.target.closest('.anatomy-sentence') : null;
@@ -198,6 +225,121 @@ __THEME_EXTRA__
   });
 
   show(0);
+
+  /* ---- 练习型组件（任务B）：判定逻辑 + 初始化（内容层只填数据） ---- */
+  function norm(s) { return (s || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+  function feedback(wrap, text) {
+    var fb = wrap.querySelector('.ix-feedback');
+    if (!fb) { fb = document.createElement('div'); fb.className = 'ix-feedback'; wrap.appendChild(fb); }
+    fb.textContent = text;
+  }
+  function shake(el) {
+    el.classList.add('shake');
+    setTimeout(function () { el.classList.remove('shake'); }, 400);
+  }
+  function runExercise(btn) {
+    var mw = btn.closest('.mark-words');
+    if (mw) {
+      var ans = (mw.getAttribute('data-answer') || '').split(',').map(function (s) { return parseInt(s, 10); })
+        .filter(function (v) { return v > 0; });
+      var words = [].slice.call(mw.querySelectorAll('.mw-w'));
+      words.forEach(function (w, i) {
+        var ok = ans.indexOf(i + 1) !== -1;
+        var pickedNow = w.classList.contains('picked');
+        w.classList.remove('shake');
+        if (pickedNow && ok) { w.classList.remove('picked', 'miss'); w.classList.add('hit'); }
+        else if (pickedNow && !ok) { w.classList.add('miss'); shake(w); }
+      });
+      var right = words.filter(function (w) { return w.classList.contains('hit'); }).length;
+      feedback(mw, right === ans.length
+        ? '全对！'
+        : '命中 ' + right + ' / ' + ans.length + '，点对的词已锁定，继续点');
+      return;
+    }
+    var fbc = btn.closest('.fill-blanks');
+    if (fbc) {
+      var inputs = [].slice.call(fbc.querySelectorAll('input.fb-blank'));
+      var fbRight = 0;
+      inputs.forEach(function (inp) {
+        var accept = (inp.getAttribute('data-answers') || '').split('|').map(norm);
+        if (accept.indexOf(norm(inp.value)) !== -1) {
+          inp.classList.remove('miss', 'shake');
+          inp.classList.add('hit');
+          inp.readOnly = true;
+          fbRight++;
+        } else {
+          inp.classList.remove('hit');
+          inp.classList.add('miss');
+          shake(inp);
+          inp.select();
+        }
+      });
+      feedback(fbc, fbRight === inputs.length
+        ? '全部正确！'
+        : '正确 ' + fbRight + ' / ' + inputs.length + '，答错处已标出，修改后可重查');
+      return;
+    }
+    var sp = btn.closest('.sort-paragraphs');
+    if (sp) {
+      var items = [].slice.call(sp.querySelectorAll('.sp-item'));
+      var spRight = 0;
+      items.forEach(function (it, i) {
+        it.classList.remove('hit', 'miss');
+        if (parseInt(it.getAttribute('data-order'), 10) === i + 1) { it.classList.add('hit'); spRight++; }
+        else { it.classList.add('miss'); }
+      });
+      feedback(sp, spRight === items.length
+        ? '顺序完全正确！'
+        : '位置正确 ' + spRight + ' / ' + items.length + '，可继续拖动调整');
+    }
+  }
+
+  /* 填空挖空水合为输入框（骨架持有行为，Enter 触发检查） */
+  [].slice.call(document.querySelectorAll('.fill-blanks .fb-blank')).forEach(function (span) {
+    var answers = span.getAttribute('data-answers') || '';
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'fb-blank';
+    inp.setAttribute('data-answers', answers);
+    inp.setAttribute('aria-label', '填空');
+    inp.size = Math.max(8, (answers.split('|')[0] || '').length + 2);
+    span.parentNode.replaceChild(inp, span);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var b = inp.closest('.fill-blanks').querySelector('.fb-check');
+      if (b) b.click();
+    });
+  });
+
+  /* 排序卡拖拽（指针事件，真实/合成输入都可靠；判定用 data-order） */
+  [].slice.call(document.querySelectorAll('.sort-paragraphs .sp-list')).forEach(function (list) {
+    var sp = null;
+    list.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var it = e.target && e.target.closest ? e.target.closest('.sp-item') : null;
+      if (!it || !list.contains(it)) return;
+      sp = { el: it };
+      it.classList.add('dragging');
+      e.preventDefault();
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (!sp) return;
+      var hitEl = document.elementFromPoint(e.clientX, e.clientY);
+      var over = hitEl && hitEl.closest ? hitEl.closest('.sp-item') : null;
+      if (!over || over === sp.el || !list.contains(over)) return;
+      var r = over.getBoundingClientRect();
+      var after = (e.clientY - r.top) / r.height > 0.5;
+      list.insertBefore(sp.el, after ? over.nextSibling : over);
+    });
+    function done() {
+      if (!sp) return;
+      sp.el.classList.remove('dragging');
+      sp = null;
+    }
+    document.addEventListener('pointerup', done);
+    document.addEventListener('pointercancel', done);
+  });
 })();
 </script>
 </body>
