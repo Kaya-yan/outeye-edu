@@ -1044,13 +1044,23 @@ def generate_html_courseware(
             else:
                 logger.info("视觉质检环节跳过：VISUAL_QC_ENABLED 与 OVERFLOW_GATE_ENABLED 均为 false")
 
-            # 任务A3 溢出兜底提示：重生成 2 轮后仍超出的页，写入课件元数据（前端给教师明确提示，不静默交付）
+            # 任务A3/D 溢出兜底提示：重生成 2 轮后仍违规的页，写入课件元数据（前端给教师明确提示，不静默交付）
             overflow_notices: List[Dict[str, Any]] = []
             if visual_qc_summary:
-                _still = (visual_qc_summary.get("overflow") or {}).get("still_overflowing") or {}
+                _ov = visual_qc_summary.get("overflow") or {}
+                _still = _ov.get("still_overflowing") or {}
                 overflow_notices = [
                     {"page": int(k), "pct": v, "note": f"第 {k} 页内容较多（超页约 {v}%），建议在编辑器中精简"}
                     for k, v in sorted(_still.items(), key=lambda kv: int(kv[0]))
+                ]
+                _still_elems = _ov.get("still_element_issues") or {}
+                overflow_notices += [
+                    {
+                        "page": int(k),
+                        "pct": 0,
+                        "note": f"第 {k} 页仍有组件内容被裁剪或叠压：{'；'.join(probs[:3])}。建议在编辑器中精简该组件",
+                    }
+                    for k, probs in sorted(_still_elems.items(), key=lambda kv: int(kv[0]))
                 ]
             if overflow_notices:
                 logger.info("溢出兜底提示（已随课件交付）：" + "；".join(n["note"] for n in overflow_notices))

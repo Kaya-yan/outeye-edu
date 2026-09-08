@@ -448,9 +448,28 @@ def test_generate_overflow_notices_delivered_to_source_meta(fake_llm, monkeypatc
 
 def test_generate_no_overflow_notices_when_gate_clean(fake_llm, monkeypatch):
     def _fake_visual_qc(pages, **kwargs):
-        return list(pages), {"overflow": {"still_overflowing": {}}}
+        return list(pages), {"overflow": {"still_overflowing": {}, "still_element_issues": {}}}
 
     monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
     fake_llm(*_two_stage_replies())
     result = _run_generate()
     assert result.editor_schema["meta"]["source_meta"].get("overflow_notices") is None
+
+
+def test_generate_element_issues_in_overflow_notices(fake_llm, monkeypatch):
+    # 任务D：元素级仍违规（组件裁剪/叠压）同样落入 notices，给教师组件级定位提示
+    def _fake_visual_qc(pages, **kwargs):
+        return list(pages), {
+            "overflow": {
+                "still_overflowing": {"2": 12},
+                "still_element_issues": {"3": ["「词汇卡 第2张/共4张」内容超出容器约 30px 被裁剪不可见，请精简该组件内容"]},
+            }
+        }
+
+    monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    notices = result.editor_schema["meta"]["source_meta"]["overflow_notices"]
+    assert [n["page"] for n in notices] == [2, 3]
+    elem = notices[1]
+    assert elem["pct"] == 0 and "词汇卡 第2张" in elem["note"] and "建议在编辑器中精简该组件" in elem["note"]

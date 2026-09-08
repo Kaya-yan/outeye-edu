@@ -1,10 +1,16 @@
 """S6 视觉质检闭环（两相）：溢出硬关卡（本地几何）+ VL 多模态检查
 
-相 A 溢出硬关卡（OVERFLOW_GATE_ENABLED，默认开，纯本地零外部依赖）：
-截图环节在 chromium 内量 section.page 的 scrollHeight - clientHeight（overflow:hidden
-下 scrollHeight 仍报告被裁内容全高）；超页页带「内容超页约 X%」反馈重生成，每页最多
-2 轮，仍超则保留并记录。chromium/playwright 不可用时 ERROR 级日志 + summary 记录
-（chromium 是部署硬依赖，不做静态估算兜底，诚实可见）。
+相 A 溢出硬关卡（OVERFLOW_GATE_ENABLED，默认开，纯本地零外部依赖，geo-v2）：
+截图环节在 chromium 内做三级确定性测量——
+1) 页级溢出：section.page 的 scrollHeight - clientHeight（overflow:hidden 下
+   scrollHeight 仍报告被裁内容全高）；
+2) 组件内裁剪：遍历 overflow:hidden / line-clamp 元素，scroll 尺寸超出阈值即内容被裁；
+3) 兄弟重叠：page-focus 直接子元素（排除绝对定位装饰）两两比对包围盒，交叠面积占
+   较小盒比例超阈值即叠压遮挡。
+违规页带组件级定位反馈（如「词汇卡 第2张…内容超出容器约 30px」）重生成，每页最多
+2 轮，仍违规则保留并记录（页级进 still_overflowing、元素级进 still_element_issues，
+经 generator 落入 overflow_notices 给前端教师提示）。chromium/playwright 不可用时
+ERROR 级日志 + summary 记录（chromium 是部署硬依赖，不做静态估算兜底，诚实可见）。
 
 相 B VL 视觉检查（VISUAL_QC_ENABLED 门控 + VISION_API_KEY 必需）：
 DashScope Qwen-VL 并发 2 查可见视觉缺陷 → 有缺陷的页面重生成一轮（带缺陷清单）。
@@ -30,11 +36,82 @@ VL_CONCURRENCY = 2
 PAGE_DESIGN_HEIGHT = 720
 OVERFLOW_PX_THRESHOLD = 12
 OVERFLOW_MAX_ROUNDS = 2
+ELEMENT_CLIP_PX_THRESHOLD = 12
+OVERLAP_AREA_RATIO = 0.05
+
+# 元素级测量的浏览器端脚本（任务D 检测升级：页级溢出 + 组件内裁剪 + 兄弟重叠）
+_MEASURE_JS = """e => {
+  const out = { over: e.scrollHeight - e.clientHeight, clips: [], overlaps: [] };
+  const CN = {
+    'vocab-card': '词汇卡', 'front': '卡正面', 'back': '卡背面', 'timeline': '时间线',
+    'timer': '计时器', 'reveal': '折叠问答', 'mark-words': '点击标词', 'fill-blanks': '语境填空',
+    'sort-paragraphs': '段落排序', 'para-original': '原文段落卡', 'para-gist': '段落主旨',
+    'sentence-anatomy': '长难句解剖', 'lang-points': '语言点', 'cohesion-note': '衔接点评',
+    'sent-walk': '逐句细读', 'anatomy-sentence': '解剖句', 'anatomy-legend': '成分图例',
+    'page-focus': '焦点容器', 'card': '卡片', 'callout': '强调框',
+  };
+  const STATE = /^(lit|flip|picked|hit|miss|shake|dragging|open|x-ray)$/;
+  function desc(el) {
+    const classes = (el.getAttribute('class') || '').split(/\\s+/).filter(c => c && !STATE.test(c));
+    const cls = classes[0] || '';
+    let base = (cls && CN[cls]) || cls || el.tagName.toLowerCase();
+    if (cls) {
+      const sibs = [].slice.call(el.parentNode.children).filter(k => {
+        const kc = (k.getAttribute('class') || '').split(/\\s+/);
+        return k.tagName === el.tagName && kc.indexOf(cls) >= 0;
+      });
+      if (sibs.length > 1) base += ' 第' + (sibs.indexOf(el) + 1) + '张/共' + sibs.length + '张';
+    }
+    const t = (el.innerText || '').replace(/\\s+/g, '').slice(0, 8);
+    return t ? base + '（' + t + '…）' : base;
+  }
+  // a) 组件内裁剪：overflow hidden / line-clamp 元素，scroll 尺寸超出即内容被裁
+  const CLIP = %CLIP_PX%;
+  for (const c of e.querySelectorAll('*')) {
+    const cs = getComputedStyle(c);
+    const lc = cs.webkitLineClamp;
+    const clamped = lc && lc !== 'none' && parseInt(lc, 10) > 0;
+    const hidden = cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflowX === 'hidden';
+    if (!hidden && !clamped) continue;
+    const dh = c.scrollHeight - c.clientHeight;
+    const dw = c.scrollWidth - c.clientWidth;
+    const px = Math.max(dh, dw);
+    if (px > CLIP) out.clips.push({ desc: desc(c), px: Math.round(px) });
+  }
+  // b) 兄弟重叠：page-focus 直接子元素（排除绝对定位装饰），交叠面积占小盒比例超阈值
+  const host = e.querySelector('.page-focus') || e;
+  const kids = [].slice.call(host.children).filter(k => {
+    const r = k.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    const p = getComputedStyle(k).position;
+    return p !== 'absolute' && p !== 'fixed';
+  });
+  for (let i = 0; i < kids.length; i++) {
+    for (let j = i + 1; j < kids.length; j++) {
+      const a = kids[i].getBoundingClientRect(), b = kids[j].getBoundingClientRect();
+      const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (ix <= 2 || iy <= 2) continue;
+      const smaller = Math.min(a.width * a.height, b.width * b.height) || 1;
+      const pct = Math.round(ix * iy / smaller * 100);
+      if (pct > %OVERLAP_PCT%) out.overlaps.push({ a: desc(kids[i]), b: desc(kids[j]), pct });
+    }
+  }
+  return out;
+}"""
 
 
-def _screenshot_pages_real(docs: List[str], deadline: float) -> Tuple[List[Optional[bytes]], List[Optional[int]], Optional[str]]:
-    """串行逐页截图+溢出测量：每份单页文档渲染后对 section.page 截图（jpeg q70），
-    并量 scrollHeight - clientHeight 得溢出像素；无溢出为 0。失败返回错误串。"""
+def _measure_js() -> str:
+    return (
+        _MEASURE_JS
+        .replace("%CLIP_PX%", str(ELEMENT_CLIP_PX_THRESHOLD))
+        .replace("%OVERLAP_PCT%", str(round(OVERLAP_AREA_RATIO * 100)))
+    )
+
+
+def _screenshot_pages_real(docs: List[str], deadline: float) -> Tuple[List[Optional[bytes]], List[Optional[Any]], Optional[str]]:
+    """串行逐页截图+元素级测量：每份单页文档渲染后对 section.page 截图（jpeg q70），
+    并量页级溢出 + 组件内裁剪 + 兄弟重叠（返回 dict）；失败返回错误串。"""
     try:
         from playwright.sync_api import sync_playwright
     except Exception as e:
@@ -45,7 +122,7 @@ def _screenshot_pages_real(docs: List[str], deadline: float) -> Tuple[List[Optio
             try:
                 ctx = browser.new_page(viewport={"width": 1280, "height": 800}, device_scale_factor=1)
                 shots: List[Optional[bytes]] = []
-                overflows: List[Optional[int]] = []
+                overflows: List[Optional[Any]] = []
                 for doc in docs:
                     if time.time() >= deadline:
                         shots.append(None)
@@ -54,7 +131,7 @@ def _screenshot_pages_real(docs: List[str], deadline: float) -> Tuple[List[Optio
                     ctx.set_content(doc, wait_until="load")
                     el = ctx.locator("section.page").first
                     shots.append(el.screenshot(type="jpeg", quality=70))
-                    overflows.append(el.evaluate("e => e.scrollHeight - e.clientHeight"))
+                    overflows.append(el.evaluate(_measure_js()))
             finally:
                 browser.close()
         return shots, overflows, None
@@ -112,6 +189,33 @@ def _overflow_problem(px: int) -> str:
     )
 
 
+def _page_over(v: Optional[Any]) -> Optional[int]:
+    """归一化测量值：新格式 dict 取页级溢出，旧格式/测试 mock 直接是 int"""
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return v.get("over")
+    return v
+
+
+def _element_problems(v: Optional[Any]) -> List[str]:
+    """元素级违规反馈：组件内裁剪 + 兄弟重叠，带组件级定位（如"词汇卡 第2张…超约 30px"）"""
+    if not isinstance(v, dict):
+        return []
+    problems: List[str] = []
+    for c in v.get("clips") or []:
+        problems.append(
+            f"「{c.get('desc') or '组件'}」内容超出容器约 {c.get('px', 0)}px 被裁剪不可见，"
+            "请精简该组件内容（释义/例句/描述控制在预算行数内，或减少该组件数量）"
+        )
+    for o in v.get("overlaps") or []:
+        problems.append(
+            f"「{o.get('a') or '元素'}」与「{o.get('b') or '元素'}」位置交叠约 {o.get('pct', 0)}%，内容互相遮挡，"
+            "请精简上方内容、减少条目或缩短文本，消除叠压"
+        )
+    return problems
+
+
 def run_visual_qc(
     pages: List[Any],
     *,
@@ -141,13 +245,16 @@ def run_visual_qc(
         "version": prompt_version(VISUAL_QC_PROMPT_NAME),
         "model": getattr(settings, "VISION_MODEL", "qwen-vl-plus"),
         "overflow": {
-            "gate_version": "geo-v1",
+            "gate_version": "geo-v2",
             "threshold_px": OVERFLOW_PX_THRESHOLD,
+            "element_clip_threshold_px": ELEMENT_CLIP_PX_THRESHOLD,
+            "overlap_area_ratio": OVERLAP_AREA_RATIO,
             "max_rounds": OVERFLOW_MAX_ROUNDS,
             "checked_pages": [],
             "overflow_pages": {},
             "regenerated": {},
             "still_overflowing": {},
+            "still_element_issues": {},
             "skipped": None,
         },
         "checked_pages": [],
@@ -182,20 +289,29 @@ def run_visual_qc(
                 summary["overflow"]["skipped"] = gate_err
             else:
                 shots = gate_shots
-                logger.info(f"溢出硬关卡：截图测量 {total} 页")
+                logger.info(f"溢出硬关卡：截图测量 {total} 页（页级溢出 + 组件内裁剪 + 兄弟重叠）")
                 summary["overflow"]["checked_pages"] = [i + 1 for i in range(total) if overflows[i] is not None]
                 for i in range(total):
-                    px = overflows[i]
-                    if px is None or px <= OVERFLOW_PX_THRESHOLD:
+                    px = _page_over(overflows[i])
+                    elem_probs = _element_problems(overflows[i])
+                    page_bad = px is not None and px > OVERFLOW_PX_THRESHOLD
+                    if not page_bad and not elem_probs:
                         continue
-                    pct = _overflow_pct(px)
-                    summary["overflow"]["overflow_pages"][str(i + 1)] = pct
+                    if page_bad:
+                        summary["overflow"]["overflow_pages"][str(i + 1)] = _overflow_pct(px)
                     rounds = 0
                     while rounds < OVERFLOW_MAX_ROUNDS and time.time() < deadline:
                         rounds += 1
-                        _progress(f"溢出检测：第 {i + 1} 页内容超页约 {pct}%，正在精简重生成（第 {rounds} 轮）…")
+                        problems = ([_overflow_problem(px)] if page_bad else []) + elem_probs
+                        head = (
+                            f"溢出检测：第 {i + 1} 页内容超页约 {_overflow_pct(px)}%"
+                            + (f"，另有 {len(elem_probs)} 处组件遮挡" if elem_probs else "")
+                            if page_bad
+                            else f"遮挡检测：第 {i + 1} 页存在 {len(elem_probs)} 处组件遮挡问题"
+                        )
+                        _progress(f"{head}，正在精简重生成（第 {rounds} 轮）…")
                         try:
-                            rewritten = regen_page(i, pages[i], [_overflow_problem(px)])
+                            rewritten = regen_page(i, pages[i], problems)
                         except Exception as e:
                             logger.warning(f"溢出硬关卡第 {i + 1} 页重生成异常（保留原稿）: {e}")
                             break
@@ -206,20 +322,24 @@ def run_visual_qc(
                             break
                         pages[i] = rewritten
                         shots[i] = re_shots[0]
-                        px = re_overflows[0]
-                        if px <= OVERFLOW_PX_THRESHOLD:
+                        px = _page_over(re_overflows[0])
+                        elem_probs = _element_problems(re_overflows[0])
+                        page_bad = px is not None and px > OVERFLOW_PX_THRESHOLD
+                        if not page_bad and not elem_probs:
                             break
-                        pct = _overflow_pct(px)
                     if rounds > 0:
                         summary["overflow"]["regenerated"][str(i + 1)] = rounds
                         if time.time() >= deadline:
                             summary["deadline_hit"] = True
-                    if px > OVERFLOW_PX_THRESHOLD:
+                    if page_bad:
                         summary["overflow"]["still_overflowing"][str(i + 1)] = _overflow_pct(px)
+                    if elem_probs:
+                        summary["overflow"]["still_element_issues"][str(i + 1)] = elem_probs
                 logger.info(
                     f"溢出硬关卡结果：超页 {summary['overflow']['overflow_pages'] or '无'}，"
                     f"重生成轮次 {summary['overflow']['regenerated'] or '无'}，"
-                    f"仍超（已保留并记录）{summary['overflow']['still_overflowing'] or '无'}"
+                    f"仍超（已保留并记录）{summary['overflow']['still_overflowing'] or '无'}，"
+                    f"元素级仍违规 {summary['overflow']['still_element_issues'] or '无'}"
                 )
 
         # ---- 相 B：VL 多模态视觉检查 ----

@@ -127,6 +127,111 @@ def test_gate_disabled_by_switch_skips_geometry(monkeypatch):
     assert summary["checked_pages"] == [1, 2] and summary["issue_pages"] == []  # VL 只补拍一次
 
 
+# ---- 任务D：元素级检测（组件内裁剪 + 兄弟重叠）----
+
+
+def _clip(desc="词汇卡 第2张/共4张（spread…）", px=30):
+    return {"over": 0, "clips": [{"desc": desc, "px": px}], "overlaps": []}
+
+
+def test_element_clip_triggers_regen_with_component_feedback(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
+    seq = [([b"a"], [_clip()], None), ([b"a1"], [{"over": 0, "clips": [], "overlaps": []}], None)]
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
+    regen_calls: list = []
+
+    def regen(i, pg, problems):
+        regen_calls.append(problems)
+        return _ContentPage(title=pg.title, intent="i", html='<div class="page-focus"><p>slim</p></div>')
+
+    out, summary = vqc.run_visual_qc(
+        _pages(1), blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=regen
+    )
+    of = summary["overflow"]
+    assert len(regen_calls) == 1 and "词汇卡 第2张/共4张" in regen_calls[0][0] and "30px" in regen_calls[0][0]
+    assert "精简该组件" in regen_calls[0][0]
+    assert of["overflow_pages"] == {} and of["regenerated"] == {"1": 1}  # 页级无溢出，元素级单独触发
+    assert of["still_element_issues"] == {} and of["still_overflowing"] == {}  # 修好即清零
+
+
+def test_element_overlap_triggers_regen_with_pair_feedback(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
+    bad = {"over": 0, "clips": [], "overlaps": [{"a": "时间线", "b": "计时器", "pct": 12}]}
+    seq = [([b"a"], [bad], None), ([b"a1"], [{"over": 0, "clips": [], "overlaps": []}], None)]
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
+    regen_calls: list = []
+
+    def regen(i, pg, problems):
+        regen_calls.append(problems)
+        return _ContentPage(title=pg.title, intent="i", html="<p>ok</p>")
+
+    vqc.run_visual_qc(_pages(1), blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=regen)
+    assert "时间线" in regen_calls[0][0] and "计时器" in regen_calls[0][0] and "12%" in regen_calls[0][0]
+    assert "互相遮挡" in regen_calls[0][0]
+
+
+def test_element_issue_persists_caps_at_two_rounds_and_records(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"a"], [_clip(px=50)], None))
+    regen_calls: list = []
+
+    def regen(i, pg, problems):
+        regen_calls.append(problems)
+        return _ContentPage(title=pg.title, intent="i", html="<p>still bad</p>")
+
+    out, summary = vqc.run_visual_qc(
+        _pages(1), blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=regen
+    )
+    of = summary["overflow"]
+    assert len(regen_calls) == 2 and of["regenerated"] == {"1": 2}
+    assert of["still_element_issues"] == {"1": [regen_calls[1][0]]}  # 仍违规保留并记录
+    assert of["still_overflowing"] == {}  # 页级没超，不重复提示
+    assert "still bad" in out[0].html
+
+
+def test_element_issue_and_page_overflow_feed_regen_together(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
+    both = {"over": 200, "clips": [{"desc": "原文段落卡（Para.2…）", "px": 45}], "overlaps": []}
+    seq = [([b"a"], [both], None), ([b"a1"], [{"over": 5, "clips": [], "overlaps": []}], None)]
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
+    regen_calls: list = []
+
+    def regen(i, pg, problems):
+        regen_calls.append(problems)
+        return _ContentPage(title=pg.title, intent="i", html="<p>ok</p>")
+
+    vqc.run_visual_qc(_pages(1), blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=regen)
+    assert len(regen_calls[0]) == 2  # 页级问题 + 元素级问题一起带给重生成
+    assert "内容超页约" in regen_calls[0][0] and "原文段落卡" in regen_calls[0][1]
+
+
+def test_real_chromium_measures_clip_and_overlap_in_page():
+    """真实 chromium 三级测量：line-clamp 裁剪与兄弟负 margin 叠压都能量出；干净页零违规"""
+    pytest.importorskip("playwright")
+    skeleton = _load_skeleton()
+    clipped = (
+        '<section class="page active"><div class="page-focus">'
+        '<p style="height:40px;overflow:hidden">' + "line<br>" * 20 + "</p></div></section>"
+    )
+    overlapped = (
+        '<section class="page active"><div class="page-focus">'
+        '<p style="height:60px">aaa</p><p style="height:60px;margin-top:-40px">bbb</p></div></section>'
+    )
+    clean = '<section class="page active"><div class="page-focus"><p>ok</p></div></section>'
+    docs = [
+        skeleton.replace("</body>", clipped + "</body>"),
+        skeleton.replace("</body>", overlapped + "</body>"),
+        skeleton.replace("</body>", clean + "</body>"),
+    ]
+    import time as _t
+
+    shots, overflows, err = vqc._screenshot_pages_real(docs, _t.time() + 60)
+    assert err is None
+    assert overflows[0]["clips"] and overflows[0]["clips"][0]["px"] > vqc.ELEMENT_CLIP_PX_THRESHOLD
+    assert overflows[1]["overlaps"] and overflows[1]["overlaps"][0]["pct"] > 5
+    assert overflows[2] == {"over": 0, "clips": [], "overlaps": []}
+
+
 # ---- 相 B：VL 视觉检查 ----
 
 
@@ -249,7 +354,13 @@ def test_skeleton_overflow_resilience_contracts():
     css = _load_skeleton()
     assert "justify-content:safe center" in css  # 超页时顶端对齐，不上下双向裁剪
     assert "grid-template-columns:repeat(4,196px)" in css  # vocab 网格固定行列防叠压
-    assert "-webkit-line-clamp" in css  # 卡背释义限行截断
+    # 任务D 废固定高：卡片随内容等高伸展（minmax 行高 + min-height 卡 + 背面流内撑高），
+    # 不再用固定 128px / line-clamp 截断（那是「叠压变裁剪」的总根源）
+    assert "grid-auto-rows:minmax(128px,auto)" in css
+    assert ".vocab-card{width:196px;min-height:128px;" in css
+    assert "grid-auto-rows:128px" not in css and ";height:128px" not in css
+    assert "-webkit-line-clamp" not in css
+    assert ".vocab-card .back{min-height:128px;display:flex" in css  # 背面流内撑高，正面 absolute 跟随
 
 
 # ---- 端到端（fake LLM + 假截图/VL） ----

@@ -49,14 +49,16 @@ details.reveal[open] summary::before{content:"点击收起　"}
 ol.timeline{list-style:none;display:flex;flex-direction:column;gap:14px}
 ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:var(--card);opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
 ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
-.vocab-grid{display:grid;grid-template-columns:repeat(4,196px);grid-auto-rows:128px;gap:18px;justify-content:center}
-.vocab-card{width:196px;height:128px;perspective:900px;cursor:default}
-.vocab-card .inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s}
+/* 任务D 废固定高：行高 minmax 随内容伸展、同行卡片等高；背面改流内元素撑高
+   （正面 absolute 跟随），从根上消除「释义超出 128px 被裁」的叠压变裁剪问题 */
+.vocab-grid{display:grid;grid-template-columns:repeat(4,196px);grid-auto-rows:minmax(128px,auto);gap:18px;justify-content:center}
+.vocab-card{width:196px;min-height:128px;perspective:900px;cursor:default}
+.vocab-card .inner{position:relative;transform-style:preserve-3d;transition:transform .5s}
 .vocab-card:hover .inner,.vocab-card.flip .inner{transform:rotateY(180deg)}
-.vocab-card .front,.vocab-card .back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;padding:12px;border:1px solid var(--line);background:var(--card);text-align:center;overflow:hidden}
-.vocab-card .front{display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
+.vocab-card .front,.vocab-card .back{box-sizing:border-box;backface-visibility:hidden;border-radius:10px;padding:12px;border:1px solid var(--line);text-align:center}
+.vocab-card .front{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);font-family:var(--font-title);font-size:27px;font-weight:700;color:var(--ink)}
 .vocab-card .front .phonetic{font-family:var(--font-body);font-size:var(--fs-caption);font-weight:400;color:var(--muted);margin-top:6px}
-.vocab-card .back{transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:15px;line-height:1.6;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5}
+.vocab-card .back{min-height:128px;display:flex;flex-direction:column;justify-content:center;transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:15px;line-height:1.6}
 .timer{display:inline-flex;align-items:center;gap:16px}
 .timer .timer-display{font-family:var(--font-title);font-size:50px;font-weight:700;color:var(--accent);min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
 .timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
