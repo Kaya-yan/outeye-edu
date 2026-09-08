@@ -44,6 +44,22 @@ interface ExportArtifactItem {
   extra_data?: { content_count?: number; fallback?: boolean };
 }
 
+interface OverflowNotice {
+  page: number;
+  pct: number;
+  note: string;
+}
+
+function parseOverflowNotices(sourceMeta: unknown): OverflowNotice[] {
+  if (!sourceMeta || typeof sourceMeta !== "object") return [];
+  const raw = (sourceMeta as Record<string, unknown>).overflow_notices;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (n): n is OverflowNotice =>
+      !!n && typeof n === "object" && typeof (n as OverflowNotice).note === "string"
+  );
+}
+
 export default function CoursewareDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -180,6 +196,8 @@ export default function CoursewareDetailPage() {
     );
   }
 
+  const overflowNotices = parseOverflowNotices(project.source_meta);
+
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <header className="max-w-7xl mx-auto brand-surface px-6 py-7 sm:px-8 sm:py-8 mb-6">
@@ -250,6 +268,17 @@ export default function CoursewareDetailPage() {
         {extractedMsg && (
           <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {extractedMsg}
+          </div>
+        )}
+
+        {overflowNotices.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="font-medium">以下页面内容较满，已按原样交付，建议在编辑器中精简：</div>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+              {overflowNotices.map((n) => (
+                <li key={n.page}>{n.note}</li>
+              ))}
+            </ul>
           </div>
         )}
 

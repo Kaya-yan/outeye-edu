@@ -153,7 +153,9 @@ def _run_generate():
     )
 
 
-def test_generate_consistency_end_to_end(fake_llm):
+def test_generate_consistency_end_to_end(fake_llm, monkeypatch):
+    # 相位隔离：本测试校验 S7 一致性审校，关闭交互自检避免其补强重生成错位消耗预排回复
+    monkeypatch.setattr("app.core.config.settings.INTERACTION_CHECK_ENABLED", False)
     fake_llm(
         _planner_json(),
         *[_PAGE for _ in range(4)],

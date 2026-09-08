@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     VISUAL_QC_ENABLED: bool = True            # S6 VL 多模态视觉检查（仅门控视觉模型相，外部依赖 DashScope）
     OVERFLOW_GATE_ENABLED: bool = True        # S6 溢出硬关卡（本地几何检测，零外部依赖；chromium 为部署硬依赖）
     CONSISTENCY_REVIEW_ENABLED: bool = True   # S7 全局一致性审校（术语统一）
+    INTERACTION_CHECK_ENABLED: bool = True    # 交互有效性自检（标记结构契约 + 交互多样性，纯本地）
 
     # 视觉质检多模态模型（S6 相 B：DashScope OpenAI 兼容模式；未配 key 时 VL 检查跳过，溢出硬关卡不受影响）
     VISION_API_KEY: str = ""

@@ -20,11 +20,15 @@ const KIND_LABELS: Record<string, string> = {
   cover: "封面页",
   agenda: "目标页",
   vocab: "词汇预教页",
+  text_anatomy: "原文解剖页",
+  lang_points: "语言点页",
   deep_reading: "精讲页",
   language_focus: "语言聚焦页",
   interaction: "互动检测页",
   summary: "总结页",
 };
+
+const ANATOMY_KINDS = new Set(["text_anatomy", "deep_reading"]);
 
 const ADDABLE_KINDS = ["interaction", "language_focus", "vocab", "agenda"];
 const MAX_PAGES = 25;
@@ -53,7 +57,10 @@ export default function PageBlueprintEditor({
   const focusValue = useRef("");
 
   const covered = new Set<number>();
-  pages.forEach((p) => (p.para || []).forEach((n) => covered.add(n)));
+  // 只有解剖类页型承担段落覆盖；语言点页与解剖页同锚，重复计数会掩盖漏段
+  pages.forEach((p) => {
+    if (ANATOMY_KINDS.has(p.kind)) (p.para || []).forEach((n) => covered.add(n));
+  });
   const missingParas =
     meta && meta.n_paras > 0
       ? Array.from({ length: meta.n_paras }, (_, i) => i + 1).filter((n) => !covered.has(n))
@@ -137,7 +144,7 @@ export default function PageBlueprintEditor({
       )}
       {missingParas.length > 0 && (
         <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs leading-5 text-amber-800">
-          第 {missingParas.join("、")} 段未被精讲页覆盖：确认生成时将自动改用内部规划补齐，建议为这些段落保留或补回精讲页。
+          第 {missingParas.join("、")} 段未被原文解剖页覆盖：确认生成时将自动改用内部规划补齐，建议为这些段落保留或补回解剖页。
         </p>
       )}
 

@@ -32,6 +32,7 @@ import time
 from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
 from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, get_theme
+from app.services.courseware_interaction_check import INTERACTION_TYPE_MARKERS as _INTERACTION_MARKERS
 from app.services.teacher_intent import intent_prompt_section
 
 PLANNER_PROMPT_NAME = "courseware_page_planner_v1"
@@ -187,14 +188,7 @@ _INLINE_STYLE_FORBIDDEN_RE = re.compile(
     r"style\s*=\s*[\"'][^\"']*\b(color|background|font-family|line-height)", re.IGNORECASE
 )
 _PAGE_FOCUS_RE = re.compile(r"class\s*=\s*[\"'][^\"']*\bpage-focus\b")
-_INTERACTION_MARKERS = {
-    "reveal": re.compile(r"<details[^>]*class\s*=\s*[\"'][^\"']*\breveal\b", re.IGNORECASE),
-    "timeline": re.compile(r"class\s*=\s*[\"'][^\"']*\btimeline\b", re.IGNORECASE),
-    "vocab-card": re.compile(r"class\s*=\s*[\"'][^\"']*\bvocab-card\b", re.IGNORECASE),
-    "timer": re.compile(r"class\s*=\s*[\"'][^\"']*\btimer\b|data-seconds\s*=", re.IGNORECASE),
-    "anatomy": re.compile(r"class\s*=\s*[\"'][^\"']*\banatomy-sentence\b", re.IGNORECASE),
-    "sent-walk": re.compile(r"class\s*=\s*[\"'][^\"']*\bsent-walk\b", re.IGNORECASE),
-}
+# 交互类型标记见文件头 import（与交互自检共用一份契约）
 
 
 def _parse_pages(answer: str) -> Tuple[str, List[_ContentPage]]:
@@ -436,25 +430,35 @@ def _slice_analysis(paragraphs: List[str], analysis: Optional[Dict[str, Any]]) -
 
 # ============ ③ 两阶段：页面蓝图（规划器 LLM + 程序硬校验 + 确定性回退） ============
 
-PAGE_KINDS = ("cover", "agenda", "vocab", "deep_reading", "language_focus", "interaction", "summary")
+PAGE_KINDS = (
+    "cover", "agenda", "vocab",
+    "text_anatomy", "lang_points",  # 任务A 拆页型：原文解剖页 + 语言点页（deep_reading 为旧版兼容）
+    "deep_reading", "language_focus", "interaction", "summary",
+)
 KIND_LABELS = {
     "cover": "封面页",
     "agenda": "目标页",
     "vocab": "词汇预教页",
+    "text_anatomy": "原文解剖页",
+    "lang_points": "语言点页",
     "deep_reading": "精讲页",
     "language_focus": "语言聚焦页",
     "interaction": "互动检测页",
     "summary": "总结页",
 }
+# 段落锚点硬要求的页型（蓝图必须有合法 para）；覆盖判定只认解剖类页型
+_ANCHORED_KINDS = ("deep_reading", "text_anatomy", "lang_points")
+_COVERAGE_KINDS = ("deep_reading", "text_anatomy")
 
 
 def _page_progress_label(spec: Dict[str, Any]) -> str:
-    """进度文案显示当前页类型（微调 c），如「第 3 段精讲页」「目标页」"""
-    if spec.get("kind") == "deep_reading" and spec.get("para"):
+    """进度文案显示当前页类型（微调 c），如「第 3 段原文解剖页」「目标页」"""
+    if spec.get("kind") in _ANCHORED_KINDS and spec.get("para"):
         idxs = spec["para"]
+        label = KIND_LABELS.get(spec["kind"], "精讲页")
         if len(idxs) > 1:
-            return f"第{idxs[0]}-{idxs[-1]}段精讲页"
-        return f"第{idxs[0]}段精讲页"
+            return f"第{idxs[0]}-{idxs[-1]}段{label}"
+        return f"第{idxs[0]}段{label}"
     return KIND_LABELS.get(spec.get("kind", ""), "内容页")
 
 
@@ -474,14 +478,14 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
         if kind not in PAGE_KINDS:
             continue
         para: Optional[List[int]] = None
-        if kind in ("deep_reading", "language_focus"):
+        if kind in _ANCHORED_KINDS or kind == "language_focus":
             raw_para = p.get("para")
             if isinstance(raw_para, int) and 1 <= raw_para <= n_paras:
                 para = [raw_para]
             elif isinstance(raw_para, list):
                 para = sorted({x for x in raw_para if isinstance(x, int) and 1 <= x <= n_paras})
-            if kind == "deep_reading" and not para:
-                continue  # 精讲页必须有合法段落锚点
+            if kind in _ANCHORED_KINDS and not para:
+                continue  # 解剖/语言点/旧精讲页必须有合法段落锚点
         pages.append({
             "kind": kind,
             "title": str(p.get("title", "")).strip()[:40],
@@ -490,7 +494,7 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
         })
     if not pages:
         return None, "无合法页面"
-    covered = {x for spec in pages if spec["kind"] == "deep_reading" for x in (spec["para"] or [])}
+    covered = {x for spec in pages if spec["kind"] in _COVERAGE_KINDS for x in (spec["para"] or [])}
     missing = [i for i in range(1, n_paras + 1) if i not in covered]
     if missing:
         return None, f"段落未被精讲页覆盖：第 {missing[:8]} 段"
@@ -499,8 +503,9 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
     if pages[-1]["kind"] != "summary":
         pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None})
     if len(pages) > MAX_BLUEPRINT_PAGES:
-        # 溢出裁剪优先级：互动 < 语言聚焦/词汇/目标 < 精讲 < 封面/总结
-        keep_priority = {"interaction": 0, "language_focus": 1, "vocab": 1, "agenda": 1, "deep_reading": 2, "cover": 3, "summary": 3}
+        # 溢出裁剪优先级：互动 < 语言聚焦/词汇/目标 < 解剖/语言点/精讲 < 封面/总结
+        keep_priority = {"interaction": 0, "language_focus": 1, "vocab": 1, "agenda": 1,
+                         "deep_reading": 2, "text_anatomy": 2, "lang_points": 2, "cover": 3, "summary": 3}
         overflow = len(pages) - MAX_BLUEPRINT_PAGES
         drop = set(sorted(
             range(len(pages)),
@@ -511,7 +516,7 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
 
 
 def _fallback_blueprint(slices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """确定性回退蓝图：封面/目标/词汇预教/逐段精讲/检测/总结；段落多时并段保 25 页上限"""
+    """确定性回退蓝图：封面/目标/词汇预教/逐段「解剖+语言点」成对页/检测/总结；段落多时并段保 25 页上限"""
     pages: List[Dict[str, Any]] = [
         {"kind": "cover", "title": "", "intent": "建立主题情境，激活已知", "para": None},
         {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": None},
@@ -519,13 +524,21 @@ def _fallback_blueprint(slices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if any(s["difficult_words"] for s in slices):
         pages.append({"kind": "vocab", "title": "词汇预教", "intent": "预教难点词，先建立词形识别", "para": None})
     budget = max(MAX_BLUEPRINT_PAGES - len(pages) - 2, 1)  # 给检测页与总结页留位
-    per_page = max(1, -(-len(slices) // budget))
-    for start in range(0, len(slices), per_page):
-        idxs = [s["index"] for s in slices[start:start + per_page]]
+    # 拆页型成对出现（解剖+语言点各一页），预算按页计：每组段落数 = ceil(2*段数/预算)
+    per_group = max(1, -(-(len(slices) * 2) // budget))
+    for start in range(0, len(slices), per_group):
+        idxs = [s["index"] for s in slices[start:start + per_group]]
+        span = f"第{idxs[0]}段" if len(idxs) == 1 else f"第{idxs[0]}-{idxs[-1]}段"
         pages.append({
-            "kind": "deep_reading",
-            "title": f"第{idxs[0]}段精讲" if len(idxs) == 1 else f"第{idxs[0]}-{idxs[-1]}段精讲",
-            "intent": "逐段细读：原文、主旨、长难句、语言点、衔接",
+            "kind": "text_anatomy",
+            "title": f"{span}原文解剖",
+            "intent": "原文呈现、段落主旨与长难句解剖",
+            "para": idxs,
+        })
+        pages.append({
+            "kind": "lang_points",
+            "title": f"{span}语言点",
+            "intent": "逐句细读、语言点与衔接点评",
             "para": idxs,
         })
     pages.append({"kind": "interaction", "title": "理解检测", "intent": "基于课文命题，检验理解", "para": None})
@@ -970,6 +983,40 @@ def generate_html_courseware(
                 accent_note = f"声明值 {accent or '未声明'} 不在色板，已用默认 {DEFAULT_ACCENT}"
                 accent = DEFAULT_ACCENT
 
+            # 单页定向重生成的共用通道（交互自检与视觉质检共用）
+            def _regen_for_phase(i: int, pg: _ContentPage, problems: List[str]) -> Optional[_ContentPage]:
+                spec = blueprint[i]
+                prev_t = (blueprint[i - 1].get("title") or KIND_LABELS.get(blueprint[i - 1]["kind"], "未知")) if i else "（无）"
+                next_t = (blueprint[i + 1].get("title") or KIND_LABELS.get(blueprint[i + 1]["kind"], "未知")) if i + 1 < len(blueprint) else "（无）"
+                page_system, _ = render_prompt(PAGE_PROMPT_NAME)
+                page_prompt = _build_page_prompt(
+                    spec, page_no=i + 1, total=len(blueprint),
+                    context_nav=f"前一页「{prev_t}」，后一页「{next_t}」", **prompt_kwargs,
+                )
+                rewritten = _regen_page(generator, page_system, page_prompt, pg, i + 1, problems)
+                if rewritten is not None:
+                    rewritten.title = rewritten.title or spec.get("title") or ""
+                    rewritten.intent = spec.get("intent") or rewritten.intent
+                return rewritten
+
+            # 任务A2 交互有效性自检：标记结构与骨架钩子契约匹配 + 全课件交互类型 ≥3 种
+            interaction_check_summary: Optional[Dict[str, Any]] = None
+            _ix_on = getattr(settings, "INTERACTION_CHECK_ENABLED", True)
+            if _ix_on:
+                try:
+                    from app.services.courseware_interaction_check import run_interaction_check
+
+                    _progress("正在做交互有效性自检…")
+                    pages, interaction_check_summary = run_interaction_check(
+                        pages, blueprint=blueprint, regen_page=_regen_for_phase, progress_cb=_progress,
+                    )
+                except Exception as ix_e:
+                    logger.warning(f"交互有效性自检整体异常，跳过: {ix_e}")
+                    interaction_check_summary = {"enabled": True, "error": str(ix_e)[:200]}
+            else:
+                logger.info("交互有效性自检跳过：INTERACTION_CHECK_ENABLED=false")
+                interaction_check_summary = {"enabled": False}
+
             # S6 视觉质检（两相）：溢出硬关卡（OVERFLOW_GATE_ENABLED，本地几何）+ VL 检查（VISUAL_QC_ENABLED）
             visual_qc_summary: Optional[Dict[str, Any]] = None
             _vl_on = getattr(settings, "VISUAL_QC_ENABLED", True)
@@ -981,26 +1028,11 @@ def generate_html_courseware(
                     def _make_doc(pg: _ContentPage) -> str:
                         return _assemble_skeleton(title, accent, [pg], theme=cw_theme)
 
-                    def _regen_for_visual(i: int, pg: _ContentPage, problems: List[str]) -> Optional[_ContentPage]:
-                        spec = blueprint[i]
-                        prev_t = (blueprint[i - 1].get("title") or KIND_LABELS.get(blueprint[i - 1]["kind"], "未知")) if i else "（无）"
-                        next_t = (blueprint[i + 1].get("title") or KIND_LABELS.get(blueprint[i + 1]["kind"], "未知")) if i + 1 < len(blueprint) else "（无）"
-                        page_system, _ = render_prompt(PAGE_PROMPT_NAME)
-                        page_prompt = _build_page_prompt(
-                            spec, page_no=i + 1, total=len(blueprint),
-                            context_nav=f"前一页「{prev_t}」，后一页「{next_t}」", **prompt_kwargs,
-                        )
-                        rewritten = _regen_page(generator, page_system, page_prompt, pg, i + 1, problems)
-                        if rewritten is not None:
-                            rewritten.title = rewritten.title or spec.get("title") or ""
-                            rewritten.intent = spec.get("intent") or rewritten.intent
-                        return rewritten
-
                     pages, visual_qc_summary = run_visual_qc(
                         pages,
                         blueprint=blueprint,
                         make_doc=_make_doc,
-                        regen_page=_regen_for_visual,
+                        regen_page=_regen_for_phase,
                         kind_labels=KIND_LABELS,
                         progress_cb=_progress,
                         vl_enabled=_vl_on,
@@ -1011,6 +1043,17 @@ def generate_html_courseware(
                     visual_qc_summary = {"enabled": True, "error": str(qc_e)[:200]}
             else:
                 logger.info("视觉质检环节跳过：VISUAL_QC_ENABLED 与 OVERFLOW_GATE_ENABLED 均为 false")
+
+            # 任务A3 溢出兜底提示：重生成 2 轮后仍超出的页，写入课件元数据（前端给教师明确提示，不静默交付）
+            overflow_notices: List[Dict[str, Any]] = []
+            if visual_qc_summary:
+                _still = (visual_qc_summary.get("overflow") or {}).get("still_overflowing") or {}
+                overflow_notices = [
+                    {"page": int(k), "pct": v, "note": f"第 {k} 页内容较多（超页约 {v}%），建议在编辑器中精简"}
+                    for k, v in sorted(_still.items(), key=lambda kv: int(kv[0]))
+                ]
+            if overflow_notices:
+                logger.info("溢出兜底提示（已随课件交付）：" + "；".join(n["note"] for n in overflow_notices))
             self_check = {
                 "prompt_version": version,
                 "planner_version": prompt_version(PLANNER_PROMPT_NAME),
@@ -1031,6 +1074,7 @@ def generate_html_courseware(
                     {"page": i + 1, "title": p.title, "intent": p.intent} for i, p in enumerate(pages)
                 ],
                 "interaction_types": sorted(_interaction_types(pages)),
+                "interaction_check": interaction_check_summary if interaction_check_summary is not None else {"enabled": False},
                 "regenerated_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["regens"]],
                 "sanitized_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["sanitized"]],
                 "stub_pages": [i + 1 for i in sorted(page_infos) if page_infos[i]["stub"]],
@@ -1091,6 +1135,7 @@ def generate_html_courseware(
             "theme": cw_theme.id,
             "page_blueprint": blueprint,
             "consistency_review": consistency_summary,
+            "overflow_notices": overflow_notices or None,
         }
         schema = _wrap_llm_schema(title, html, source_meta)
         sync = _structure_sync_from_pages(schema)

@@ -39,6 +39,12 @@ interface ConsistencyReview {
   rolled_back?: boolean;
 }
 
+interface OverflowNotice {
+  page: number;
+  pct: number;
+  note: string;
+}
+
 interface CoursewareProject {
   id: string;
   title: string;
@@ -46,7 +52,11 @@ interface CoursewareProject {
   source_type: string;
   status: string;
   current_version_id: string | null;
-  source_meta?: { generated_by?: string; consistency_review?: ConsistencyReview | null } | null;
+  source_meta?: {
+    generated_by?: string;
+    consistency_review?: ConsistencyReview | null;
+    overflow_notices?: OverflowNotice[] | null;
+  } | null;
 }
 
 interface CoursewareVersion {
@@ -92,6 +102,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [components, setComponents] = useState<OfficialComponent[]>([]);
   const [reviewOn, setReviewOn] = useState(false);
+  const [overflowDismissed, setOverflowDismissed] = useState(false);
 
   const [history, setHistory] = useState<VePatch[][]>([[]]);
   const [hIndex, setHIndex] = useState(0);
@@ -617,6 +628,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   const srcDoc = sourceHtml ? injectAgent(sourceHtml, channel) : "";
   const consistency = project.source_meta?.consistency_review;
+  const overflowNotices = project.source_meta?.overflow_notices || [];
   const reviewNotes = consistency?.structure_notes || [];
   const reviewReplaced = consistency?.total_replaced || 0;
   const hasReview = reviewNotes.length > 0 || reviewReplaced > 0;
@@ -739,6 +751,23 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           </button>
         </div>
       </header>
+
+      {overflowNotices.length > 0 && !overflowDismissed && (
+        <div className="flex-shrink-0 flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <span className="leading-5">
+            <span className="font-medium">部分页面内容较满：</span>
+            {overflowNotices.map((n) => n.note).join("；")}
+            ，超出 16:9 版心的内容放映时会被裁剪，建议在编辑器中精简。
+          </span>
+          <button
+            onClick={() => setOverflowDismissed(true)}
+            className="ml-auto flex-shrink-0 text-amber-500 hover:text-amber-800"
+            aria-label="关闭提示"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 relative overflow-hidden">
         {srcDoc ? (

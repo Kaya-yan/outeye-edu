@@ -96,6 +96,25 @@ def test_normalize_blueprint_rejects_missing_para_coverage():
     assert pages is None and "覆盖" in reason and "2" in reason
 
 
+def test_normalize_blueprint_accepts_paired_anatomy_and_lang_points():
+    pages, reason = _normalize_blueprint({"pages": [
+        {"kind": "text_anatomy", "title": "第1段原文解剖", "intent": "i", "para": 1},
+        {"kind": "lang_points", "title": "第1段语言点", "intent": "i", "para": 1},
+    ]}, 1)
+    assert reason == "" and pages is not None
+    assert [p["kind"] for p in pages] == ["cover", "text_anatomy", "lang_points", "summary"]
+    assert pages[1]["para"] == [1] and pages[2]["para"] == [1]
+
+
+def test_normalize_blueprint_lang_points_alone_does_not_cover_paras():
+    # 覆盖判定只认解剖类页型：仅语言点页锚定全部段落仍判漏段
+    pages, reason = _normalize_blueprint({"pages": [
+        {"kind": "lang_points", "title": "第1段语言点", "intent": "i", "para": 1},
+        {"kind": "lang_points", "title": "第2段语言点", "intent": "i", "para": 2},
+    ]}, 2)
+    assert pages is None and "覆盖" in reason
+
+
 def test_normalize_blueprint_truncates_to_25_keeping_priority():
     specs = [{"kind": "interaction", "title": f"x{i}", "intent": "i", "para": None} for i in range(24)]
     specs.append({"kind": "deep_reading", "title": "d", "intent": "i", "para": 1})
@@ -111,14 +130,25 @@ def test_fallback_blueprint_covers_all_paragraphs_within_cap():
         for i in range(1, 31)
     ]
     pages = _fallback_blueprint(slices)
-    covered = {x for p in pages if p["kind"] == "deep_reading" for x in p["para"]}
+    covered = {x for p in pages if p["kind"] == "text_anatomy" for x in p["para"]}
     assert covered == set(range(1, 31))
     assert len(pages) <= MAX_BLUEPRINT_PAGES
+
+
+def test_fallback_blueprint_pairs_anatomy_with_lang_points_on_same_para():
+    slices = [{"index": 1, "preview": "p", "word_count": 10, "difficult_words": ["w"], "long_sentences": []}]
+    pages = _fallback_blueprint(slices)
+    assert [p["kind"] for p in pages] == [
+        "cover", "agenda", "vocab", "text_anatomy", "lang_points", "interaction", "summary",
+    ]
+    assert pages[3]["para"] == [1] and pages[4]["para"] == [1]
 
 
 def test_page_progress_label_carries_page_type():
     assert _page_progress_label({"kind": "deep_reading", "para": [3]}) == "第3段精讲页"
     assert _page_progress_label({"kind": "deep_reading", "para": [2, 3]}) == "第2-3段精讲页"
+    assert _page_progress_label({"kind": "text_anatomy", "para": [3]}) == "第3段原文解剖页"
+    assert _page_progress_label({"kind": "lang_points", "para": [2, 3]}) == "第2-3段语言点页"
     assert _page_progress_label({"kind": "agenda", "para": None}) == "目标页"
 
 
@@ -177,7 +207,7 @@ def test_planner_two_failures_fall_back_to_deterministic():
     gen = _MiniGen("垃圾输出", "还是垃圾")
     pages, accent, source, note = _plan_blueprint(gen, **_PLAN_KW)
     assert source == "fallback" and "校验" in note
-    covered = {x for p in pages if p["kind"] == "deep_reading" for x in p["para"]}
+    covered = {x for p in pages if p["kind"] == "text_anatomy" for x in p["para"]}
     assert covered == {1, 2}
 
 
@@ -370,3 +400,57 @@ def test_generate_no_api_falls_back_to_bootstrap(fake_llm, monkeypatch):
     result = _run_generate()
     assert result.fallback is True
     assert result.self_check.get("prompt_version") == "fallback"
+
+
+# ---- 任务A2/A3：交互自检接线与溢出提示交付 ----
+
+
+def test_generate_runs_interaction_check_and_records_summary(fake_llm):
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    ix = result.self_check["interaction_check"]
+    assert ix["enabled"] is True and ix["min_types"] == 3
+    assert "anatomy" in ix["types_found"] and "sent-walk" in ix["types_found"]
+    assert ix["structural_problem_pages"] == {}
+
+
+def test_generate_interaction_check_disabled(fake_llm, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "INTERACTION_CHECK_ENABLED", False)
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    assert result.self_check["interaction_check"] == {"enabled": False}
+    assert result.self_check["pages_count"] == 4
+
+
+def test_generate_interaction_check_error_degrades(fake_llm, monkeypatch):
+    def _boom(*args, **kwargs):
+        raise RuntimeError("ix boom")
+
+    monkeypatch.setattr("app.services.courseware_interaction_check.run_interaction_check", _boom)
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    ix = result.self_check["interaction_check"]
+    assert ix["enabled"] is True and "ix boom" in ix["error"]
+
+
+def test_generate_overflow_notices_delivered_to_source_meta(fake_llm, monkeypatch):
+    def _fake_visual_qc(pages, **kwargs):
+        return list(pages), {"overflow": {"still_overflowing": {"2": 12}}}
+
+    monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    notices = result.editor_schema["meta"]["source_meta"]["overflow_notices"]
+    assert notices == [{"page": 2, "pct": 12, "note": "第 2 页内容较多（超页约 12%），建议在编辑器中精简"}]
+
+
+def test_generate_no_overflow_notices_when_gate_clean(fake_llm, monkeypatch):
+    def _fake_visual_qc(pages, **kwargs):
+        return list(pages), {"overflow": {"still_overflowing": {}}}
+
+    monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
+    fake_llm(*_two_stage_replies())
+    result = _run_generate()
+    assert result.editor_schema["meta"]["source_meta"].get("overflow_notices") is None

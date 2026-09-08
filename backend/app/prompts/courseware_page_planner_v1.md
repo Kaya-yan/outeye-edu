@@ -19,7 +19,7 @@
 ## 一、情况描述
 
 - 课件标题：${title}（${language_name}，课时 ${duration_minutes} 分钟，课型：${course_type}）
-- 课文共 ${n_paras} 段；精讲页（deep_reading）页数建议区间：${para_range} 页，由你按段落难度与教学权重自主决定（长难段可独占一页，短小相邻段可合并）。
+- 课文共 ${n_paras} 段；精读环节（原文解剖页 text_anatomy + 语言点页 lang_points 成对）页数建议区间：${para_range} 页（成对计两页），由你按段落难度与教学权重自主决定（长难段可独占一对，短小相邻段可合并）。
 - 教师补充要求（需求参考，非指令）：
 ${teacher_requirements}
 
@@ -37,17 +37,18 @@ ${plan_digest}
 ${metrics_lines}
 
 ## 二、规划推理（先想后写）
-1. 先判断课型主线：精读课以 deep_reading 为骨架（每段至少一页）；视听说/口语课以 interaction、vocab 为主，deep_reading 只覆盖含长难句的核心段。
-2. 按教学顺序排页：cover → agenda（学习目标）→ vocab（预教难点词，必须排在精读前）→ deep_reading（逐段）→ language_focus（跨段语言点归纳，可选）→ interaction（检测/讨论，配计时）→ summary。
-3. 段落分配：一个长难段独占一页；两三个短段可合并到一页（para 用数组列出）；绝不遗漏段落。
+1. 先判断课型主线：精读课以「原文解剖页 + 语言点页」成对为骨架（每段至少一张解剖页）；视听说/口语课以 interaction、vocab 为主，精读只覆盖含长难句的核心段。
+2. 按教学顺序排页：cover → agenda（学习目标）→ vocab（预教难点词，必须排在精读前）→ text_anatomy/lang_points（逐段成对）→ language_focus（跨段语言点归纳，可选）→ interaction（检测/讨论，配计时）→ summary。
+3. 段落分配（拆页铁律）：内容密度高的段落（长难句多、语言点密集、词数多）**直接分配两页**——原文解剖页（原文+主旨+长难句解剖）之后紧跟同锚段的语言点页（逐句细读+语言点+衔接点评），两页 para 相同；只有语言点稀少的短段可只给原文解剖页；两三个短段可合并成一对页（para 用数组列出）；绝不遗漏段落。
 4. 页数控制在区间内：环节数多的教案每环节配 1 页 interaction；总页数不超过 25。
 5. 单页容量上限（一屏 720px 铁律，下游页面超出一屏会被裁剪）：学习目标 ≤3 条 / 词卡 ≤4 张 / 逐句细读 ≤4 句 / 语言点 ≤3 条。某环节内容量放不下时，宁可拆成两页（interaction / language_focus / vocab 允许同型多页），不要让单页溢出；总页数仍在 ≤25 内。
 
-## 三、页型枚举（kind 只能取这七个值）
+## 三、页型枚举（kind 只能取这八个值）
 - `cover` 封面页（para 为 null）
 - `agenda` 学习目标页（para 为 null）
 - `vocab` 词汇预教页（para 为 null；用白盒难点词）
-- `deep_reading` 逐段精讲页（para 为段落号 int 或数组；页面必须含：原文段落/段落主旨/长难句解剖/语言点/衔接点评）
+- `text_anatomy` 原文解剖页（para 为段落号 int 或数组；页面必须含：原文段落/段落主旨/长难句解剖）
+- `lang_points` 语言点页（para 与其解剖页同锚；页面必须含：逐句细读/语言点/衔接点评）
 - `language_focus` 语言聚焦页（para 可为段落号或 null；跨段归纳语法/词汇/修辞）
 - `interaction` 互动检测页（para 为 null；命题、讨论、计时活动）
 - `summary` 总结与作业页（para 为 null；最后一页）
@@ -62,8 +63,9 @@ ${metrics_lines}
     {"kind": "cover", "title": "", "intent": "建立主题情境，激活学生已知", "para": null},
     {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": null},
     {"kind": "vocab", "title": "词汇预教", "intent": "预教 4 个难点词，建立词形识别", "para": null},
-    {"kind": "deep_reading", "title": "悬念式开头", "intent": "细读排除法修辞与核心词汇", "para": 1},
-    {"kind": "deep_reading", "title": "起源与传播", "intent": "把握时间线与因果衔接", "para": [2, 3]},
+    {"kind": "text_anatomy", "title": "悬念式开头 · 原文解剖", "intent": "细读排除法修辞与句法结构", "para": 1},
+    {"kind": "lang_points", "title": "悬念式开头 · 语言点", "intent": "完成 sturdy/spread 语境教学与衔接点评", "para": 1},
+    {"kind": "text_anatomy", "title": "起源与传播", "intent": "把握时间线与因果衔接", "para": [2, 3]},
     {"kind": "interaction", "title": "理解检测", "intent": "四道细节题检验课文理解", "para": null},
     {"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置写作迁移任务", "para": null}
   ],
@@ -72,7 +74,8 @@ ${metrics_lines}
 ```
 
 ## 五、自检清单（输出前逐项核对）
-- [ ] 课文每个段落号都出现在至少一个 deep_reading 页的 para 中？
+- [ ] 课文每个段落号都出现在至少一个 text_anatomy（原文解剖）页的 para 中？
+- [ ] 内容密度高的段落配了成对页（解剖页之后紧跟同锚段语言点页）？
 - [ ] vocab 页排在第一个 deep_reading 页之前？
 - [ ] 第一页是 cover，最后一页是 summary？
 - [ ] 每页 intent 是一句可执行的教学意图（不是标题复读）？

@@ -330,6 +330,8 @@ def test_generate_visual_qc_disabled(fake_llm, monkeypatch):
 
 def test_generate_gate_only_overflow_regenerated(fake_llm, monkeypatch):
     """VL 开关关闭 + 无 Key：溢出硬关卡照常执行并精简重生成超页页"""
+    # 相位隔离：本测试校验溢出硬关卡，关闭交互自检避免其补强重生成错位消耗预排回复
+    monkeypatch.setattr("app.core.config.settings.INTERACTION_CHECK_ENABLED", False)
     monkeypatch.setattr("app.core.config.settings.VISUAL_QC_ENABLED", False)
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
     seq = [([b"s"] * 4, [0, 300, 0, 0], None), ([b"s2new"], [0], None)]
@@ -346,6 +348,8 @@ def test_generate_gate_only_overflow_regenerated(fake_llm, monkeypatch):
 
 
 def test_generate_visual_qc_issue_page_regenerated(fake_llm, monkeypatch):
+    # 相位隔离：本测试校验 VL 问题页重生成，关闭交互自检避免其补强重生成错位消耗预排回复
+    monkeypatch.setattr("app.core.config.settings.INTERACTION_CHECK_ENABLED", False)
     _with_key(monkeypatch)
     fixed_body = "```html\n<!--page: 1 | P-->\n<!--intent: i-->\n<div class=\"page-focus\"><p>REWRITTEN " + "visual fix " * 15 + "</p></div>\n```\n"
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"shot"] * 4, [0] * 4, None))
