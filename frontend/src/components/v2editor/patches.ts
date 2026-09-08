@@ -28,6 +28,7 @@ export interface VePatch {
   oeId?: string;
   moveId?: string;
   targetIndex?: number;
+  toPage?: number;
   fingerprint: VePatchFingerprint;
 }
 

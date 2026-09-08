@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { VeChainNode, VeTarget } from "./rpc";
+import type { VeChainNode, VePageInfo, VeTarget } from "./rpc";
 
 function rgbToHex(rgb: string): string {
   const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
@@ -34,6 +34,8 @@ export default function Inspector({
   onStartTextEdit,
   onImageReplace,
   onMoveElement,
+  onMoveToPage,
+  pages,
   components,
   onInsertComponent,
   onInsertTextBox,
@@ -47,6 +49,8 @@ export default function Inspector({
   onStartTextEdit: (selector: string) => void;
   onImageReplace: (selector: string, src: string) => void;
   onMoveElement: (dir: 1 | -1) => void;
+  onMoveToPage: (pageNo: number) => void;
+  pages: VePageInfo[];
   components: InspectorComponent[];
   onInsertComponent: (component: InspectorComponent, position: "after" | "before" | "append") => void;
   onInsertTextBox: (position: "after" | "before" | "append") => void;
@@ -71,6 +75,8 @@ export default function Inspector({
   const [selectedCompId, setSelectedCompId] = useState<string>("");
   const selectedComp = components.find((c) => c.id === selectedCompId) || null;
   const [insertPos, setInsertPos] = useState<"after" | "before" | "append">("after");
+  const [movePage, setMovePage] = useState<string>("");
+  const otherPages = pages.filter((pg) => pg.n !== target.page);
 
   const commitSize = () => {
     const n = parseFloat(sizeText);
@@ -118,7 +124,7 @@ export default function Inspector({
       </div>
 
       <div className="px-4 py-3 border-b border-slate-100">
-        <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-2">同级排序</div>
+        <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-2">移动</div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-slate-500">
             {target.siblingCount > 0 ? `同级第 ${target.siblingIndex + 1} / ${target.siblingCount} 位` : "无同级元素"}
@@ -140,6 +146,36 @@ export default function Inspector({
             </button>
           </div>
         </div>
+        {target.tag !== "section" && otherPages.length > 0 && (
+          <div className="mt-2.5 flex items-center gap-1.5">
+            <select
+              value={movePage}
+              onChange={(e) => setMovePage(e.target.value)}
+              aria-label="跨页移动目标页"
+              className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-500"
+            >
+              <option value="">移动到第 N 页…</option>
+              {otherPages.map((pg) => (
+                <option key={pg.n} value={pg.n}>
+                  第 {pg.n} 页{pg.title ? ` · ${pg.title}` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                const n = parseInt(movePage, 10);
+                if (n > 0) {
+                  onMoveToPage(n);
+                  setMovePage("");
+                }
+              }}
+              disabled={!movePage}
+              className="flex-shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+            >
+              移动
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 border-b border-slate-100 space-y-3">

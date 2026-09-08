@@ -460,6 +460,35 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     [target, patches, mutatePatches]
   );
 
+  // 跨页移动：走菜单而非视觉拖拽，重放时 appendChild 到目标页 .page-focus 末尾
+  const onMoveToPage = useCallback(
+    (pageNo: number) => {
+      if (!target) return;
+      const byOeId = target.oeId
+        ? patches.find((p) => p.kind === "move" && p.moveId === target.oeId)
+        : undefined;
+      const exists =
+        byOeId || patches.find((p) => p.kind === "move" && p.id === patchId(target.selector, "move"));
+      if (exists && exists.toPage === pageNo) return;
+      const moveId = exists?.moveId || nextOeId(patches, "oe-mv");
+      const { targetIndex: _drop, toPage: _prev, ...rest } = exists || ({} as VePatch);
+      const next: VePatch = {
+        ...rest,
+        id: exists ? exists.id : patchId(target.selector, "move"),
+        kind: "move",
+        selector: exists ? exists.selector : target.selector,
+        label: `${targetLabel(target)} · 移至第 ${pageNo} 页`,
+        toPage: pageNo,
+        moveId,
+        fingerprint: exists ? exists.fingerprint : makeFingerprint(target),
+      };
+      mutatePatches(
+        exists ? patches.map((p) => (p.id === exists.id ? next : p)) : patches.concat([next])
+      );
+    },
+    [target, patches, mutatePatches]
+  );
+
   const onInsertComponent = useCallback(
     (component: OfficialComponent, position: VeInsertPosition) => {
       if (!target) return;
@@ -822,6 +851,8 @@ export default function V2Editor({ projectId }: { projectId: string }) {
             onStartTextEdit={(sel) => sendRpc("ve:text:edit", { selector: sel })}
             onImageReplace={onImageReplace}
             onMoveElement={onMoveElement}
+            onMoveToPage={onMoveToPage}
+            pages={pages}
             components={components}
             onInsertComponent={onInsertComponent}
             onInsertTextBox={onInsertTextBox}
@@ -853,7 +884,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                       <span className="ml-1.5 text-[11px] text-slate-400">图片已替换</span>
                     ) : p.kind === "move" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">
-                        移至同级第 {(p.targetIndex ?? 0) + 1} 位
+                        {p.toPage ? `移至第 ${p.toPage} 页` : `移至同级第 ${(p.targetIndex ?? 0) + 1} 位`}
                       </span>
                     ) : p.kind === "insert" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">
