@@ -23,7 +23,7 @@ import re
 import json
 
 from app.services.prompt_manager import render_prompt, prompt_version
-from app.services.teacher_intent import intent_prompt_section
+from app.services.teacher_intent import intent_prompt_section, source_text_guard
 
 PROMPT_NAME = "lesson_plan_v2"
 
@@ -152,7 +152,7 @@ def build_fusion_prompt(
         class_size=int(class_size or 30),
         native_language=_esc(native_language or "中文"),
         language_note=language_note,
-        full_text=_esc(prepare_text(text_content or "")),
+        full_text=source_text_guard(_esc(prepare_text(text_content or ""))),
         total_words=vocab.get("total_words", 0),
         unique_words=vocab.get("unique_words", 0),
         cefr_line=_build_cefr_line(vocab.get("cefr_distribution", {})),

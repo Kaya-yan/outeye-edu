@@ -33,7 +33,7 @@ from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
 from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, get_theme
 from app.services.courseware_interaction_check import INTERACTION_TYPE_MARKERS as _INTERACTION_MARKERS
-from app.services.teacher_intent import intent_prompt_section
+from app.services.teacher_intent import intent_prompt_section, source_text_guard
 
 PLANNER_PROMPT_NAME = "courseware_page_planner_v1"
 PAGE_PROMPT_NAME = "courseware_html_page_v2"
@@ -590,7 +590,7 @@ def _plan_blueprint(
         course_type=_esc(course_type or "综合"),
         n_paras=n_paras,
         para_range=f"{n_paras}~{n_paras * 2}",
-        paragraphs_digest=_esc(_paragraphs_digest(slices)),
+        paragraphs_digest=source_text_guard(_esc(_paragraphs_digest(slices))),
         plan_digest=_esc(_format_plan_text(plan)[:3000]),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
         teacher_requirements=intent_prompt_section(teaching_intent),
@@ -655,7 +655,8 @@ def _build_page_prompt(
     para_block = "（本页无段落锚点）"
     slices_block = "-（本页无段落锚点）"
     if idxs:
-        para_block = "\n\n".join(f"【第{i}段】\n{_esc(paragraphs[i - 1])}" for i in idxs)
+        # 任务E2：锚定段原文统一防御包裹（数据非指令），模板侧不再重复 <user_content> 标签
+        para_block = source_text_guard("\n\n".join(f"【第{i}段】\n{_esc(paragraphs[i - 1])}" for i in idxs))
         parts = []
         for s in (x for x in slices if x["index"] in idxs):
             words = "、".join(s["difficult_words"][:8]) or "（无）"
@@ -664,7 +665,7 @@ def _build_page_prompt(
         slices_block = "\n".join(parts)
     text_block = ""
     if spec["kind"] == "interaction":
-        text_block = "### 课文全文（命题依据，答案必须可在课文找到依据）\n<user_content>\n" + _esc(prepare_text(text or ""))[:6000] + "\n</user_content>"
+        text_block = "### 课文全文（命题依据，答案必须可在课文找到依据）\n" + source_text_guard(_esc(prepare_text(text or ""))[:6000])
     _, user_prompt = render_prompt(
         PAGE_PROMPT_NAME,
         title=_esc(title),
@@ -681,7 +682,7 @@ def _build_page_prompt(
         context_nav=_esc(context_nav),
         para_block=para_block,
         slices_block=slices_block,
-        paragraphs_digest=_esc(_paragraphs_digest(slices)),
+        paragraphs_digest=source_text_guard(_esc(_paragraphs_digest(slices))),
         plan_digest=_esc(_format_plan_text(plan)[:3000]),
         objectives_digest=_esc(_objectives_digest(plan)),
         components_digest=_esc(_build_components_digest(components)),
@@ -1269,7 +1270,7 @@ def _build_ppt_prompt(
         class_size=int(class_size or 30),
         native_language=_esc(native_language or "中文"),
         slide_count_hint=int(slide_count_hint),
-        full_text=_esc(prepare_text(text or "")),
+        full_text=source_text_guard(_esc(prepare_text(text or ""))),
         plan_text=_esc(_format_plan_text(plan)),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
         teacher_requirements=intent_prompt_section(teaching_intent),
@@ -1604,7 +1605,7 @@ def _build_word_prompt(
         course_type=_esc(course_type or "综合"),
         class_size=int(class_size or 30),
         native_language=_esc(native_language or "中文"),
-        full_text=_esc(prepare_text(text or "")),
+        full_text=source_text_guard(_esc(prepare_text(text or ""))),
         plan_text=_esc(_format_plan_text(plan)),
         metrics_lines=_esc(_build_metrics_lines(analysis)),
         teacher_requirements=intent_prompt_section(teaching_intent),

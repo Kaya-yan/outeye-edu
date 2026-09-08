@@ -16,6 +16,7 @@ import time
 
 from app.services.prompt_manager import render_prompt, prompt_version
 from app.services.analysis.fusion_generator import _esc, prepare_text
+from app.services.teacher_intent import source_text_guard
 
 PROMPT_NAME = "culture_background_v1"
 
@@ -120,7 +121,7 @@ def enrich_cultural_elements(
             PROMPT_NAME,
             language_name=_esc(language_name or "英语"),
             element_count=len(elements),
-            full_text=_esc(prepare_text(text or "")),
+            full_text=source_text_guard(_esc(prepare_text(text or ""))),
             elements_block=_esc(_format_elements_block(elements)),
         )
 

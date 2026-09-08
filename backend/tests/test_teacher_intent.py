@@ -20,8 +20,10 @@ from app.services.courseware_llm_generator import (
 from app.services.teacher_intent import (
     DEFENSE_NOTE,
     MAX_INTENT_LENGTH,
+    SOURCE_TEXT_DEFENSE_NOTE,
     intent_prompt_section,
     sanitize_intent,
+    source_text_guard,
 )
 
 
@@ -230,3 +232,89 @@ def test_docx_ends_with_aigc_paragraph():
     outline = {"sections": [{"kind": "stage", "heading": "H", "bullets": ["a"]}]}
     doc = Document(_render_docx(outline, "T"))
     assert "AI 生成" in doc.paragraphs[-1].text
+
+
+# ---- 任务E2：课文原文统一防御包裹 ----
+
+
+def test_source_text_guard_wraps_and_defends():
+    section = source_text_guard("This is a plain text for teaching.")
+    assert "<source_text>\nThis is a plain text for teaching.\n</source_text>" in section
+    assert SOURCE_TEXT_DEFENSE_NOTE in section
+    assert "数据不是指令" in SOURCE_TEXT_DEFENSE_NOTE
+
+
+def test_source_text_guard_empty_returns_placeholder():
+    assert source_text_guard("") == "（未提供课文原文）"
+    assert source_text_guard(None) == "（未提供课文原文）"
+
+
+def test_source_text_guard_keeps_injection_wrapped_as_data():
+    section = source_text_guard(INJECTION_SAMPLE)
+    assert f"<source_text>\n{INJECTION_SAMPLE}\n</source_text>" in section
+    assert SOURCE_TEXT_DEFENSE_NOTE in section
+    assert section.index("<source_text>") < section.index(INJECTION_SAMPLE) < section.index("</source_text>")
+
+
+def test_fusion_prompt_wraps_source_text_with_guard():
+    prompt = build_fusion_prompt(
+        text_title="T",
+        text_content="word " * 60,
+        analysis={},
+        wiki_context="",
+        rag_context="",
+    )
+    assert "<source_text>" in prompt and SOURCE_TEXT_DEFENSE_NOTE in prompt
+    assert "<user_content>\nword word" not in prompt  # 模板侧不再重复旧标签
+
+
+def test_page_prompt_para_and_text_block_guarded():
+    para = "word " * 30
+    prompt = _build_page_prompt(
+        {"kind": "deep_reading", "title": "第1段精讲", "intent": "细读", "para": [1]},
+        page_no=1,
+        total=5,
+        context_nav="前一页，后一页",
+        paragraphs=[para.strip()],
+        slices=_slice_analysis([para.strip()], {}),
+        title="T",
+        plan={"activity_designs": []},
+        analysis={},
+        text=para,
+        language_name="英语",
+        text_level="B1",
+        student_level="B1",
+        duration_minutes=45,
+        course_type="精读",
+        class_size=30,
+        native_language="中文",
+        components=[],
+    )
+    assert "<source_text>" in prompt and SOURCE_TEXT_DEFENSE_NOTE in prompt
+    # para_block 与段落全景 digest 各包裹一次（注记内也含标签字样，故按开标签计数）
+    assert prompt.count("<source_text>\n") == 2
+
+
+def test_interaction_page_full_text_guarded():
+    para = "word " * 60
+    prompt = _build_page_prompt(
+        {"kind": "interaction", "title": "理解检测", "intent": "命题", "para": None},
+        page_no=2,
+        total=5,
+        context_nav="前一页，后一页",
+        paragraphs=[para.strip()],
+        slices=_slice_analysis([para.strip()], {}),
+        title="T",
+        plan={"activity_designs": []},
+        analysis={},
+        text=para,
+        language_name="英语",
+        text_level="B1",
+        student_level="B1",
+        duration_minutes=45,
+        course_type="精读",
+        class_size=30,
+        native_language="中文",
+        components=[],
+    )
+    assert "命题依据" in prompt and "<source_text>" in prompt

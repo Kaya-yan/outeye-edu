@@ -55,6 +55,7 @@ class ParseFileResponse(BaseModel):
     word_count: int = 0
     file_type: str = ""
     likely_scanned: bool = False
+    warning: Optional[str] = None
 
 
 class OCRImageResponse(BaseModel):
@@ -116,6 +117,68 @@ def _count_words(text: str) -> int:
     return en_words + int(zh_chars * 0.67)
 
 
+# ============ 任务E1：文本体检（确定性校验，不合格拒绝 / 可疑警告放行） ============
+
+MIN_EFFECTIVE_CHARS = 30        # 有效文本长度下限（非空白字符数）
+CTRL_RATIO_REJECT = 0.02        # 控制字符占比超此值 → 疑似二进制/损坏，拒绝
+CTRL_RATIO_WARN = 0.002         # 介于两值之间 → 警告放行
+FFFD_RATIO_REJECT = 0.03        # 乱码替换符 U+FFFD 占比超此值 → 编码损坏，拒绝
+FFFD_RATIO_WARN = 0.005         # 介于两值之间 → 警告放行
+
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _decode_text_auto(raw: bytes) -> str:
+    """编码自动检测：UTF-8(含 BOM) → UTF-16(BOM) → GB18030 → Big5，全部失败才用替换符兜底"""
+    for enc in ("utf-8-sig", "utf-16", "gb18030", "big5"):
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _inspect_text(text: str, ext: str, total_pages: int = 0) -> Tuple[Optional[str], Optional[str]]:
+    """提取文本体检。返回 (拒绝原因, 警告)；两者均可为 None（放行且无警告）"""
+    non_ws = re.sub(r"\s+", "", text)
+    n = len(non_ws)
+    scanned_hint = (
+        "请改用「拍照识别」上传页面照片走 OCR 识别，或换用可复制的文本版 PDF / DOCX。"
+        if ext == ".pdf" else
+        "请确认上传的是课文文本文件；若是扫描图片，请改用「拍照识别」上传。"
+    )
+    if n < MIN_EFFECTIVE_CHARS:
+        if ext == ".pdf" and total_pages > 0:
+            return (
+                f"该 PDF 疑似扫描件（无文字层）：共 {total_pages} 页仅提取到 {n} 个有效字符。{scanned_hint}",
+                None,
+            )
+        return f"未能从文件中提取到足够的有效文本（仅 {n} 个字符）。{scanned_hint}", None
+
+    ctrl = len(_CTRL_RE.findall(text))
+    fffd = text.count("�")
+    ctrl_ratio = ctrl / n
+    fffd_ratio = fffd / n
+    if ctrl_ratio > CTRL_RATIO_REJECT:
+        return (
+            f"文件中控制字符占比约 {ctrl_ratio:.0%}，疑似二进制或已损坏的文件，无法作为课文分析。"
+            "请确认上传的是文本类文件（PDF/DOCX/TXT/MD）。",
+            None,
+        )
+    if fffd_ratio > FFFD_RATIO_REJECT:
+        return (
+            f"文本中乱码替换符（U+FFFD）占比约 {fffd_ratio:.0%}，文件编码可能已损坏。"
+            "请将文件另存为 UTF-8 编码的 TXT，或改用 DOCX / 有文字层的 PDF 上传。",
+            None,
+        )
+    warnings: list = []
+    if ctrl_ratio > CTRL_RATIO_WARN:
+        warnings.append(f"文件含少量控制字符（约 {ctrl_ratio:.1%}），已自动清理前提示您核对解析结果")
+    if fffd_ratio > FFFD_RATIO_WARN:
+        warnings.append(f"文本含少量乱码替换符（{fffd} 处，约 {fffd_ratio:.1%}），建议核对或重新导出文件")
+    return None, ("；".join(warnings) + "。") if warnings else None
+
+
 # ============ 端点 ============
 
 
@@ -164,16 +227,22 @@ async def parse_file(
         elif ext == ".docx":
             text = _parse_docx(tmp_path)
         elif ext in (".txt", ".md"):
-            # 从已写入的临时文件读取，避免双倍内存
-            with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
+            # 编码自动检测（UTF-8/UTF-16/GB18030/Big5），不再固定 utf-8+替换符
+            with open(tmp_path, "rb") as f:
+                text = _decode_text_auto(f.read())
         else:
             text = ""
 
         text = text.strip()
+
+        # 任务E1：提取文本体检——不合格直接拒绝（中文原因+操作建议），可疑警告放行
+        reject, warning = _inspect_text(text, ext, total_pages)
+        if reject:
+            raise HTTPException(400, reject)
+
         word_count = _count_words(text)
 
-        # 扫描件/图片型 PDF：有页数但几乎提不出文本（每页平均不足 10 词）
+        # 扫描件/图片型 PDF：有页数但几乎提不出文本（每页平均不足 10 词）——可疑警告放行
         likely_scanned = ext == ".pdf" and total_pages > 0 and word_count < 10 * total_pages
 
         return ParseFileResponse(
@@ -185,6 +254,7 @@ async def parse_file(
             word_count=word_count,
             file_type=ext.lstrip("."),
             likely_scanned=likely_scanned,
+            warning=warning,
         )
 
     except HTTPException:

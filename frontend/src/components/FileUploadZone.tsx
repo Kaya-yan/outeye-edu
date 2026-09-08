@@ -12,6 +12,7 @@ interface FileInfo {
   file_type: string;
   word_count: number;
   likely_scanned?: boolean;
+  warning?: string;
 }
 
 interface OCRResult {
@@ -341,6 +342,14 @@ export default function FileUploadZone({ onTextExtracted, onFilename, compact = 
           >
             重新上传
           </button>
+        </div>
+      )}
+
+      {/* 体检警告放行：文件可用但有可疑信号 */}
+      {fileInfo && !showPageSelector && !ocrResult && fileInfo.warning && (
+        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <span className="text-sm text-amber-700">⚠️</span>
+          <p className="text-xs text-amber-700 leading-5">{fileInfo.warning}</p>
         </div>
       )}
     </div>
