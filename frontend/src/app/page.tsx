@@ -204,7 +204,7 @@ function IntentInput({ value, onChange }: { value: string; onChange: (v: string)
             key={p}
             type="button"
             onClick={() => applyPreset(p)}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+            className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
               value.includes(p)
                 ? "border-primary-300 bg-primary-50 text-primary-700"
                 : "border-black/10 bg-white text-ink-600 hover:border-primary-200"
@@ -643,14 +643,14 @@ function Stepper({ current }: { current: Step }) {
   const currentIdx = steps.findIndex((s) => s.key === current);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {steps.map((s, i) => {
         const isCurrent = i === currentIdx;
         const isDone = i < currentIdx;
         return (
           <div
             key={s.key}
-            className={`rounded-2xl border px-4 py-3 transition-colors ${
+            className={`rounded-2xl border px-2.5 py-2.5 sm:px-4 sm:py-3 transition-colors ${
               isCurrent
                 ? "bg-primary-100 border-primary-300 shadow-soft"
                 : isDone
@@ -658,19 +658,19 @@ function Stepper({ current }: { current: Step }) {
                   : "bg-canvas-100/80 border-black/5"
             }`}
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0 rounded-full flex items-center justify-center text-sm ${
                   isCurrent ? "bg-white text-ink-900" : isDone ? "bg-white text-ink-800" : "bg-white/80 text-ink-500"
                 }`}>
                   {isDone ? "✓" : s.icon}
                 </span>
-                <div>
-                  <div className={`text-sm font-semibold ${isCurrent || isDone ? "text-ink-900" : "text-ink-600"}`}>{s.label}</div>
-                  <div className={`text-xs ${isCurrent ? "text-ink-600" : isDone ? "text-ink-500" : "text-ink-400"}`}>{s.hint}</div>
+                <div className="min-w-0">
+                  <div className={`text-sm font-semibold truncate ${isCurrent || isDone ? "text-ink-900" : "text-ink-600"}`}>{s.label}</div>
+                  <div className={`hidden sm:block text-xs ${isCurrent ? "text-ink-600" : isDone ? "text-ink-500" : "text-ink-400"}`}>{s.hint}</div>
                 </div>
               </div>
-              <span className={`text-[10px] uppercase tracking-[0.16em] ${
+              <span className={`hidden sm:inline text-[10px] uppercase tracking-[0.16em] ${
                 isCurrent ? "text-ink-700" : isDone ? "text-ink-500" : "text-ink-400"
               }`}>
                 {isCurrent ? "进行中" : isDone ? "完成" : `Step ${i + 1}`}
@@ -1000,14 +1000,14 @@ function AnalysisStep({
       <div className="flex gap-3">
         <button
           onClick={onBack}
-          className="px-6 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          className="px-6 py-3 sm:py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
         >
           返回修改
         </button>
         <button
           onClick={onNext}
           disabled={loading}
-          className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
+          className="flex-1 py-3 sm:py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {loading ? "生成中…" : "生成教案"}
         </button>

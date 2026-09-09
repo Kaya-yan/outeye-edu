@@ -37,6 +37,8 @@ export default function CoursewarePresentPage() {
   const [hideUI, setHideUI] = useState(false);
   const [sections, setSections] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState(0);
+  // 全屏时工具栏靠 hover 呼出，触屏无 hover：点击画面切换（touchUI）
+  const [touchUI, setTouchUI] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const loadProject = useCallback(async () => {
@@ -179,6 +181,12 @@ export default function CoursewarePresentPage() {
     }
   }, []);
 
+  // 全屏时点击工具栏/底栏空白处切换显隐（按钮点击不触发）；触屏依赖此路径，桌面 hover 仍可呼出
+  const handleTapUI = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button, a, input")) return;
+    setTouchUI((v) => !v);
+  };
+
   const resetTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
@@ -212,11 +220,15 @@ export default function CoursewarePresentPage() {
   }
 
   const toolbarClasses = `flex-shrink-0 bg-ink-900/88 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-4 sm:px-5 h-12 transition-opacity duration-300 ${
-    isFullscreen ? "opacity-0 hover:opacity-100 absolute top-0 left-0 right-0 z-10" : ""
+    isFullscreen
+      ? `absolute top-0 left-0 right-0 z-10 ${touchUI && !hideUI ? "opacity-100" : "opacity-0 hover:opacity-100"}`
+      : ""
   } ${hideUI && isFullscreen ? "pointer-events-none" : ""}`;
 
   const footerClasses = `flex-shrink-0 bg-ink-900/88 backdrop-blur-xl border-t border-white/10 flex items-center justify-between px-4 sm:px-5 h-10 transition-opacity duration-300 ${
-    isFullscreen ? "opacity-0 hover:opacity-100 absolute bottom-0 left-0 right-0 z-10" : ""
+    isFullscreen
+      ? `absolute bottom-0 left-0 right-0 z-10 ${touchUI && !hideUI ? "opacity-100" : "opacity-0 hover:opacity-100"}`
+      : ""
   } ${hideUI && isFullscreen ? "pointer-events-none" : ""}`;
 
   return (
@@ -226,14 +238,14 @@ export default function CoursewarePresentPage() {
         <div className="absolute left-[-8%] bottom-[8%] h-64 w-64 rounded-full bg-sage-300/10 blur-3xl" />
       </div>
 
-      <div className={toolbarClasses}>
+      <div className={toolbarClasses} onClick={handleTapUI}>
         <div className="flex items-center gap-3 min-w-0">
           <Link href={`/courseware/${projectId}`} className="text-xs text-white/55 hover:text-white/80 transition-colors">&larr;</Link>
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">Presentation Mode</div>
             <div className="text-sm text-white/90 truncate">{project.title}</div>
           </div>
-          <span className="drawer-handle bg-white/10 border border-white/10 text-white/70">
+          <span className="hidden sm:inline-flex drawer-handle bg-white/10 border border-white/10 text-white/70">
             {project.mode === "slides" ? "幻灯片" : "长页面"}
           </span>
           {timerRunning && (
@@ -243,12 +255,12 @@ export default function CoursewarePresentPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { resetTimer(); toggleTimer(); }} className={`text-xs px-3 py-1.5 rounded-full transition-colors ${timerRunning ? "bg-white/12 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>
+          <button onClick={() => { resetTimer(); toggleTimer(); }} className={`text-xs px-3.5 py-2 rounded-full transition-colors ${timerRunning ? "bg-white/12 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>
             {timerRunning ? "停止计时" : "计时"}
           </button>
-          <button onClick={() => setShowNotes(!showNotes)} className={`text-xs px-3 py-1.5 rounded-full transition-colors ${showNotes ? "bg-white/14 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>备注</button>
-          <button onClick={() => setIsBlackout(!isBlackout)} className={`text-xs px-3 py-1.5 rounded-full transition-colors ${isBlackout ? "bg-white/14 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>{isBlackout ? "恢复" : "黑屏"}</button>
-          <button onClick={toggleFullscreen} className="text-xs px-3 py-1.5 rounded-full text-white/55 hover:text-white hover:bg-white/8 transition-colors">{isFullscreen ? "退出" : "全屏"}</button>
+          <button onClick={() => setShowNotes(!showNotes)} className={`text-xs px-3.5 py-2 rounded-full transition-colors ${showNotes ? "bg-white/14 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>备注</button>
+          <button onClick={() => setIsBlackout(!isBlackout)} className={`text-xs px-3.5 py-2 rounded-full transition-colors ${isBlackout ? "bg-white/14 text-white" : "text-white/55 hover:text-white hover:bg-white/8"}`}>{isBlackout ? "恢复" : "黑屏"}</button>
+          <button onClick={toggleFullscreen} className="text-xs px-3.5 py-2 rounded-full text-white/55 hover:text-white hover:bg-white/8 transition-colors">{isFullscreen ? "退出" : "全屏"}</button>
         </div>
       </div>
 
@@ -264,7 +276,7 @@ export default function CoursewarePresentPage() {
 
       <div className="flex-1 flex relative mt-3 sm:mt-4 px-4 sm:px-5 pb-4 sm:pb-5">
         {project.mode === "longform" && sections.length > 0 && !isBlackout && (
-          <aside className={`w-52 flex-shrink-0 mr-4 rounded-[24px] border border-white/10 bg-white/6 backdrop-blur-xl overflow-y-auto flex flex-col transition-opacity duration-300 ${hideUI ? "opacity-0 pointer-events-none" : ""}`}>
+          <aside className={`hidden md:flex w-52 flex-shrink-0 mr-4 rounded-[24px] border border-white/10 bg-white/6 backdrop-blur-xl overflow-y-auto flex-col transition-opacity duration-300 ${hideUI ? "opacity-0 pointer-events-none" : ""}`}>
             <div className="p-4 border-b border-white/10">
               <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em]">章节导航</span>
             </div>
@@ -286,7 +298,7 @@ export default function CoursewarePresentPage() {
           </aside>
         )}
 
-        <div className="flex-1 flex items-center justify-center relative rounded-[28px] overflow-hidden border border-white/8 bg-black/20 backdrop-blur-sm shadow-card">
+        <div className="flex-1 flex items-center justify-center relative rounded-[28px] overflow-hidden border border-white/8 bg-black/20 backdrop-blur-sm shadow-card" onClick={handleTapUI}>
           {isBlackout ? (
             <div className="absolute inset-0 bg-black flex items-center justify-center">
               <p className="text-white/35 text-sm">黑屏模式 · 按 B 恢复</p>
@@ -323,20 +335,23 @@ export default function CoursewarePresentPage() {
         </div>
       </div>
 
-      <div className={footerClasses}>
+      <div className={footerClasses} onClick={handleTapUI}>
         <div className="flex items-center gap-3">
-          <button onClick={() => setCurrentSlide((p) => Math.max(p - 1, 1))} className="text-white/55 hover:text-white disabled:opacity-30" disabled={currentSlide <= 1}>
+          <button onClick={() => setCurrentSlide((p) => Math.max(p - 1, 1))} className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/55 hover:text-white hover:bg-white/8 disabled:opacity-30 disabled:pointer-events-none" disabled={currentSlide <= 1} aria-label="上一页">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path d="M15 19l-7-7 7-7"/></svg>
           </button>
           <span className="text-xs text-white/55 font-mono tabular-nums">
             {currentSlide} / {totalSlides.current} 页
           </span>
-          <button onClick={() => setCurrentSlide((p) => Math.min(p + 1, totalSlides.current))} className="text-white/55 hover:text-white disabled:opacity-30" disabled={currentSlide >= totalSlides.current}>
+          <button onClick={() => setCurrentSlide((p) => Math.min(p + 1, totalSlides.current))} className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/55 hover:text-white hover:bg-white/8 disabled:opacity-30 disabled:pointer-events-none" disabled={currentSlide >= totalSlides.current} aria-label="下一页">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path d="M9 5l7 7-7 7"/></svg>
           </button>
         </div>
-        <span className="text-[10px] text-white/40">
+        <span className="hidden sm:inline text-[10px] text-white/40">
           ←/→ 翻页 · Space 揭示 · T 计时 · B 黑屏 · F 全屏
+        </span>
+        <span className="sm:hidden text-[10px] text-white/40">
+          全屏后点击画面边缘可呼出工具栏
         </span>
       </div>
     </div>

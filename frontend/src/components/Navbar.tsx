@@ -7,11 +7,18 @@ import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-context";
 
 const navLinks = [
-  { href: "/", label: "工作台" },
-  { href: "/html-workbench", label: "HTML 工作台" },
-  { href: "/materials", label: "我的资料" },
-  { href: "/history", label: "历史记录" },
-];
+  { href: "/", label: "工作台", icon: "workbench" },
+  { href: "/html-workbench", label: "HTML 工作台", icon: "code" },
+  { href: "/materials", label: "我的资料", icon: "folder" },
+  { href: "/history", label: "历史记录", icon: "clock" },
+] as const;
+
+const tabIconPaths: Record<string, string> = {
+  workbench: "M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5zM13.5 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5z",
+  code: "M17.25 6.75L22.5 12l-5.25 5.25M6.75 17.25L1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5",
+  folder: "M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z",
+  clock: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z",
+};
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -41,6 +48,9 @@ export default function Navbar() {
   if (pathname === "/login" || pathname === "/register") {
     return null;
   }
+
+  // 沉浸式全屏页（编辑器/放映）不显示底部 Tab
+  const immersive = /^\/courseware\/[^/]+\/(edit|edit-v2|present)(\/|$)/.test(pathname);
 
   const userInitial = user?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "?";
 
@@ -190,6 +200,48 @@ export default function Navbar() {
           </div>
         </div>
       </nav>
+
+      {!immersive && <MobileTabBar pathname={pathname} />}
     </>
+  );
+}
+
+// 移动端底部 Tab 栏：md 以下承载主导航（顶部导航在移动端仅保留标识与账户）
+function MobileTabBar({ pathname }: { pathname: string }) {
+  return (
+    <nav
+      aria-label="主导航"
+      className="mobile-tabbar grid grid-cols-4 md:hidden"
+    >
+      {navLinks.map((link) => {
+        const isActive =
+          pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            aria-current={isActive ? "page" : undefined}
+            className={`flex h-14 flex-col items-center justify-center gap-0.5 transition-colors ${
+              isActive ? "text-primary-600" : "text-ink-400 active:text-ink-700"
+            }`}
+          >
+            <svg
+              className={`h-[22px] w-[22px] ${isActive ? "" : "opacity-70"}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d={tabIconPaths[link.icon]} />
+            </svg>
+            <span className={`text-[11px] leading-none ${isActive ? "font-semibold" : ""}`}>
+              {link.label}
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

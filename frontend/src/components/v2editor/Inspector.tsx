@@ -84,7 +84,7 @@ export default function Inspector({
   };
 
   return (
-    <aside className="absolute right-4 top-4 z-30 w-80 max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+    <aside className="absolute inset-x-0 top-0 z-30 h-full overflow-y-auto border-slate-200 bg-white shadow-xl sm:inset-x-auto sm:right-4 sm:top-4 sm:h-auto sm:max-h-[calc(100%-2rem)] sm:w-80 sm:rounded-xl sm:border">
       <div className="sticky top-0 bg-white flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">{target.tag}</span>

@@ -667,7 +667,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
-      <header className="flex-shrink-0 h-12 border-b border-slate-200 bg-white flex items-center justify-between px-4 gap-3">
+      <header className="flex-shrink-0 min-h-12 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 py-1.5 sm:h-12 sm:flex-nowrap sm:py-0">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href={`/courseware/${projectId}`}
@@ -760,14 +760,14 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           {savedMsg && <span className="text-xs text-emerald-600">{savedMsg}</span>}
           <Link
             href={`/courseware/${projectId}/edit`}
-            className="rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200"
+            className="hidden lg:inline-flex rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200"
           >
             V1 编辑器
           </Link>
           <button
             onClick={() => void handleExport()}
             disabled={!sourceHtml}
-            className="rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+            className="hidden sm:inline-flex rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50"
           >
             导出 HTML
           </button>
@@ -837,7 +837,12 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="absolute inset-2 rounded-xl border-2 border-dashed border-blue-400/60" />
             <span className="absolute left-5 top-5 rounded-full bg-blue-600/90 px-3 py-1 text-[11px] text-white shadow">
-              {target ? "编辑中" : "编辑中 · 点击页面元素开始编辑，Esc 退出"}
+              {target
+                ? "编辑中"
+                : <>
+                    编辑中 · 点击页面元素开始编辑
+                    <span className="hidden sm:inline">，Esc 退出</span>
+                  </>}
             </span>
           </div>
         )}
@@ -863,7 +868,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         )}
 
         {pickOn && patches.length > 0 && (
-          <div className="absolute right-4 bottom-4 z-30 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="absolute right-4 bottom-4 z-30 w-[calc(100%-2rem)] sm:w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
             <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] uppercase tracking-widest text-slate-400">
               调整记录（保存后生效于展示与导出）
             </div>
@@ -906,7 +911,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                   </div>
                   <button
                     onClick={() => mutatePatches(patches.filter((x) => x.id !== p.id))}
-                    className="opacity-0 group-hover:opacity-100 text-[11px] text-slate-400 hover:text-red-500 flex-shrink-0"
+                    className="text-[11px] text-slate-400 hover:text-red-500 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100"
                   >
                     移除
                   </button>
@@ -917,7 +922,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         )}
 
         {reviewOn && hasReview && (
-          <div className="absolute left-4 bottom-4 z-30 w-96 rounded-xl border border-teal-200 bg-white shadow-xl">
+          <div className="absolute left-4 bottom-4 z-30 w-[calc(100%-2rem)] sm:w-96 rounded-xl border border-teal-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-teal-100 px-4 py-2.5">
               <span className="text-[10px] uppercase tracking-widest text-teal-700">
                 AI 全局审校意见（仅供参考，不自动改动结构）

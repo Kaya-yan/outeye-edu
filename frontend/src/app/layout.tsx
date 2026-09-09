@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
@@ -8,6 +8,13 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'OutEye Edu - AI 备课助手',
   description: '粘贴或上传英文课文，自动完成词汇、文化与教学分析，一键生成课件',
+}
+
+// viewportFit=cover：刘海屏 env(safe-area-inset-*) 才会生效（底部 Tab 栏依赖）
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 // 防 FOUC：在 hydration 前根据 localStorage 或 prefers-color-scheme 设置主题
@@ -47,6 +54,9 @@ export default function RootLayout({
               </div>
               {children}
             </main>
+
+            {/* 移动端底部 Tab 栏让位（Tab 栏为 fixed 覆盖层） */}
+            <div className="h-14 md:hidden" aria-hidden />
 
             <footer className="mt-16 footer-surface">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

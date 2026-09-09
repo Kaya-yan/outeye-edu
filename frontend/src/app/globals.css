@@ -390,6 +390,21 @@
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-card);
   }
+
+  /* 移动端底部 Tab 栏：刘海屏让出 home indicator 安全区 */
+  .mobile-tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: rgba(var(--bg-surface-rgb), 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border-subtle);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -1px 12px rgba(16, 20, 24, 0.06);
+  }
 }
 
 /* ---- Utilities ---- */
@@ -480,4 +495,28 @@
   80% { transform: translateX(3px); }
 }
 .animate-legal-shake { animation: legalShake 0.4s ease-in-out; }
+
+/* ---- 移动端表单体验 ---- */
+/* iOS Safari：字号 <16px 的控件聚焦时会强制放大页面，统一抬到 16px（桌面不受影响） */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+/* 触屏无 hover：抑制悬停抬升类的粘滞效果，点击反馈交给 :active */
+@media (hover: none) {
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: var(--shadow-card);
+  }
+  .btn-secondary:hover {
+    transform: none;
+  }
+  .archive-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-card);
+  }
+}
 

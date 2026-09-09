@@ -122,3 +122,6 @@ backend/backups/
 
 # seed 脚本以 sys.path.insert 方式直跑，无需包标记（服务器上为误产物）
 backend/scripts/__init__.py
+
+# 移动端视口 smoke 截图（脚本可再生）
+backend/scripts/_mobile_shots/
