@@ -9,7 +9,8 @@ import DifficultWordsChart from "./charts/DifficultWordsChart";
 import DifficultWordsPanel from "./DifficultWordsPanel";
 import PublicAssetDrawer from "./PublicAssetDrawer";
 import { listPublicKnowledge, type PublicKnowledgeItem } from "@/lib/knowledge";
-import TermTooltip from "./TermTooltip";
+import TermTooltip, { TermDetailContext } from "./TermTooltip";
+import TermDetailDrawer from "./TermDetailDrawer";
 import type { GlossaryEntry } from "@/lib/glossary";
 
 interface DifficultWord {
@@ -121,6 +122,7 @@ export default function WhiteboxResults({
 }) {
   const { vocabulary: v, syntax: s, discourse: d, learner_gap: g } = data;
   const gl = data.metric_glossary || {};
+  const [termDetail, setTermDetail] = useState<{ term: string; entry: GlossaryEntry } | null>(null);
 
   const readinessTone =
     g.gap === "i+0"
@@ -142,6 +144,7 @@ export default function WhiteboxResults({
           };
 
   return (
+    <TermDetailContext.Provider value={(term, entry) => setTermDetail({ term, entry })}>
     <div className="space-y-6">
       <div className="page-surface-strong p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -356,6 +359,10 @@ export default function WhiteboxResults({
         </ul>
       </EvidencePanel>
     </div>
+    {termDetail && (
+      <TermDetailDrawer term={termDetail.term} entry={termDetail.entry} onClose={() => setTermDetail(null)} />
+    )}
+    </TermDetailContext.Provider>
   );
 }
 
