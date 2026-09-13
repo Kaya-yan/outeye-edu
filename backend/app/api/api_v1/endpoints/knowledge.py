@@ -16,6 +16,7 @@ from datetime import datetime
 from app.core.database import get_async_db
 from app.core.security import get_current_user
 from app.models.document import Document, DocumentChunk
+from app.services.rag.corpus_clean import excerpt_by_sentence
 
 router = APIRouter()
 
@@ -315,7 +316,7 @@ async def get_public_knowledge(
                 "kind": "document",
                 "category": "官方语料",
                 "title": payload.get("title", "") or "未命名文档",
-                "summary": (payload.get("content") or "")[:200],
+                "summary": excerpt_by_sentence(payload.get("content") or "", limit=200),
                 "badge": "官方",
                 "source": "平台官方语料",
                 "doc_type": payload.get("doc_type") or "document",
@@ -372,7 +373,7 @@ async def get_public_knowledge_detail(
                 source="平台官方语料",
                 doc_type=chunks[0].get("doc_type") or "document",
                 created_at=chunks[0].get("created_at"),
-                detail=merged[:8000],
+                detail=excerpt_by_sentence(merged, limit=8000),
                 chunk_count=len(chunks),
             )
     except Exception as e:

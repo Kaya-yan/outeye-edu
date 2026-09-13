@@ -78,3 +78,34 @@ class TestPublicKnowledgeDetail:
     def test_requires_auth(self):
         res = TestClient(app).get("/api/v1/knowledge/public/builtin-cefr-wordlists")
         assert res.status_code == 403
+
+
+class TestPublicKnowledgeExcerpt:
+    """任务G1：列表摘要与详情超长时按句边界修剪，头部加（节选）"""
+
+    def test_list_summary_trimmed_to_sentence(self, auth_client, monkeypatch):
+        long_content = "这部分是完整的句子，讲教学理论的核心观点。" * 20
+        _patch_store(monkeypatch, [{
+            "doc_id": "sys-x", "title": "句界测试语料", "scope": "system",
+            "chunk_index": 0, "doc_type": "theory", "content": long_content,
+            "created_at": "2026-09-14T00:00:00",
+        }])
+
+        res = auth_client.get("/api/v1/knowledge/public")
+        assert res.status_code == 200
+        doc = next(i for i in res.json() if i.get("id") == "sys-x")
+        assert doc["summary"].startswith("（节选）")
+        assert doc["summary"].endswith("。")
+
+    def test_detail_trimmed_with_marker_when_over_limit(self, auth_client, monkeypatch):
+        content = "这是一段足够长的正文句子，用于超过详情截断上限的测试。" * 400
+        _patch_store(monkeypatch, [{
+            "doc_id": "sys-y", "title": "长文语料", "scope": "system",
+            "chunk_index": 0, "doc_type": "theory", "content": content,
+        }])
+
+        res = auth_client.get("/api/v1/knowledge/public/sys-y")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["detail"].startswith("（节选）")
+        assert body["detail"].endswith("。")
