@@ -553,3 +553,103 @@ def _parse_theory_text(theory_text: str) -> List[Dict[str, Any]]:
         })
 
     return theories
+
+
+def export_vocab_handout(plan: Dict[str, Any], title: str = "词汇讲义") -> BytesIO:
+    """
+    导出词汇讲义为 Word 文档（任务F2）
+
+    plan 结构：
+      language_name / text_level：副标题信息
+      words: [{word, level, count, phonetic, pos, gloss, original_sentence,
+               teaching_example, board_note}]（详情字段缺失时留空跳段）
+    每词一节：词头（词+音标+词性+等级）→ 语境释义 → 课文原句 → 教学例句 → 板书建议（等宽框）。
+    """
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = Document()
+    style = doc.styles["Normal"]
+    style.font.size = Pt(11)
+    style.font.name = "Microsoft YaHei"
+
+    PRIMARY = RGBColor(0x1E, 0x3A, 0x5F)
+    ACCENT = RGBColor(0xD4, 0x8B, 0x2C)
+    MUTED = RGBColor(0x66, 0x66, 0x66)
+
+    heading = doc.add_heading(title, level=0)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    words: List[Dict[str, Any]] = plan.get("words", [])
+    sub_parts = []
+    if plan.get("language_name"):
+        sub_parts.append(f"语言 {plan['language_name']}")
+    if plan.get("text_level"):
+        sub_parts.append(f"课文等级 {plan['text_level']}")
+    sub_parts.append(f"共 {len(words)} 个难词")
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run(" · ".join(sub_parts))
+    run.font.size = Pt(10)
+    run.font.color.rgb = MUTED
+    doc.add_paragraph()
+
+    for idx, w in enumerate(words, 1):
+        if not isinstance(w, dict):
+            continue
+        head = doc.add_heading(f"{idx}. {w.get('word', '')}", level=2)
+        if head.runs:
+            head.runs[0].font.color.rgb = PRIMARY
+
+        meta_bits = [b for b in (w.get("phonetic", ""), w.get("pos", "")) if b]
+        if w.get("level"):
+            meta_bits.append(f"CEFR {w['level']}")
+        if w.get("count"):
+            meta_bits.append(f"出现 {w['count']} 次")
+        if meta_bits:
+            p = doc.add_paragraph()
+            run = p.add_run("  ".join(meta_bits))
+            run.font.size = Pt(10)
+            run.font.color.rgb = MUTED
+
+        if w.get("gloss"):
+            p = doc.add_paragraph()
+            r = p.add_run("语境释义：")
+            r.bold = True
+            r.font.color.rgb = ACCENT
+            p.add_run(w["gloss"])
+
+        if w.get("original_sentence"):
+            p = doc.add_paragraph()
+            r = p.add_run("课文原句：")
+            r.bold = True
+            r.font.color.rgb = ACCENT
+            p2 = doc.add_paragraph()
+            p2.paragraph_format.left_indent = Inches(0.3)
+            p2.add_run(w["original_sentence"]).italic = True
+
+        if w.get("teaching_example"):
+            p = doc.add_paragraph()
+            r = p.add_run("教学例句：")
+            r.bold = True
+            r.font.color.rgb = ACCENT
+            p.add_run(w["teaching_example"])
+
+        if w.get("board_note"):
+            p = doc.add_paragraph()
+            r = p.add_run("板书建议：")
+            r.bold = True
+            r.font.color.rgb = ACCENT
+            for line in str(w["board_note"]).split("\n"):
+                if line.strip():
+                    p2 = doc.add_paragraph()
+                    p2.paragraph_format.left_indent = Inches(0.3)
+                    run = p2.add_run(line.strip())
+                    run.font.name = "Consolas"
+                    run.font.size = Pt(10)
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer

@@ -234,6 +234,21 @@ BUILTIN_PUBLIC_ASSETS = [
         "summary": "覆盖产出导向法（POA）、任务型教学、输入假说、支架式教学等常用理论的核心要点与课堂应用方式。生成教案时自动作为理论依据被引用。",
         "badge": "官方",
         "source": "OutEye Edu 内置",
+        "detail": (
+            "本理论库收录大学英语课堂最常用的教学理论，生成教案时按课文特征自动匹配引用。\n\n"
+            "【产出导向法（POA）】文秋芳提出的中国本土外语教学理论，以「学用一体」为核心："
+            "驱动—促成—评价三阶段。课堂应用：先呈现交际场景让学生尝试产出，暴露语言缺口后再精讲课文，最后回产出任务闭环。\n\n"
+            "【任务型教学（TBLT）】以完成任务组织课堂，语言形式在任务前后显性处理。"
+            "课堂应用：任务前激活话题词汇，任务中小组协作解决真实问题，任务后聚焦语言形式（Focus on Form）。\n\n"
+            "【输入假说（Krashen i+1）】习得依赖略高于当前水平的可理解输入。"
+            "课堂应用：按学生 CEFR 水平选材，i+1 为最优区间；i+2 时必须搭建支架（双语词汇表、结构化阅读框架）。\n\n"
+            "【支架式教学（ZPD）】在最近发展区内提供临时支持并逐步撤除。"
+            "课堂应用：长难句先给结构图解，段落先给大意匹配，学生熟悉后撤除提示。\n\n"
+            "【体裁教学法】按语篇体裁（议论/说明/记叙）组织教学，关注图式结构。"
+            "课堂应用：议论文抓论点-论据链，说明文抓信息结构，记叙文抓情节链。\n\n"
+            "【合作学习】异质小组 + 积极互赖 + 个体责任。"
+            "课堂应用：阅读后的小组讨论、拼图阅读（Jigsaw）、角色扮演汇报。"
+        ),
     },
     {
         "id": "builtin-cefr-wordlists",
@@ -243,6 +258,17 @@ BUILTIN_PUBLIC_ASSETS = [
         "summary": "平台采用主词表（约 3200 词）+ 词频频段词表（约 16400 词）两级判定课文词汇难度，未命中的低频词由 AI 按剑桥词典口径定级，课文分析中的等级徽章即来自该体系。",
         "badge": "官方",
         "source": "OutEye Edu 内置",
+        "detail": (
+            "课文分析中的每个词都会经过三级分级流水线，等级徽章即来源于此。\n\n"
+            "【第一级 · 主词表】约 3200 词的 CEFR 权威词表（A1-C2），覆盖日常与教材高频词，"
+            "词条冲突时取最高等级。\n\n"
+            "【第二级 · 词频频段词表】约 16400 词，按语料库词频生成，只填补主词表缺口，不覆盖既有判定。\n\n"
+            "【第三级 · AI 兜底定级】两级词表均未命中的低频/生僻词，由 LLM 按剑桥词典、"
+            "Oxford 3000/5000 的分级口径批量定级，结果写入持久缓存——同词再遇零成本、结论稳定。"
+            "专有名词（人名地名机构名）单独分桶，不计入难度。\n\n"
+            "等级含义：A1-A2 基础词，B1-B2 进阶词，C1-C2 高阶词。"
+            "判定口径为「学习者首次习得该词的典型阶段」，与欧洲语言共同参考框架（CEFR）一致。"
+        ),
     },
     {
         "id": "builtin-culture-corpus",
@@ -252,6 +278,18 @@ BUILTIN_PUBLIC_ASSETS = [
         "summary": "课文分析会识别节日、历史、制度、地理、文学、习俗等文化元素，并由 AI 补充具体事实背景与课堂应用建议，帮助教师快速准备文化讲解点。",
         "badge": "官方",
         "source": "OutEye Edu 内置",
+        "detail": (
+            "课文分析对文化元素采用「确定性识别 + AI 具体化」两段式处理。\n\n"
+            "【第一步 · 确定性识别】按语言维护关键词库，覆盖六大类：\n"
+            "习俗（节日、仪式）、历史（战争、时代）、社会（制度、现象）、"
+            "价值观（个人主义、集体主义）、地理（地标、气候）、文学（文体、经典）。\n"
+            "识别结果附课文原句上下文，可人工核验。\n\n"
+            "【第二步 · AI 具体化】对识别到的元素，由 LLM 补充具体事实背景——"
+            "起源、年代、地点、当代形态，以及一条可直接用的课堂应用建议（teaching hook）。"
+            "AI 不可用时回退为分类模板建议并在页面标注，不冒充事实。\n\n"
+            "教学用法：文化元素卡可直接作为课堂文化讲解点的清单；"
+            "建议课前挑选 2-3 个元素准备图片或视频素材，其余随文点拨。"
+        ),
     },
 ]
 
@@ -287,6 +325,60 @@ async def get_public_knowledge(
     except Exception as e:
         logger.warning(f"公共语料聚合失败（仅返回内置资产）: {e}")
     return items
+
+
+class PublicKnowledgeDetail(PublicKnowledgeItem):
+    """公共资料条目详情（只读）：完整正文 + 语料分片数"""
+    detail: str
+    chunk_count: int = 0
+
+
+@router.get("/public/{item_id}", response_model=PublicKnowledgeDetail)
+async def get_public_knowledge_detail(
+    item_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    公共资料条目详情（任务F3）：
+
+    - builtin 条目返回内置长文说明（理论库 / CEFR 分级体系 / 文化语料分类）
+    - document 条目按 doc_id 聚合平台官方语料的全部分片正文（按 chunk_index 排序，超长截断）
+    """
+    for asset in BUILTIN_PUBLIC_ASSETS:
+        if asset["id"] == item_id:
+            item = dict(asset)
+            detail = item.pop("detail", "")
+            return PublicKnowledgeDetail(**item, detail=detail)
+
+    try:
+        vector_store = _get_vector_store()
+        chunks = []
+        for r in vector_store.get_all_records():
+            payload = r.payload or {}
+            if payload.get("scope") == "system" and payload.get("doc_id") == item_id:
+                chunks.append(payload)
+        if chunks:
+            chunks.sort(key=lambda p: p.get("chunk_index", 0))
+            merged = "\n\n".join((p.get("content") or "").strip() for p in chunks if p.get("content"))
+            if not merged:
+                merged = "该语料暂无可展示的正文。"
+            return PublicKnowledgeDetail(
+                id=item_id,
+                kind="document",
+                category="官方语料",
+                title=chunks[0].get("title", "") or "未命名文档",
+                summary=(chunks[0].get("content") or "")[:200],
+                badge="官方",
+                source="平台官方语料",
+                doc_type=chunks[0].get("doc_type") or "document",
+                created_at=chunks[0].get("created_at"),
+                detail=merged[:8000],
+                chunk_count=len(chunks),
+            )
+    except Exception as e:
+        logger.warning(f"公共语料详情聚合失败: {e}")
+
+    raise HTTPException(status_code=404, detail="公共资料条目不存在")
 
 
 @router.delete("/documents/{document_id}")

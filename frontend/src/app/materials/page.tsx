@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import KnowledgeUploadPanel from "@/components/KnowledgeUploadPanel";
+import PublicAssetDrawer from "@/components/PublicAssetDrawer";
 import { listKnowledgeDocuments, listPublicKnowledge, type PublicKnowledgeItem } from "@/lib/knowledge";
 
 type Tab = "mine" | "public";
@@ -11,6 +12,7 @@ export default function MaterialsPage() {
   const [publicItems, setPublicItems] = useState<PublicKnowledgeItem[]>([]);
   const [publicLoaded, setPublicLoaded] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
+  const [openItem, setOpenItem] = useState<PublicKnowledgeItem | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +78,11 @@ export default function MaterialsPage() {
               </div>
             )}
             {publicItems.map((item) => (
-              <article key={item.id} className="page-surface-strong px-6 py-5 sm:px-7">
+              <button
+                key={item.id}
+                onClick={() => setOpenItem(item)}
+                className="w-full page-surface-strong px-6 py-5 text-left sm:px-7 transition-colors hover:border-primary-300"
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-sage-100 border border-sage-200 px-2.5 py-0.5 text-[11px] font-medium text-ink-700">
                     {item.category}
@@ -90,10 +96,11 @@ export default function MaterialsPage() {
                       {new Date(item.created_at).toLocaleDateString("zh-CN")}
                     </span>
                   )}
+                  <span className="ml-auto text-xs text-primary-600">查看完整内容 →</span>
                 </div>
                 <h2 className="mt-3 text-lg font-semibold text-ink-900">{item.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-ink-500">{item.summary}</p>
-              </article>
+              </button>
             ))}
             {publicLoaded && publicItems.length === 0 && (
               <div className="page-surface-strong px-6 py-10 text-center text-sm text-ink-400">
@@ -103,6 +110,8 @@ export default function MaterialsPage() {
           </section>
         )}
       </main>
+
+      {openItem && <PublicAssetDrawer item={openItem} onClose={() => setOpenItem(null)} />}
     </div>
   );
 }

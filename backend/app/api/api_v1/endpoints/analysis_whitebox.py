@@ -175,6 +175,10 @@ async def whitebox_analyze(
         wiki_tags = get_wiki_tags_for_retrieval(tag_details)
         rag_tags = get_rag_tags_for_retrieval(tag_details)
 
+        # 术语表（任务F1）：指标 → 通俗解释 + 按本文值实例化的数值解读，前端 tooltip 直接消费
+        from app.services.analysis.metric_glossary import build_glossary
+        metric_glossary = build_glossary(result)
+
         duration = time.time() - start_time
 
         # 保存到数据库
@@ -296,6 +300,7 @@ async def whitebox_analyze(
             "tag_details": tag_details,
             "wiki_tags": wiki_tags,
             "rag_tags": rag_tags,
+            "metric_glossary": metric_glossary,
             "teaching_tips": result.teaching_tips,
             "analysis_version": result.analysis_version,
             "analysis_duration": round(duration, 2),
@@ -436,6 +441,34 @@ async def culture_enrich(
             "self_check": {"error": str(e)},
             "generation_duration": 0,
         }
+
+
+# ============ 难词教学详情端点（任务F2） ============
+
+class WordDetailsRequest(BaseModel):
+    """难词详情请求：白盒难词表的词批量补齐教学卡片字段"""
+    words: List[str] = Field(..., description="难词列表", min_length=1, max_length=30)
+    text: str = Field("", description="课文原文（用于确定性提取课文原句）")
+    language: Optional[str] = Field("en", description="语言代码", pattern=r"^[a-z]{2}$")
+
+
+@router.post("/word-details", response_model=Dict[str, Any])
+async def word_details(
+    request: WordDetailsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    难词教学详情端点
+
+    音标/词性/语境释义/教学例句/板书建议：缓存优先，缺失词一次轻量 LLM 批调补齐并落库（同词不重复生成）。
+    课文原句由后端确定性提取，不经 LLM。LLM 不可用时返回已缓存部分，缺字段留空、fallback=True。
+    """
+    from app.services.analysis.word_detail import fetch_word_details
+
+    details, meta = await fetch_word_details(
+        request.words, request.text, request.language or "en"
+    )
+    return {"details": details, "meta": meta}
 
 
 # ============ 双源检索端点 ============
@@ -1322,7 +1355,7 @@ async def submit_ab_evaluation(
 
 class ExportRequest(BaseModel):
     """导出请求"""
-    format: str = Field("pptx", description="导出格式: pptx, docx 或 html")
+    format: str = Field("pptx", description="导出格式: pptx, docx, html 或 vocab（词汇讲义 Word）")
     title: str = Field("教学方案", description="文档标题")
     plan: Dict[str, Any] = Field(..., description="教学方案数据")
 
@@ -1338,7 +1371,7 @@ async def export_plan(
     接收教学方案 JSON，返回文件流。
     """
     try:
-        from app.services.analysis.export_service import export_pptx, export_docx, export_html
+        from app.services.analysis.export_service import export_pptx, export_docx, export_html, export_vocab_handout
         from fastapi.responses import StreamingResponse
 
         if request.format == "pptx":
@@ -1347,6 +1380,10 @@ async def export_plan(
             media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         elif request.format == "docx":
             buffer = export_docx(request.plan, request.title)
+            filename = f"{request.title}.docx"
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif request.format == "vocab":
+            buffer = export_vocab_handout(request.plan, request.title)
             filename = f"{request.title}.docx"
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         elif request.format == "html":

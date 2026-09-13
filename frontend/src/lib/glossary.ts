@@ -9,6 +9,8 @@
  */
 
 export interface GlossaryEntry {
+  /** 后端条目携带的通俗名称（本地字典条目无此字段，展示时回退 term） */
+  name?: string;
   definition: string;
   interpretation?: string;
   teaching?: string;

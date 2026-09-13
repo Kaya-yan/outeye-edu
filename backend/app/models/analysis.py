@@ -162,3 +162,16 @@ class WordLevelCache(Base):
     level = Column(String(2), nullable=False)  # A1-C2
     source = Column(String(20), default="llm")  # llm / manual
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class WordDetailCache(Base):
+    """难词教学详情缓存（任务F2：音标/词性/释义/例句/板书建议，同词不重复生成）"""
+    __tablename__ = "word_detail_cache"
+    __table_args__ = (UniqueConstraint("word", "lang", name="uq_word_detail_lang"),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    word = Column(String(100), nullable=False, index=True)
+    lang = Column(String(2), nullable=False, default="en", index=True)
+    payload_json = Column(Text, nullable=False)  # {phonetic, pos, gloss, teaching_example, board_note}
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+

@@ -584,6 +584,8 @@ export default function AnalysisPage() {
               analysis={analysis}
               loading={loading}
               cultureStatus={cultureStatus}
+              text={text}
+              title={title}
               intent={teacherIntent}
               onIntentChange={setTeacherIntent}
               settings={{
@@ -961,6 +963,8 @@ function AnalysisStep({
   analysis,
   loading,
   cultureStatus,
+  text,
+  title,
   settings,
   intent,
   onIntentChange,
@@ -970,6 +974,8 @@ function AnalysisStep({
   analysis: WhiteboxAnalysis;
   loading: boolean;
   cultureStatus: "idle" | "loading" | "enriched" | "fallback";
+  text: string;
+  title: string;
   settings: SettingsProps;
   intent: string;
   onIntentChange: (v: string) => void;
@@ -990,7 +996,7 @@ function AnalysisStep({
             耗时 {analysis.analysis_duration}s
           </div>
         </div>
-        <WhiteboxResults data={analysis} cultureStatus={cultureStatus} />
+        <WhiteboxResults data={analysis} cultureStatus={cultureStatus} text={text} title={title} />
       </div>
 
       <div className="workbench-panel p-4">

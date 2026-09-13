@@ -89,5 +89,13 @@ export interface PublicKnowledgeItem {
   created_at?: string | null;
 }
 
+export interface PublicKnowledgeDetail extends PublicKnowledgeItem {
+  detail: string;
+  chunk_count: number;
+}
+
 export const listPublicKnowledge = () =>
   apiGet<PublicKnowledgeItem[]>("/knowledge/public");
+
+export const getPublicKnowledgeDetail = (id: string) =>
+  apiGet<PublicKnowledgeDetail>(`/knowledge/public/${id}`);

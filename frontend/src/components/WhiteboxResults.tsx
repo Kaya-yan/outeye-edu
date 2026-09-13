@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import RadarChart from "./charts/RadarChart";
 import { cefrLabel } from "@/lib/cefr";
 import CefrBarChart from "./charts/CefrBarChart";
 import ReadabilityGauge from "./charts/ReadabilityGauge";
 import DifficultWordsChart from "./charts/DifficultWordsChart";
+import DifficultWordsPanel from "./DifficultWordsPanel";
+import PublicAssetDrawer from "./PublicAssetDrawer";
+import { listPublicKnowledge, type PublicKnowledgeItem } from "@/lib/knowledge";
 import TermTooltip from "./TermTooltip";
+import type { GlossaryEntry } from "@/lib/glossary";
 
 interface DifficultWord {
   word: string;
@@ -70,6 +75,8 @@ interface WhiteboxData {
   teaching_insights?: TeachingInsight[];
   cultural_elements?: CulturalElement[];
   teaching_tips: string[];
+  /** 后端术语表（任务F1）：解读已按本文数值实例化 */
+  metric_glossary?: Record<string, GlossaryEntry>;
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -104,11 +111,16 @@ type CultureStatus = "idle" | "loading" | "enriched" | "fallback";
 export default function WhiteboxResults({
   data,
   cultureStatus = "idle",
+  text = "",
+  title = "",
 }: {
   data: WhiteboxData;
   cultureStatus?: CultureStatus;
+  text?: string;
+  title?: string;
 }) {
   const { vocabulary: v, syntax: s, discourse: d, learner_gap: g } = data;
+  const gl = data.metric_glossary || {};
 
   const readinessTone =
     g.gap === "i+0"
@@ -155,18 +167,18 @@ export default function WhiteboxResults({
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:w-[420px]">
-            <VerdictCard label="体裁判断" value={d.genre_hint} note={d.text_structure || "等待结构分析"} term="体裁" />
-            <VerdictCard label="可读性" value={s.flesch_reading_ease} note={s.flesch_reading_ease > 60 ? "较易进入课堂" : "需增加引导"} term="可读性" />
+            <VerdictCard label="体裁判断" value={d.genre_hint} note={d.text_structure || "等待结构分析"} term="体裁" entry={gl["体裁"]} />
+            <VerdictCard label="可读性" value={s.flesch_reading_ease} note={s.flesch_reading_ease > 60 ? "较易进入课堂" : "需增加引导"} term="可读性" entry={gl["可读性"]} />
             <VerdictCard label="重点出口" value="生成课件" note={readinessTone.summary} />
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="总词数" value={v.total_words} note="词汇规模" term="总词数" />
-        <MetricCard label="平均句长" value={`${s.avg_sentence_length} 词`} note="句法负荷" term="平均句长" />
-        <MetricCard label="连接密度" value={`${d.connective_density}/百词`} note="语篇衔接" term="连接密度" />
-        <MetricCard label="AWL 占比" value={`${(v.awl_ratio * 100).toFixed(1)}%`} note="学术词汇" term="AWL 占比" />
+        <MetricCard label="总词数" value={v.total_words} note="词汇规模" term="总词数" entry={gl["总词数"]} />
+        <MetricCard label="平均句长" value={`${s.avg_sentence_length} 词`} note="句法负荷" term="平均句长" entry={gl["平均句长"]} />
+        <MetricCard label="连接密度" value={`${d.connective_density}/百词`} note="语篇衔接" term="连接密度" entry={gl["连接密度"]} />
+        <MetricCard label="AWL 占比" value={`${(v.awl_ratio * 100).toFixed(1)}%`} note="学术词汇" term="AWL 占比" entry={gl["AWL 占比"]} />
       </div>
 
       <div className="archive-surface p-5 sm:p-6">
@@ -199,16 +211,16 @@ export default function WhiteboxResults({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartPanel title="六维分析雷达" caption="用于快速判断课文在哪些维度会拉高课堂组织成本。" term="六维分析雷达">
+        <ChartPanel title="六维分析雷达" caption="用于快速判断课文在哪些维度会拉高课堂组织成本。" term="六维分析雷达" entry={gl["六维分析雷达"]}>
           <RadarChart vocabulary={v} syntax={s} discourse={d} />
         </ChartPanel>
-        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词是否集中。专有名词单列不计难度；未分级为低频生僻词，多数已由 AI 定级至高阶档。" term="CEFR 词汇分布">
+        <ChartPanel title="CEFR 词汇分布" caption="先看基础词覆盖，再看高阶词是否集中。专有名词单列不计难度；未分级为低频生僻词，多数已由 AI 定级至高阶档。" term="CEFR 词汇分布" entry={gl["CEFR 词汇分布"]}>
           <CefrBarChart distribution={v.cefr_distribution} totalWords={v.total_words} />
         </ChartPanel>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartPanel title="可读性指数" caption="可读性越低，越需要提前设计支架与解释密度。" term="可读性指数">
+        <ChartPanel title="可读性指数" caption="可读性越低，越需要提前设计支架与解释密度。" term="可读性指数" entry={gl["可读性指数"]}>
           <ReadabilityGauge fleschScore={s.flesch_reading_ease} />
         </ChartPanel>
         <ChartPanel title="难词 Top 10" caption="重点看超纲词是否会直接影响课堂目标与任务推进。">
@@ -220,22 +232,30 @@ export default function WhiteboxResults({
         </ChartPanel>
       </div>
 
+      <DifficultWordsPanel
+        words={v.difficult_words}
+        text={text}
+        title={title}
+        languageName={data.language_name}
+        textLevel={data.text_level}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <EvidencePanel title="词汇证据" subtitle="Vocabulary">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="不重复词" value={v.unique_words} note="词汇分布" term="不重复词" />
-            <MetricCard label="词汇丰富度" value={v.vocabulary_richness.toFixed(2)} note="TTR 近似" term="词汇丰富度" />
-            <MetricCard label="AWL 学术词" value={v.awl_count} note="高阶词项" term="AWL 学术词" />
-            <MetricCard label="难词数" value={v.difficult_words.length} note="超纲负荷" term="难词数" />
+            <MetricCard label="不重复词" value={v.unique_words} note="词汇分布" term="不重复词" entry={gl["不重复词"]} />
+            <MetricCard label="词汇丰富度" value={v.vocabulary_richness.toFixed(2)} note="TTR 近似" term="词汇丰富度" entry={gl["词汇丰富度"]} />
+            <MetricCard label="AWL 学术词" value={v.awl_count} note="高阶词项" term="AWL 学术词" entry={gl["AWL 学术词"]} />
+            <MetricCard label="难词数" value={v.difficult_words.length} note="超纲负荷" term="难词数" entry={gl["难词数"]} />
           </div>
         </EvidencePanel>
 
         <EvidencePanel title="句法证据" subtitle="Syntax">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="句子数" value={s.total_sentences} note="文本切分" term="句子数" />
-            <MetricCard label="Flesch" value={s.flesch_reading_ease} note="可读性" term="Flesch" />
-            <MetricCard label="长句" value={s.long_sentences_count} note="> 30 词" term="长句" />
-            <MetricCard label="超长句" value={s.very_long_sentences_count} note="> 40 词" term="超长句" />
+            <MetricCard label="句子数" value={s.total_sentences} note="文本切分" term="句子数" entry={gl["句子数"]} />
+            <MetricCard label="Flesch" value={s.flesch_reading_ease} note="可读性" term="Flesch" entry={gl["Flesch"]} />
+            <MetricCard label="长句" value={s.long_sentences_count} note="> 30 词" term="长句" entry={gl["长句"]} />
+            <MetricCard label="超长句" value={s.very_long_sentences_count} note="> 40 词" term="超长句" entry={gl["超长句"]} />
           </div>
           <div className="mt-4 rounded-2xl bg-canvas-100/80 border border-black/5 px-4 py-3">
             <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">最长句</div>
@@ -245,10 +265,10 @@ export default function WhiteboxResults({
 
         <EvidencePanel title="语篇证据" subtitle="Discourse">
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="段落数" value={d.paragraph_count} note="结构密度" term="段落数" />
-            <MetricCard label="连接密度" value={`${d.connective_density}`} note="每百词" term="连接密度" />
-            <MetricCard label="体裁" value={d.genre_hint} note="文本类型" term="体裁" />
-            <MetricCard label="文本结构" value={d.text_structure || "待定"} note="结构判断" term="文本结构" />
+            <MetricCard label="段落数" value={d.paragraph_count} note="结构密度" term="段落数" entry={gl["段落数"]} />
+            <MetricCard label="连接密度" value={`${d.connective_density}`} note="每百词" term="连接密度" entry={gl["连接密度"]} />
+            <MetricCard label="体裁" value={d.genre_hint} note="文本类型" term="体裁" entry={gl["体裁"]} />
+            <MetricCard label="文本结构" value={d.text_structure || "待定"} note="结构判断" term="文本结构" entry={gl["文本结构"]} />
           </div>
         </EvidencePanel>
       </div>
@@ -262,6 +282,8 @@ export default function WhiteboxResults({
           ))}
         </div>
       </EvidencePanel>
+
+      <KnowledgeRefsPanel />
 
       {data.teaching_insights && data.teaching_insights.length > 0 && (
         <EvidencePanel title="教学洞察" subtitle="Insights">
@@ -337,12 +359,12 @@ export default function WhiteboxResults({
   );
 }
 
-function ChartPanel({ title, caption, children, term }: { title: string; caption: string; children: React.ReactNode; term?: string }) {
+function ChartPanel({ title, caption, children, term, entry }: { title: string; caption: string; children: React.ReactNode; term?: string; entry?: GlossaryEntry }) {
   return (
     <div className="archive-surface p-5">
       <div className="section-title mb-2">Evidence View</div>
       <h3 className="text-lg font-semibold text-ink-900">
-        {term ? <TermTooltip term={term}>{title}</TermTooltip> : title}
+        {term ? <TermTooltip term={term} entry={entry}>{title}</TermTooltip> : title}
       </h3>
       <p className="mt-2 text-sm text-ink-500 leading-6">{caption}</p>
       <div className="mt-5">{children}</div>
@@ -360,11 +382,61 @@ function EvidencePanel({ title, subtitle, children }: { title: string; subtitle:
   );
 }
 
-function VerdictCard({ label, value, note, term }: { label: string; value: string | number; note: string; term?: string }) {
+/** 分析依据（任务F3）：白盒分析引用的官方知识资产，点击抽屉查看完整内容 */
+function KnowledgeRefsPanel() {
+  const [items, setItems] = useState<PublicKnowledgeItem[] | null>(null);
+  const [openItem, setOpenItem] = useState<PublicKnowledgeItem | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = await listPublicKnowledge();
+        if (!cancelled) setItems(all.filter((it) => it.kind === "builtin"));
+      } catch {
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <EvidencePanel title="分析依据" subtitle="Knowledge Basis">
+      <p className="mb-3 text-sm text-ink-500 leading-6">
+        本次分析所依据的官方知识资产，点击可查看完整说明——内容可追溯。
+      </p>
+      <div className="space-y-2">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            onClick={() => setOpenItem(it)}
+            className="flex w-full items-start gap-3 rounded-2xl border border-black/5 bg-white p-3.5 text-left shadow-soft transition-colors hover:border-primary-200"
+          >
+            <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-sage-100 text-ink-700 flex-shrink-0 mt-0.5">
+              {it.category}
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-ink-900">{it.title}</span>
+              <span className="mt-0.5 block truncate text-xs text-ink-400">{it.summary}</span>
+            </span>
+            <span className="text-xs text-primary-600 flex-shrink-0 mt-0.5">查看 →</span>
+          </button>
+        ))}
+      </div>
+      {openItem && <PublicAssetDrawer item={openItem} onClose={() => setOpenItem(null)} />}
+    </EvidencePanel>
+  );
+}
+
+function VerdictCard({ label, value, note, term, entry }: { label: string; value: string | number; note: string; term?: string; entry?: GlossaryEntry }) {
   return (
     <div className="data-card p-4 bg-white/90">
       <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
-        {term ? <TermTooltip term={term} block>{label}</TermTooltip> : label}
+        {term ? <TermTooltip term={term} entry={entry} block>{label}</TermTooltip> : label}
       </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <p className="mt-1 text-xs text-ink-500 leading-5">{note}</p>
@@ -372,11 +444,11 @@ function VerdictCard({ label, value, note, term }: { label: string; value: strin
   );
 }
 
-function MetricCard({ label, value, note, term }: { label: string; value: string | number; note: string; term?: string }) {
+function MetricCard({ label, value, note, term, entry }: { label: string; value: string | number; note: string; term?: string; entry?: GlossaryEntry }) {
   return (
     <div className="data-card p-4 bg-white/92">
       <div className="text-[11px] uppercase tracking-[0.16em] text-ink-400">
-        {term ? <TermTooltip term={term} block>{label}</TermTooltip> : label}
+        {term ? <TermTooltip term={term} entry={entry} block>{label}</TermTooltip> : label}
       </div>
       <div className="mt-2 text-lg font-semibold text-ink-900">{value}</div>
       <div className="mt-1 text-xs text-ink-500">{note}</div>
