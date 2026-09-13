@@ -55,12 +55,13 @@ def test_skeleton_assembly_replaces_all_markers():
     html = _assemble_skeleton("Test <Title> & Deck", "#b5493e", pages)
     assert "__TITLE__" not in html and "__ACCENT__" not in html and "__ACCENT_SOFT__" not in html
     assert "<!--SECTIONS-->" not in html
-    assert html.count('<section class="page"') == 1
-    assert 'data-page="1"' in html and 'data-intent="建立情境"' in html
+    assert html.count('<section class="oe-section"') == 1
+    assert html.count('<section class="oe-chapter"') == 1
+    assert 'data-sec="1"' in html and 'data-intent="建立情境"' in html
     assert "--accent:#b5493e" in html
     assert "Test &lt;Title&gt; &amp; Deck" in html
-    # 框架层要素写死在骨架，拼装后必须存在
-    for marker in ('id="nav-prev"', 'id="nav-next"', 'id="page-indicator"', "--fs-body:21px", "--lh-body:1.8"):
+    # 框架层要素写死在骨架，拼装后必须存在（滚动骨架：目录/进度条/返回顶部/AIGC 文末徽标）
+    for marker in ('id="oe-toc"', 'id="oe-progress"', 'id="oe-backtop"', 'id="oe-aigc"', "--fs-body:21px", "--lh-body:1.8"):
         assert marker in html, marker
 
 

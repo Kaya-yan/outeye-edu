@@ -1201,7 +1201,7 @@ function PlanStep({
   const startBlueprintPlanning = async () => {
     setBlueprintError("");
     setBlueprintBusy(true);
-    setBlueprintProgress("正在启动页面规划…");
+    setBlueprintProgress("正在启动章节规划…");
     try {
       const start = await apiPost<{ task_id: string }>("/courseware/blueprint", buildPlanPayload());
       // 轮询蓝图规划（上限 3 分钟）
@@ -1231,11 +1231,11 @@ function PlanStep({
           setBlueprintEdits(0);
           return;
         }
-        if (st.status === "error") throw new Error(st.error || "页面规划失败，请重试");
+        if (st.status === "error") throw new Error(st.error || "章节规划失败，请重试");
       }
-      throw new Error("页面规划超时（超过 3 分钟），请重试");
+      throw new Error("章节规划超时（超过 3 分钟），请重试");
     } catch (e: unknown) {
-      setBlueprintError(e instanceof Error ? e.message : "页面规划失败，请重试");
+      setBlueprintError(e instanceof Error ? e.message : "章节规划失败，请重试");
     } finally {
       setBlueprintBusy(false);
       setBlueprintProgress("");
@@ -1566,7 +1566,7 @@ function PlanStep({
               <div className="section-title mb-2">Courseware Generation</div>
               <h3 className="text-lg font-semibold text-ink-900">AI 三链路课件生成</h3>
               <p className="text-sm text-ink-500 mt-1 leading-6">
-                同一确认教案，三种独立产物：HTML 交互课件（先出页面蓝图，确认后逐页生成，进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成，所有产物均标注「AI 生成」。
+                同一确认教案，三种独立产物：HTML 交互课件（先出章节蓝图，确认后逐节生成，进编辑器精修）、PPT 课堂放映（含讲者备注）、Word 课堂执行文档（步骤表/板书/作业）。各自独立 LLM 按媒介最优化生成，所有产物均标注「AI 生成」。
               </p>
             </div>
           </div>
@@ -1576,7 +1576,7 @@ function PlanStep({
               disabled={creatingCourseware || blueprintBusy}
               className="btn-primary w-full rounded-xl py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {blueprintBusy ? "AI 规划页面中…" : pageBlueprint ? "重新规划页面蓝图" : "生成 HTML 课件（先出页面蓝图）"}
+              {blueprintBusy ? "AI 规划章节中…" : pageBlueprint ? "重新规划章节蓝图" : "生成 HTML 课件（先出章节蓝图）"}
             </button>
             <div className="grid grid-cols-2 gap-2">
               <button

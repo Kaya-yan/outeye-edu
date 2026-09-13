@@ -59,21 +59,21 @@ elapsed = round(time.time() - t0, 1)
 
 sc = result.self_check
 print("\n===== 自检摘要 =====")
-print("fallback:", result.fallback, "| duration:", elapsed, "s | pages:", sc.get("pages_count"))
+print("fallback:", result.fallback, "| duration:", elapsed, "s | sections:", sc.get("pages_count"))
 print("interactions:", sc.get("interaction_types"))
 print("regen/sanitize/stub:", sc.get("regenerated_pages"), sc.get("sanitized_pages"), sc.get("stub_pages"))
 rv = sc.get("reviewer") or {}
 print("reviewer version:", rv.get("version"), "| pass_score:", rv.get("pass_score"), "| avg:", rv.get("avg_score"))
 for p in rv.get("pages", []):
     problems = "；".join(p.get("problems") or [])[:80]
-    print(f"  第{p['page']}页 score={p.get('score')} verdict={p.get('verdict')} rewrites={p.get('rewrites')} {problems}")
+    print(f"  第{p['page']}节 score={p.get('score')} verdict={p.get('verdict')} rewrites={p.get('rewrites')} {problems}")
 vq = sc.get("visual_qc") or {}
 of = vq.get("overflow") or {}
 print("visual_qc enabled:", vq.get("enabled"), "| skipped:", vq.get("skipped"), "| error:", vq.get("error"),
       "| vl_checked:", vq.get("checked_pages"), "| vl_issues:", vq.get("issue_pages"))
-print("overflow gate skipped:", of.get("skipped"), "| measured:", len(of.get("checked_pages") or []),
-      "| overflow_pages:", of.get("overflow_pages"), "| regenerated:", of.get("regenerated"),
-      "| still_overflowing:", of.get("still_overflowing"))
+print("gate version:", of.get("gate_version"), "| skipped:", of.get("skipped"), "| measured:", len(of.get("checked_pages") or []),
+      "| regenerated:", of.get("regenerated"),
+      "| still_element_issues:", of.get("still_element_issues"))
 cr = sc.get("consistency_review") or {}
 print("consistency enabled:", cr.get("enabled"), "| replaced:", cr.get("total_replaced"),
       "| rolled_back:", cr.get("rolled_back"), "| note:", cr.get("note"), "| error:", cr.get("error"))

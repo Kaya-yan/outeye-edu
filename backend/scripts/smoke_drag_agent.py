@@ -15,14 +15,14 @@ AGENT = Path("scripts/_agent_smoke.js").read_text(encoding="utf-8")
 
 HTML = (
     "<html><head><style>section{display:block;margin:0 0 24px 0;padding:10px}</style></head><body>"
-    '<div id="stage">'
-    '<section class="page" data-page="1" data-title="A"><div class="page-focus">'
+    '<main id="oe-content">'
+    '<section class="oe-chapter" data-section="第一章">'
+    '<section class="oe-section" data-sec="1" data-title="A"><div class="page-focus">'
     "<p>one</p><p>two</p><p>three</p></div></section>"
-    '<section class="page" data-page="2" data-title="B"><div class="page-focus"><p>b</p></div></section>'
-    '<section class="page" data-page="3" data-title="C"><div class="page-focus"><p>c</p></div></section>'
-    "</div>"
-    '<button id="nav-prev">p</button><button id="nav-next">n</button>'
-    '<div id="page-indicator">1 / 3</div>'
+    '<section class="oe-section" data-sec="2" data-title="B"><div class="page-focus"><p>b</p></div></section>'
+    '<section class="oe-section" data-sec="3" data-title="C"><div class="page-focus"><p>c</p></div></section>'
+    "</section>"
+    "</main>"
     '<div id="row" style="display:flex;gap:8px;width:600px;padding:10px">'
     "<span>甲</span><span>乙</span><span>丙</span><span>丁</span></div>"
     "<script>" + AGENT + "</script>"
@@ -40,13 +40,13 @@ def apply(page, patches):
 
 def page_order(page):
     return page.evaluate(
-        "[].slice.call(document.querySelectorAll('section.page')).map(s=>s.getAttribute('data-page'))"
+        "[].slice.call(document.querySelectorAll('.oe-section')).map(s=>s.getAttribute('data-sec'))"
     )
 
 
 def inner_texts(page):
     return page.evaluate(
-        "[].slice.call(document.querySelectorAll('[data-page=\"1\"] .page-focus p')).map(p=>p.textContent)"
+        "[].slice.call(document.querySelectorAll('[data-sec=\"1\"] .page-focus p')).map(p=>p.textContent)"
     )
 
 
@@ -84,7 +84,7 @@ with sync_playwright() as p:
     )
     page.wait_for_timeout(150)
 
-    x1, y1 = center(page, '[data-page="1"]')
+    x1, y1 = center(page, '[data-sec="1"]')
     page.mouse.move(x1, y1)
     page.mouse.down()
     page.mouse.move(x1 + 3, y1 + 3)
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(150)
     check("微动（<6px）不触发拖拽，点击选取仍有效", len(commits(page)) == 0 and page.evaluate("window.__picks.length") == 1)
 
-    b3 = page.locator('[data-page="3"]').bounding_box()
+    b3 = page.locator('[data-sec="3"]').bounding_box()
     px3, py3 = b3["x"] + 5, b3["y"] + 5
     page.mouse.move(px3, py3)
     page.mouse.down()
@@ -102,13 +102,13 @@ with sync_playwright() as p:
         "(document.getElementById('ve-drag-line')||{style:{}}).style.display==='block'"
     )
     ghost_shown = page.evaluate(
-        "(document.getElementById('ve-drag-ghost')||{style:{}}).style.display==='block'"
+        "(document.getElementById('ve-drag-ghost')||{style:{}}).style.display==='flex'"
     )
     page.mouse.up()
     page.wait_for_timeout(150)
     cs = commits(page)
     check("拖拽期间显示插入线与拖拽框", line_shown and ghost_shown)
-    check("拖拽提交 ve:move:commit（page3 → 同级第 0 位）", len(cs) == 1 and cs[0]["targetIndex"] == 0 and cs[0]["tag"] == "section")
+    check("拖拽提交 ve:move:commit（节3 → 同级第 0 位）", len(cs) == 1 and cs[0]["targetIndex"] == 0 and cs[0]["tag"] == "section")
     check("提交后拖拽 UI 已清理",
           page.evaluate("!document.getElementById('ve-drag-style')") and
           page.evaluate("(document.getElementById('ve-drag-line')||{style:{}}).style.display==='none'"))
@@ -116,10 +116,10 @@ with sync_playwright() as p:
     apply(page, [{"kind": "move", "selector": cs[0]["selector"], "moveId": "oe-mv-d1", "targetIndex": cs[0]["targetIndex"]}])
     check("宿主回放 move 补丁后顺序 [3,1,2]", page_order(page) == ["3", "1", "2"])
     check("被拖元素盖稳定锚点", page.evaluate(
-        "!!document.querySelector('section.page[data-title=\"C\"][data-oe-id=\"oe-mv-d1\"]')"
+        "!!document.querySelector('.oe-section[data-title=\"C\"][data-oe-id=\"oe-mv-d1\"]')"
     ))
 
-    b1 = page.locator('[data-page="1"]').bounding_box()
+    b1 = page.locator('[data-sec="1"]').bounding_box()
     pa, pb = b1["x"] + 5, b1["y"] + 5
     page.mouse.move(pa, pb)
     page.mouse.down()
@@ -128,8 +128,8 @@ with sync_playwright() as p:
     page.wait_for_timeout(150)
     check("原位拖拽（落点=当前位次）不产生提交", len(commits(page)) == 1)
 
-    xp, yp = center(page, '[data-page="1"] .page-focus p:nth-of-type(2)')
-    xt, yt = center(page, '[data-page="1"] .page-focus p:nth-of-type(3)')
+    xp, yp = center(page, '[data-sec="1"] .page-focus p:nth-of-type(2)')
+    xt, yt = center(page, '[data-sec="1"] .page-focus p:nth-of-type(3)')
     page.mouse.move(xp, yp)
     page.mouse.down()
     page.mouse.move(xp, yp - 20, steps=3)
@@ -137,15 +137,15 @@ with sync_playwright() as p:
     page.mouse.up()
     page.wait_for_timeout(150)
     cs2 = commits(page)
-    check("页内段落拖到末尾（targetIndex=2）", len(cs2) == 2 and cs2[1]["targetIndex"] == 2 and cs2[1]["tag"] == "p")
+    check("节内段落拖到末尾（targetIndex=2）", len(cs2) == 2 and cs2[1]["targetIndex"] == 2 and cs2[1]["tag"] == "p")
     apply(page, [
         {"kind": "move", "selector": cs[0]["selector"], "moveId": "oe-mv-d1", "targetIndex": 0},
         {"kind": "move", "selector": cs2[1]["selector"], "moveId": "oe-mv-d2", "targetIndex": 2},
     ])
-    check("回放后页内顺序 [one,three,two]", inner_texts(page) == ["one", "three", "two"])
-    check("页级顺序不受页内拖拽影响", page_order(page) == ["3", "1", "2"])
+    check("回放后节内顺序 [one,three,two]", inner_texts(page) == ["one", "three", "two"])
+    check("节级顺序不受节内拖拽影响", page_order(page) == ["3", "1", "2"])
 
-    xp, yp = center(page, '[data-page="1"] .page-focus p:nth-of-type(2)')
+    xp, yp = center(page, '[data-sec="1"] .page-focus p:nth-of-type(2)')
     page.mouse.move(xp, yp)
     page.mouse.down()
     page.mouse.move(xp, yp - 20, steps=3)

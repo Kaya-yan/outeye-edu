@@ -157,6 +157,11 @@ export default function CoursewarePresentPage() {
       const ifr = iframeRef.current;
       if (!ifr || !ifr.contentWindow) return;
       const doc = ifr.contentDocument || ifr.contentWindow.document;
+      // 章节式滚动骨架自带左侧章目录（#oe-toc），外置侧栏置空避免双目录
+      if (doc.querySelector(".oe-chapter")) {
+        setSections([]);
+        return;
+      }
       const els = doc.querySelectorAll("[data-section]");
       const names: string[] = [];
       els.forEach((el) => {

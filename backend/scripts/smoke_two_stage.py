@@ -97,6 +97,6 @@ if "cover" not in kinds or "summary" not in kinds or "deep_reading" not in kinds
     fails.append(f"页型不全：{kinds}")
 if "anatomy" not in (sc.get("interaction_types") or []):
     fails.append("全副无长难句解剖组件")
-if not any("精讲页" in m for m in messages):
-    fails.append("进度文案缺少页类型")
+if not any("精讲节" in m for m in messages):
+    fails.append("进度文案缺少节类型")
 print("\n冒烟结论:", "FAIL — " + "; ".join(fails) if fails else "PASS")

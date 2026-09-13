@@ -1,7 +1,7 @@
-"""任务C 代理级冒烟：真实 chromium DOM 验证 move 补丁与拖拽体验
+"""任务C 代理级冒烟：真实 chromium DOM 验证 move 补丁与拖拽体验（章节滚动式 .oe-section）
 
-场景一（承接任务③）：move 补丁重放/幂等/同级约束/导出重编号
-场景二（任务C）：toPage 跨页移动补丁（重放到目标页 .page-focus 末尾 + 稳定锚点 + 幂等 + 导出）
+场景一（承接任务③）：move 补丁重放/幂等/同级约束/导出重编号 data-sec
+场景二（任务C）：toPage 跨节移动补丁（重放到目标节 .page-focus 末尾 + 稳定锚点 + 幂等 + 导出）
 场景三（任务C）：拖拽手柄可见性/幽灵预览跟随/元素半透明/ve:move:commit 提交
 
 前置：node --input-type=module -e "…buildPickAgentScript('smoke-ch')…" 已生成 scripts/_agent_smoke.js
@@ -20,14 +20,14 @@ AGENT = Path("scripts/_agent_smoke.js").read_text(encoding="utf-8")
 
 HTML = (
     "<html><head><style>section{display:block}</style></head><body>"
-    '<div id="stage">'
-    '<section class="page" data-page="1" data-title="A"><div class="page-focus">'
+    '<main id="oe-content">'
+    '<section class="oe-chapter" data-section="第一章">'
+    '<section class="oe-section" data-sec="1" data-title="A"><div class="page-focus">'
     "<p>one</p><p>two</p><p>three</p></div></section>"
-    '<section class="page" data-page="2" data-title="B"><div class="page-focus"><p>b</p></div></section>'
-    '<section class="page" data-page="3" data-title="C"><div class="page-focus"><p>c</p></div></section>'
-    "</div>"
-    '<button id="nav-prev">p</button><button id="nav-next">n</button>'
-    '<div id="page-indicator">1 / 3</div>'
+    '<section class="oe-section" data-sec="2" data-title="B"><div class="page-focus"><p>b</p></div></section>'
+    '<section class="oe-section" data-sec="3" data-title="C"><div class="page-focus"><p>c</p></div></section>'
+    "</section>"
+    "</main>"
     "<script>" + AGENT + "</script>"
     "</body></html>"
 )
@@ -63,13 +63,13 @@ def last_msg(page, mtype):
 
 def page_order(page):
     return page.evaluate(
-        "[].slice.call(document.querySelectorAll('section.page')).map(s=>s.getAttribute('data-page'))"
+        "[].slice.call(document.querySelectorAll('.oe-section')).map(s=>s.getAttribute('data-sec'))"
     )
 
 
 def focus_texts(page, pageNo):
     return page.evaluate(
-        "n=>[].slice.call(document.querySelectorAll('section.page[data-page=\"'+n+'\"] .page-focus p')).map(p=>p.textContent)",
+        "n=>[].slice.call(document.querySelectorAll('.oe-section[data-sec=\"'+n+'\"] .page-focus p')).map(p=>p.textContent)",
         pageNo,
     )
 
@@ -99,51 +99,51 @@ with sync_playwright() as p:
     page = b.new_page()
     page.set_content(HTML, wait_until="load")
 
-    move_page3 = {"kind": "move", "selector": '[data-page="3"]', "moveId": "oe-mv-1", "targetIndex": 0}
+    move_page3 = {"kind": "move", "selector": '[data-sec="3"]', "moveId": "oe-mv-1", "targetIndex": 0}
     apply(page, [move_page3])
-    check("页面级上移：3 移到最前", page_order(page) == ["3", "1", "2"])
-    check("被移动页获得稳定锚点", page.evaluate(
-        "!!document.querySelector('section.page[data-title=\"C\"][data-oe-id=\"oe-mv-1\"]')"
+    check("节级上移：3 移到最前", page_order(page) == ["3", "1", "2"])
+    check("被移动节获得稳定锚点", page.evaluate(
+        "!!document.querySelector('.oe-section[data-title=\"C\"][data-oe-id=\"oe-mv-1\"]')"
     ))
-    check("移动未波及导航按钮位置", page.evaluate(
-        "document.getElementById('stage').lastElementChild.tagName === 'SECTION'"
+    check("移动未波及章容器结构", page.evaluate(
+        "document.querySelector('.oe-chapter').lastElementChild.tagName === 'SECTION'"
     ))
 
     apply(page, [dict(move_page3, targetIndex=2)])
-    check("页面级下移（补丁更新后重放）", page_order(page) == ["1", "2", "3"])
+    check("节级下移（补丁更新后重放）", page_order(page) == ["1", "2", "3"])
 
     apply(page, [dict(move_page3, targetIndex=0), dict(move_page3, targetIndex=0)])
     check("重放幂等", page_order(page) == ["3", "1", "2"])
 
-    move_p2 = {"kind": "move", "selector": '[data-page="1"] .page-focus p:nth-of-type(2)',
+    move_p2 = {"kind": "move", "selector": '[data-sec="1"] .page-focus p:nth-of-type(2)',
                "moveId": "oe-mv-2", "targetIndex": 2}
     apply(page, [dict(move_page3, targetIndex=0), move_p2])
-    check("页内同级下移（跨页不生效语义：仅在同级内）", focus_texts(page, "1") == ["one", "three", "two"])
+    check("节内同级下移（跨节不生效语义：仅在同级内）", focus_texts(page, "1") == ["one", "three", "two"])
 
     exported = export_html(page)
-    pairs = re.findall(r'data-page="(\d+)" data-title="([ABC])"', exported)
-    check("导出重编号 data-page（DOM 顺序 1..N）", pairs == [("1", "C"), ("2", "A"), ("3", "B")])
+    pairs = re.findall(r'data-sec="(\d+)" data-title="([ABC])"', exported)
+    check("导出重编号 data-sec（DOM 顺序 1..N）", pairs == [("1", "C"), ("2", "A"), ("3", "B")])
     check("导出保留稳定锚点", 'data-oe-id="oe-mv-1"' in exported)
 
     apply(page, [])
     check("清空补丁后位置保留（与 text 补丁同语义，撤销靠历史快照）", page_order(page) == ["3", "1", "2"])
     page.close()
 
-    # ---- 场景二：任务C toPage 跨页移动补丁 ----
+    # ---- 场景二：任务C toPage 跨节移动补丁 ----
     page = b.new_page()
     page.set_content(HTML, wait_until="load")
 
-    move_to_p2 = {"kind": "move", "selector": '[data-page="1"] .page-focus p:nth-of-type(1)',
+    move_to_p2 = {"kind": "move", "selector": '[data-sec="1"] .page-focus p:nth-of-type(1)',
                   "moveId": "oe-mv-9", "toPage": 2}
     apply(page, [move_to_p2])
-    check("跨页移动：源页只剩 two/three", focus_texts(page, "1") == ["two", "three"])
-    check("跨页移动：落到目标页 .page-focus 末尾", focus_texts(page, "2") == ["b", "one"])
-    check("跨页移动元素获得稳定锚点", page.evaluate(
-        "!!document.querySelector('section.page[data-page=\"2\"] .page-focus p[data-oe-id=\"oe-mv-9\"]')"
+    check("跨节移动：源节只剩 two/three", focus_texts(page, "1") == ["two", "three"])
+    check("跨节移动：落到目标节 .page-focus 末尾", focus_texts(page, "2") == ["b", "one"])
+    check("跨节移动元素获得稳定锚点", page.evaluate(
+        "!!document.querySelector('.oe-section[data-sec=\"2\"] .page-focus p[data-oe-id=\"oe-mv-9\"]')"
     ))
 
     apply(page, [move_to_p2])
-    check("跨页移动重放幂等（不重复搬移）", focus_texts(page, "2") == ["b", "one"])
+    check("跨节移动重放幂等（不重复搬移）", focus_texts(page, "2") == ["b", "one"])
 
     exported = export_html(page)
     check("导出保留跨页结果（b 后接 one 且带锚点）",
@@ -161,7 +161,7 @@ with sync_playwright() as p:
         "var h=document.getElementById('ve-drag-handle');!h||h.style.display==='none'"
     ))
 
-    first_p = page.locator('[data-page="1"] .page-focus p').first
+    first_p = page.locator('[data-sec="1"] .page-focus p').first
     pr = first_p.bounding_box()
     first_p.click()
     page.wait_for_timeout(100)
@@ -187,7 +187,7 @@ with sync_playwright() as p:
     check("幽灵宽度钳制（源元素 1264px 宽被压到 ~240px 内容宽 + 边框内边距）",
           240 <= ghost["w"] <= 260)
     check("拖拽中原元素半透明", page.evaluate(
-        "document.querySelector('[data-page=\"1\"] .page-focus p').style.opacity"
+        "document.querySelector('[data-sec=\"1\"] .page-focus p').style.opacity"
     ) == "0.35")
     check("拖拽中手柄隐藏", page.evaluate(
         "document.getElementById('ve-drag-handle').style.display==='none'"
@@ -199,8 +199,8 @@ with sync_playwright() as p:
     check("松手发出 ve:move:commit（targetIndex=1：移到第二位）",
           commit is not None and commit["payload"]["targetIndex"] == 1)
     check("松手后元素透明度恢复", page.evaluate(
-        "document.querySelector('[data-page=\"1\"] .page-focus p').style.opacity==='' || "
-        "document.querySelector('[data-page=\"1\"] .page-focus p').style.opacity===''"
+        "document.querySelector('[data-sec=\"1\"] .page-focus p').style.opacity==='' || "
+        "document.querySelector('[data-sec=\"1\"] .page-focus p').style.opacity===''"
     ))
     check("松手后幽灵隐藏、手柄复显", page.evaluate(
         "document.getElementById('ve-drag-ghost').style.display==='none' && "
@@ -208,7 +208,7 @@ with sync_playwright() as p:
     ))
     check("拖拽仅发补丁不动 DOM（由外部重放）", focus_texts(page, "1") == ["one", "two", "three"])
 
-    apply(page, [{"kind": "move", "selector": '[data-page="1"] .page-focus p:nth-of-type(1)', "moveId": "oe-mv-5",
+    apply(page, [{"kind": "move", "selector": '[data-sec="1"] .page-focus p:nth-of-type(1)', "moveId": "oe-mv-5",
                   "targetIndex": 1}])
     check("提交的补丁重放后顺序生效", focus_texts(page, "1") == ["two", "one", "three"])
     page.close()

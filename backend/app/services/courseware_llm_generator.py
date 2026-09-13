@@ -1,12 +1,13 @@
 """
 课件 LLM 生成引擎（FIX-3 · F3.1/F3.2；HTML 链路 ④a 三层架构 + ③ 两阶段生成）
 
-HTML 链路（③ 两阶段 · 三层）：框架层+主题层写死在 courseware_skeleton_v2.html
-（16:9 舞台、翻页/键盘/页码、交互行为、逐段精讲组件），LLM 分两阶段工作——
-阶段一规划器（courseware_page_planner_v1）一次调用产出页面蓝图（页型/标题/
-意图/段落锚点/强调色），程序硬校验（段落全覆盖 + ≤25 页截断），失败带原因
-重试一次，仍失败确定性回退蓝图；阶段二按蓝图逐页生成
-（courseware_html_page_v2，含金标准 few-shot），3 路并发，每页带段落原文与
+HTML 链路（③ 两阶段 · 三层）：框架层+主题层写死在 courseware_skeleton_scroll.html
+（章节式滚动版心、左侧章节目录、顶部进度条、←/→ 切章、节淡入、交互行为、
+逐段精讲组件），LLM 分两阶段工作——
+阶段一规划器（courseware_page_planner_v2）一次调用产出章节蓝图（章+节，
+节型/标题/意图/段落锚点/强调色），程序硬校验（段落全覆盖 + 章≤10 + 每章
+节≤6），失败带原因重试一次，仍失败确定性回退蓝图；阶段二按蓝图逐节生成
+（courseware_html_page_v3，含金标准 few-shot），3 路并发，每节带段落原文与
 白盒切片（难词归属小写化+词干匹配、长难句按长度+从句标记数加权排序）。
 逐页程序自检（单焦点/禁忌/行内色值），不合格定向重生成 ≤2 轮，仍失败确定
 性净化，完全无输出用程序兜底页保证整副不缺页；任意阶段异常回退
@@ -35,15 +36,17 @@ from app.services.courseware_themes import DEFAULT_THEME_ID, CoursewareTheme, ge
 from app.services.courseware_interaction_check import INTERACTION_TYPE_MARKERS as _INTERACTION_MARKERS
 from app.services.teacher_intent import intent_prompt_section, source_text_guard
 
-PLANNER_PROMPT_NAME = "courseware_page_planner_v1"
-PAGE_PROMPT_NAME = "courseware_html_page_v2"
-MAX_BLUEPRINT_PAGES = 25
+PLANNER_PROMPT_NAME = "courseware_page_planner_v2"
+PAGE_PROMPT_NAME = "courseware_html_page_v3"
+# 章节式滚动格式：章 ≤10、每章节数 ≤6（段落全覆盖是更高不变量，冲突时优先覆盖）
+MAX_CHAPTERS = 10
+MAX_SECTIONS_PER_CHAPTER = 6
 
 _EXTERNAL_RE = re.compile(r"(?:src|href)\s*=\s*[\"']https?://|@import|<link[^>]+stylesheet", re.IGNORECASE)
 
 # ============ ④a 三层架构：骨架（框架+主题）与内容层分离 ============
 
-_SKELETON_PATH = Path(__file__).resolve().parent / "courseware_skeleton_v2.html"
+_SKELETON_PATH = Path(__file__).resolve().parent / "courseware_skeleton_scroll.html"
 _SKELETON_CACHE: Optional[str] = None
 
 # 默认主题（academic）的基线 token；主题库见 courseware_themes.py
@@ -279,20 +282,48 @@ def _blend_colors(hex_fg: str, hex_bg: str, ratio: float) -> str:
     return "#" + "".join(f"{c:02x}" for c in mixed)
 
 
-def _assemble_skeleton(title: str, accent: str, pages: List[_ContentPage], theme: Optional[CoursewareTheme] = None) -> str:
-    """三层拼装：骨架（框架）+ 主题 token 组与微调（④b）+ 逐页内容 section（重编页码）"""
+def _assemble_skeleton(
+    title: str,
+    accent: str,
+    pages: List[_ContentPage],
+    theme: Optional[CoursewareTheme] = None,
+    blueprint: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """三层拼装：滚动骨架 + 主题 token 组与微调（④b）+ 章节课内容（节序重编）
+
+    蓝图（平面节列表，每节可带 chapter 标签）→ 连续同标签运行合并为一章；
+    同名非连续章自动编号（课文精讲（二）…）。"""
     theme = theme or _ACADEMIC
-    sections = []
-    for i, p in enumerate(pages, 1):
-        attrs = f'<section class="page" data-page="{i}" data-title="{_html_escape(p.title or f"第{i}页", quote=True)}"'
-        if p.intent:
-            attrs += f' data-intent="{_html_escape(p.intent, quote=True)}"'
-        sections.append(f'{attrs}>\n{p.html}\n</section>')
+    specs = list(blueprint or [])
+    if len(specs) != len(pages):
+        specs = [{"kind": ""} for _ in pages]
+    chapter_html = []
+    sec_no = 0
+    for ch_no, ch in enumerate(_derive_chapters(specs), 1):
+        body = []
+        for i in ch["idxs"]:
+            sec_no += 1
+            p = pages[i]
+            attrs = f'<section class="oe-section" data-sec="{sec_no}"'
+            kind = specs[i].get("kind") or ""
+            if kind:
+                attrs += f' data-kind="{kind}"'
+            attrs += f' data-title="{_html_escape(p.title or f"第{sec_no}节", quote=True)}"'
+            if p.intent:
+                attrs += f' data-intent="{_html_escape(p.intent, quote=True)}"'
+            body.append(f'{attrs}>\n{p.html}\n</section>')
+        chapter_html.append(
+            f'<section class="oe-chapter" data-section="{_html_escape(ch["display"], quote=True)}">\n'
+            f'<header class="ch-head"><span class="ch-index">第 {ch_no} 章</span>'
+            f'<h2 class="ch-title">{_html_escape(ch["display"])}</h2></header>\n'
+            + "\n".join(body)
+            + "\n</section>"
+        )
     token_block = (
         theme.token_css()
         + f"\n  --accent:{accent};\n  --accent-soft:{_blend_colors(accent, theme.tokens['paper'], 0.12)};"
     )
-    html = _load_skeleton().replace("<!--SECTIONS-->", "\n".join(sections))
+    html = _load_skeleton().replace("<!--SECTIONS-->", "\n".join(chapter_html))
     return (
         html.replace("__TITLE__", _html_escape(title))
         .replace("__TOKEN_BLOCK__", token_block)
@@ -436,19 +467,141 @@ PAGE_KINDS = (
     "deep_reading", "language_focus", "interaction", "summary",
 )
 KIND_LABELS = {
-    "cover": "封面页",
-    "agenda": "目标页",
-    "vocab": "词汇预教页",
-    "text_anatomy": "原文解剖页",
-    "lang_points": "语言点页",
-    "deep_reading": "精讲页",
-    "language_focus": "语言聚焦页",
-    "interaction": "互动检测页",
-    "summary": "总结页",
+    "cover": "封面节",
+    "agenda": "目标节",
+    "vocab": "词汇预教节",
+    "text_anatomy": "原文解剖节",
+    "lang_points": "语言点节",
+    "deep_reading": "精讲节",
+    "language_focus": "语言聚焦节",
+    "interaction": "互动检测节",
+    "summary": "总结节",
 }
 # 段落锚点硬要求的页型（蓝图必须有合法 para）；覆盖判定只认解剖类页型
 _ANCHORED_KINDS = ("deep_reading", "text_anatomy", "lang_points")
 _COVERAGE_KINDS = ("deep_reading", "text_anatomy")
+
+# ---- 章节式滚动格式：章派生与上限（格式级契约） ----
+# 节型 → 所属章型；同章型连续运行合并为一章
+_CHAPTER_KIND_LABELS = {
+    "cover": "导入",
+    "agenda": "导入",
+    "vocab": "词汇预教",
+    "text_anatomy": "课文精讲",
+    "lang_points": "课文精讲",
+    "deep_reading": "课文精讲",
+    "language_focus": "语法聚焦",
+    "interaction": "课堂活动",
+    "summary": "总结作业",
+}
+# 章上限裁剪优先级：活动 < 聚焦/词汇/目标 < 精讲 < 封面/总结（封面总结不可裁）
+_CHAPTER_DROP_PRIORITY = {
+    "interaction": 0, "language_focus": 1, "vocab": 1, "agenda": 1,
+    "deep_reading": 2, "text_anatomy": 2, "lang_points": 2, "cover": 3, "summary": 3,
+}
+
+
+def _eff_chapter_label(spec: Dict[str, Any]) -> str:
+    label = str(spec.get("chapter") or "").strip()
+    return label[:24] if label else _CHAPTER_KIND_LABELS.get(spec.get("kind", ""), "内容")
+
+
+def _derive_chapters(specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """平面节列表 → 连续同标签章运行；同名标签多次出现时全部自动编号（一）（二）"""
+    runs: List[Dict[str, Any]] = []
+    for i, spec in enumerate(specs):
+        label = _eff_chapter_label(spec)
+        if runs and runs[-1]["label"] == label:
+            runs[-1]["idxs"].append(i)
+        else:
+            runs.append({"label": label, "idxs": [i]})
+    counts: Dict[str, int] = {}
+    for ch in runs:
+        counts[ch["label"]] = counts.get(ch["label"], 0) + 1
+    seen: Dict[str, int] = {}
+    cn = "一二三四五六七八九十"
+    for ch in runs:
+        if counts[ch["label"]] > 1:
+            seen[ch["label"]] = seen.get(ch["label"], 0) + 1
+            n = seen[ch["label"]]
+            suffix = f"（{cn[n - 1]}）" if n <= len(cn) else f"（{n}）"
+            ch["display"] = ch["label"] + suffix
+        else:
+            ch["display"] = ch["label"]
+    return runs
+
+
+def _chapter_ctx(specs: List[Dict[str, Any]]) -> Dict[int, Tuple[int, str, int]]:
+    """节序 → (章号, 章显示名, 章内节号)，逐节提示词与拼装共用同一派生保证一致"""
+    ctx: Dict[int, Tuple[int, str, int]] = {}
+    for no, ch in enumerate(_derive_chapters(specs), 1):
+        for pos, i in enumerate(ch["idxs"], 1):
+            ctx[i] = (no, ch["display"], pos)
+    return ctx
+
+
+def _split_oversized_chapters(specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """每章节 ≤6：优先丢非锚定低优先级节；全锚定则拆「（续）」章（锚定节永不丢，保覆盖）"""
+    while True:
+        over = next((ch for ch in _derive_chapters(specs) if len(ch["idxs"]) > MAX_SECTIONS_PER_CHAPTER), None)
+        if over is None:
+            return specs
+        drop_candidates = [
+            i for i in over["idxs"]
+            if specs[i].get("para") is None and specs[i]["kind"] not in ("cover", "summary")
+        ]
+        if drop_candidates:
+            victim = sorted(drop_candidates, key=lambda i: (_CHAPTER_DROP_PRIORITY.get(specs[i]["kind"], 0), -i))[0]
+            specs = [s for j, s in enumerate(specs) if j != victim]
+        else:
+            cont_label = (over["label"] + "（续）")[:24]
+            for k in over["idxs"][MAX_SECTIONS_PER_CHAPTER:]:
+                specs[k]["chapter"] = cont_label
+
+
+def _reduce_chapter_count(specs: List[Dict[str, Any]]) -> None:
+    """章数超限时压缩中间章链（首末锚定章不动）：整链一次性重切为「每章 ≤6 的最少章数」，
+    新章标签沿用链内原章标签并保持互异（相邻同名会归并破上限）。
+    数学不可行（中间节数 > 6×可用章数）则不动——段落覆盖优先于章数上限。"""
+    runs = _derive_chapters(specs)
+    if len(runs) <= MAX_CHAPTERS:
+        return
+    start = len(runs[0]["idxs"])
+    end = len(specs) - len(runs[-1]["idxs"])
+    total = end - start
+    m = MAX_CHAPTERS - 2
+    if total <= 0 or m < 1:
+        return
+    per = -(-total // m)
+    if per > MAX_SECTIONS_PER_CHAPTER:
+        return
+    middle_labels = [runs[j]["label"] for j in range(1, len(runs) - 1)]
+    used = set()
+    pos = start
+    for j in range(m):
+        size = per if j < m - 1 else end - pos
+        base = middle_labels[j] if j < len(middle_labels) else middle_labels[-1]
+        label = base
+        n = 1
+        while label in used:
+            n += 1
+            suffix = "（续）" if n == 2 else f"（续{n}）"
+            label = base[:24 - len(suffix)] + suffix
+        used.add(label)
+        for i in range(pos, pos + size):
+            specs[i]["chapter"] = label
+        pos += size
+
+
+def _enforce_chapter_caps(specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """章 ≤10、每章节 ≤6：先拆超 6 章（丢非锚定节优先、（续）章兜底），
+    仍超 10 章则重切中间章链；内容总量极端超出时保段落覆盖、放开章数。"""
+    specs = [dict(s) for s in specs]
+    specs = _split_oversized_chapters(specs)
+    if len(_derive_chapters(specs)) > MAX_CHAPTERS:
+        _reduce_chapter_count(specs)
+        specs = _split_oversized_chapters(specs)
+    return specs
 
 
 def _page_progress_label(spec: Dict[str, Any]) -> str:
@@ -463,17 +616,34 @@ def _page_progress_label(spec: Dict[str, Any]) -> str:
 
 
 def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[List[Dict[str, Any]]], str]:
-    """规划器输出 → 合法蓝图，返回 (蓝图, 失败原因)。程序只管硬契约：页型合法、
-    段落全覆盖、首封面末总结、≤25 页截断；页数多少由 LLM 在区间内自主决定"""
+    """规划器/教师蓝图 → 合法平面节蓝图，返回 (蓝图, 失败原因)。程序只管硬契约：
+    节型合法、段落全覆盖、首封面末总结、章 ≤10、每章节 ≤6。
+    输入兼容两种形态：新嵌套 chapters:[{title, sections:[…]}] 与旧平面 pages:[…]
+    （旧形态无章标签，按节型派生）。每节可带 chapter 标签（章归属）。"""
     if not isinstance(data, dict):
         return None, "输出不是 JSON 对象"
-    pages_raw = data.get("pages")
-    if not isinstance(pages_raw, list) or not pages_raw:
-        return None, "pages 缺失或为空"
+    raw: List[Tuple[Optional[str], Dict[str, Any]]] = []
+    chapters_raw = data.get("chapters")
+    if isinstance(chapters_raw, list):
+        for ch in chapters_raw:
+            if not isinstance(ch, dict):
+                continue
+            label = str(ch.get("title", "")).strip()[:24]
+            secs = ch.get("sections")
+            if not isinstance(secs, list):
+                continue
+            for p in secs:
+                if isinstance(p, dict):
+                    raw.append((label or None, p))
+    if not raw:
+        pages_raw = data.get("pages")
+        if isinstance(pages_raw, list):
+            # 平面形态可带逐节 chapter 标签（教师确认蓝图原样回传）
+            raw += [(str(p.get("chapter") or "").strip()[:24] or None, p) for p in pages_raw if isinstance(p, dict)]
+    if not raw:
+        return None, "chapters/pages 缺失或为空"
     pages: List[Dict[str, Any]] = []
-    for p in pages_raw:
-        if not isinstance(p, dict):
-            continue
+    for label, p in raw:
         kind = str(p.get("kind", "")).strip()
         if kind not in PAGE_KINDS:
             continue
@@ -485,12 +655,13 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
             elif isinstance(raw_para, list):
                 para = sorted({x for x in raw_para if isinstance(x, int) and 1 <= x <= n_paras})
             if kind in _ANCHORED_KINDS and not para:
-                continue  # 解剖/语言点/旧精讲页必须有合法段落锚点
+                continue  # 解剖/语言点/旧精讲节必须有合法段落锚点
         pages.append({
             "kind": kind,
             "title": str(p.get("title", "")).strip()[:40],
             "intent": str(p.get("intent", "")).strip()[:120],
             "para": para,
+            "chapter": label,
         })
     if not pages:
         return None, "无合法页面"
@@ -499,34 +670,30 @@ def _normalize_blueprint(data: Dict[str, Any], n_paras: int) -> Tuple[Optional[L
     if missing:
         return None, f"段落未被精讲页覆盖：第 {missing[:8]} 段"
     if pages[0]["kind"] != "cover":
-        pages.insert(0, {"kind": "cover", "title": "", "intent": "建立主题情境", "para": None})
+        pages.insert(0, {"kind": "cover", "title": "", "intent": "建立主题情境", "para": None, "chapter": None})
     if pages[-1]["kind"] != "summary":
-        pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None})
-    if len(pages) > MAX_BLUEPRINT_PAGES:
-        # 溢出裁剪优先级：互动 < 语言聚焦/词汇/目标 < 解剖/语言点/精讲 < 封面/总结
-        keep_priority = {"interaction": 0, "language_focus": 1, "vocab": 1, "agenda": 1,
-                         "deep_reading": 2, "text_anatomy": 2, "lang_points": 2, "cover": 3, "summary": 3}
-        overflow = len(pages) - MAX_BLUEPRINT_PAGES
-        drop = set(sorted(
-            range(len(pages)),
-            key=lambda i: (keep_priority.get(pages[i]["kind"], 0), -i),
-        )[:overflow])
-        pages = [spec for i, spec in enumerate(pages) if i not in drop]
-    return pages, ""
+        pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None, "chapter": None})
+    return _enforce_chapter_caps(pages), ""
 
 
 def _fallback_blueprint(slices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """确定性回退蓝图：封面/目标/词汇预教/逐段「解剖+语言点」成对页/检测/总结；段落多时并段保 25 页上限"""
+    """确定性回退蓝图（章节式）：导入/词汇预教/课文精讲（解剖+语言点成对节）/课堂活动/总结作业；
+    每组 2 节、每精讲章 ≤3 组（≤6 节）、精讲章 ≤6 个 → 任意段数下章 ≤10 且每章节 ≤6"""
     pages: List[Dict[str, Any]] = [
-        {"kind": "cover", "title": "", "intent": "建立主题情境，激活已知", "para": None},
-        {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": None},
+        {"kind": "cover", "title": "", "intent": "建立主题情境，激活已知", "para": None, "chapter": "导入"},
+        {"kind": "agenda", "title": "学习目标", "intent": "明确本课结束时学生能做到什么", "para": None, "chapter": "导入"},
     ]
     if any(s["difficult_words"] for s in slices):
-        pages.append({"kind": "vocab", "title": "词汇预教", "intent": "预教难点词，先建立词形识别", "para": None})
-    budget = max(MAX_BLUEPRINT_PAGES - len(pages) - 2, 1)  # 给检测页与总结页留位
-    # 拆页型成对出现（解剖+语言点各一页），预算按页计：每组段落数 = ceil(2*段数/预算)
-    per_group = max(1, -(-(len(slices) * 2) // budget))
-    for start in range(0, len(slices), per_group):
+        pages.append({"kind": "vocab", "title": "词汇预教", "intent": "预教难点词，先建立词形识别", "para": None, "chapter": "词汇预教"})
+    groups_per_ch = MAX_SECTIONS_PER_CHAPTER // 2  # 每组 = 解剖+语言点 2 节
+    max_groups = (MAX_CHAPTERS - 4) * groups_per_ch
+    per_group = max(1, -(-len(slices) // max_groups))
+    n_groups = -(-len(slices) // per_group)
+    n_teach_ch = max(1, -(-n_groups // groups_per_ch))
+    cn = "一二三四五六"
+    for g, start in enumerate(range(0, len(slices), per_group)):
+        ch_no = g // groups_per_ch
+        label = "课文精讲" if n_teach_ch == 1 else f"课文精讲（{cn[ch_no] if ch_no < len(cn) else ch_no + 1}）"
         idxs = [s["index"] for s in slices[start:start + per_group]]
         span = f"第{idxs[0]}段" if len(idxs) == 1 else f"第{idxs[0]}-{idxs[-1]}段"
         pages.append({
@@ -534,15 +701,17 @@ def _fallback_blueprint(slices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "title": f"{span}原文解剖",
             "intent": "原文呈现、段落主旨与长难句解剖",
             "para": idxs,
+            "chapter": label,
         })
         pages.append({
             "kind": "lang_points",
             "title": f"{span}语言点",
             "intent": "逐句细读、语言点与衔接点评",
             "para": idxs,
+            "chapter": label,
         })
-    pages.append({"kind": "interaction", "title": "理解检测", "intent": "基于课文命题，检验理解", "para": None})
-    pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None})
+    pages.append({"kind": "interaction", "title": "理解检测", "intent": "基于课文命题，检验理解", "para": None, "chapter": "课堂活动"})
+    pages.append({"kind": "summary", "title": "总结与作业", "intent": "回收目标并布置作业", "para": None, "chapter": "总结作业"})
     return pages
 
 
@@ -614,16 +783,21 @@ def _plan_blueprint(
     return _fallback_blueprint(slices), DEFAULT_ACCENT, "fallback", f"规划器两次未通过校验（{reason}），已用确定性蓝图"
 
 
-def _page_spec_block(spec: Dict[str, Any], page_no: int, total: int) -> str:
+def _page_spec_block(spec: Dict[str, Any], page_no: int, total: int, chapter_ctx: Optional[Dict[int, Tuple[int, str, int]]] = None) -> str:
     anchor = ""
     para = spec.get("para")
     if para:
         anchor = f"，锚定第 {para[0]}-{para[-1]} 段（共 {len(para)} 段）" if len(para) > 1 else f"，锚定第 {para[0]} 段"
+    ch = (chapter_ctx or {}).get(page_no - 1)
+    ch_line = (
+        f"- 本节属于第 {ch[0]} 章「{ch[1]}」（章内第 {ch[2]} 节），为全课件第 {page_no}/{total} 节\n"
+        if ch else f"- 本节为全课件第 {page_no}/{total} 节\n"
+    )
     return (
-        f"- 本页为全课件第 {page_no}/{total} 页\n"
-        f"- 页型：{spec['kind']}（{KIND_LABELS.get(spec['kind'], '')}）{anchor}\n"
-        f"- 页标题：{spec.get('title') or '（由你拟定）'}\n"
-        f"- 教学意图：{spec.get('intent') or '（由你拟定一句可执行意图）'}"
+        ch_line
+        + f"- 节型：{spec['kind']}（{KIND_LABELS.get(spec['kind'], '')}）{anchor}\n"
+        + f"- 节标题：{spec.get('title') or '（由你拟定）'}\n"
+        + f"- 教学意图：{spec.get('intent') or '（由你拟定一句可执行意图）'}"
     )
 
 
@@ -649,6 +823,7 @@ def _build_page_prompt(
     components: List[Dict[str, Any]],
     theme: Optional[CoursewareTheme] = None,
     teaching_intent: Optional[str] = None,
+    chapter_ctx: Optional[Dict[int, Tuple[int, str, int]]] = None,
 ) -> str:
     cw_theme = theme or _ACADEMIC
     idxs = spec.get("para") or []
@@ -678,7 +853,7 @@ def _build_page_prompt(
         native_language=_esc(native_language or "中文"),
         theme_desc=f"「{cw_theme.name}」主题（{cw_theme.palette_desc}）",
         teacher_requirements=intent_prompt_section(teaching_intent),
-        page_spec=_page_spec_block(spec, page_no, total),
+        page_spec=_page_spec_block(spec, page_no, total, chapter_ctx),
         context_nav=_esc(context_nav),
         para_block=para_block,
         slices_block=slices_block,
@@ -786,7 +961,7 @@ def _wrap_llm_schema(title: str, html: str, source_meta: Optional[Dict[str, Any]
     return {
         "meta": {
             "title": title,
-            "mode": "slides",
+            "mode": "longform",
             "template_id": "classroom_default",
             "source_type": "from_plan_llm",
             "created_at": datetime.utcnow().isoformat(),
@@ -859,13 +1034,13 @@ def generate_html_courseware(
     """
     生成单文件交互 HTML 课件（③ 两阶段 + ④a 三层架构）。
 
-    阶段一 规划器：LLM 一次调用产出页面蓝图（页型/标题/意图/段落锚点/强调色），
-    程序硬校验（页型合法 + 段落全覆盖 + ≤25 页截断），失败带原因重试一次，
-    仍失败确定性回退蓝图。教师传入已确认蓝图时（S4）跳过规划器直接采用
-    （同样过校验，未过则带原因回退内部规划）。阶段二 逐页生成：按蓝图 3 路并发，每页带段落原文与
-    白盒切片；逐页程序自检，不合格定向重生成 ≤2 轮，仍失败确定性净化，完全
-    无输出用程序兜底页，整副不缺页。任意阶段异常回退 courseware_bootstrap，
-    fallback=True 由前端标注"简化版生成"，绝不静默。
+    阶段一 规划器：LLM 一次调用产出现章节蓝图（章+节），程序硬校验（节型合法 +
+    段落全覆盖 + 章≤10 + 每章节≤6），失败带原因重试一次，仍失败确定性回退蓝图。
+    教师传入已确认蓝图时（S4）跳过规划器直接采用（同样过校验，未过则带原因回退
+    内部规划）。阶段二 逐节生成：按蓝图 3 路并发，每节带段落原文与白盒切片；
+    逐节程序自检，不合格定向重生成 ≤2 轮，仍失败确定性净化，完全无输出用程序
+    兜底页，整副不缺节。任意阶段异常回退 courseware_bootstrap，fallback=True
+    由前端标注"简化版生成"，绝不静默。
     """
     start_time = time.time()
     version = prompt_version(PAGE_PROMPT_NAME)
@@ -918,9 +1093,9 @@ def generate_html_courseware(
             if blueprint:
                 # S4 蓝图可编辑：教师已确认，跳过内部规划直接逐页生成
                 blueprint_source = "teacher"
-                _progress(f"已采用教师确认蓝图（{len(blueprint)} 页），开始逐页生成…")
+                _progress(f"已采用教师确认蓝图（{len(blueprint)} 节），开始逐节生成…")
             else:
-                _progress("正在规划课件页面结构…")
+                _progress("正在规划课件章节结构…")
                 blueprint, accent, blueprint_source, planner_note = _plan_blueprint(
                     generator,
                     title=title,
@@ -956,6 +1131,7 @@ def generate_html_courseware(
                 components=components,
                 theme=cw_theme,
                 teaching_intent=teaching_intent,
+                chapter_ctx=_chapter_ctx(blueprint),
             )
             pages, page_infos = _generate_pages(generator, blueprint, prompt_kwargs, _progress)
 
@@ -1045,21 +1221,16 @@ def generate_html_courseware(
             else:
                 logger.info("视觉质检环节跳过：VISUAL_QC_ENABLED 与 OVERFLOW_GATE_ENABLED 均为 false")
 
-            # 任务A3/D 溢出兜底提示：重生成 2 轮后仍违规的页，写入课件元数据（前端给教师明确提示，不静默交付）
+            # 元素级兜底提示：重生成 2 轮后仍有组件裁剪/叠压的节，写入课件元数据（前端提示教师，不静默交付）
             overflow_notices: List[Dict[str, Any]] = []
             if visual_qc_summary:
                 _ov = visual_qc_summary.get("overflow") or {}
-                _still = _ov.get("still_overflowing") or {}
-                overflow_notices = [
-                    {"page": int(k), "pct": v, "note": f"第 {k} 页内容较多（超页约 {v}%），建议在编辑器中精简"}
-                    for k, v in sorted(_still.items(), key=lambda kv: int(kv[0]))
-                ]
                 _still_elems = _ov.get("still_element_issues") or {}
-                overflow_notices += [
+                overflow_notices = [
                     {
                         "page": int(k),
                         "pct": 0,
-                        "note": f"第 {k} 页仍有组件内容被裁剪或叠压：{'；'.join(probs[:3])}。建议在编辑器中精简该组件",
+                        "note": f"第 {k} 节仍有组件内容被裁剪或叠压：{'；'.join(probs[:3])}。建议在编辑器中精简该组件",
                     }
                     for k, probs in sorted(_still_elems.items(), key=lambda kv: int(kv[0]))
                 ]
@@ -1076,8 +1247,18 @@ def generate_html_courseware(
                 "blueprint": {
                     "source": blueprint_source,
                     "note": blueprint_note or None,
+                    "chapters": [
+                        {"no": no, "title": ch["display"], "sections": len(ch["idxs"])}
+                        for no, ch in enumerate(_derive_chapters(blueprint), 1)
+                    ],
                     "pages": [
-                        {"page": i + 1, "kind": spec["kind"], "para": spec.get("para"), "title": spec.get("title")}
+                        {
+                            "page": i + 1,
+                            "kind": spec["kind"],
+                            "para": spec.get("para"),
+                            "title": spec.get("title"),
+                            "chapter": _eff_chapter_label(spec),
+                        }
                         for i, spec in enumerate(blueprint)
                     ],
                 },
@@ -1118,7 +1299,7 @@ def generate_html_courseware(
         }
         source_meta = {"generated_by": "template_fallback", "prompt_version": version}
     else:
-        html = _assemble_skeleton(title, accent, pages, theme=cw_theme)
+        html = _assemble_skeleton(title, accent, pages, theme=cw_theme, blueprint=blueprint)
         # S7 全局一致性审校：术语统一（文本节点替换 + 结构校验回滚）+ 结构意见存 meta
         consistency_summary: Optional[Dict[str, Any]] = None
         from app.core.config import settings as _cons_settings

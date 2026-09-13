@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<!-- courseware_skeleton_scroll · 章节式滚动骨架（框架层 + 主题层，三层架构不变）
+     框架层（本文件写死，模型不生成）：居中阅读版心、左侧章节目录、顶部滚动进度条、
+     键盘 ←/→ 切章（↓/↑ 与 Home/End/空格留给原生滚动）、返回顶部、节进入视口淡入
+     （IntersectionObserver ≤0.6s；prefers-reduced-motion 或 body.oe-no-anim / oe-edit-all
+     时全局关闭）、交互组件 JS 与分页骨架完全一致。
+     版心：min(820px, 100% - 3rem)，无任何固定高度；除折叠组件收起态外禁止
+     overflow:hidden 裁内容。
+     主题层：:root 整块 token 组与主题微调样式由后端按所选主题注入（courseware_themes.py），
+     内容层只写 var(--token)，换主题对 LLM 透明。
+     拼装标记（课件标题、token 组、主题微调样式、章节课注入点）由后端替换——
+     注意：本注释不得出现这些标记的字面形式，否则会被 str.replace 误替换。
+     对比度契约（WCAG）：每套主题的 ink/text/muted 与四色强调色对该主题 paper/card ≥4.5:1，
+     由 tests/test_courseware_themes.py 断言。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{
+__TOKEN_BLOCK__
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--backdrop);font-family:var(--font-body);color:var(--text);font-size:var(--fs-body);line-height:var(--lh-body)}
+
+/* ============ 滚动框架：进度条 + 版心 + 章节目录 + 返回顶部 ============ */
+#oe-progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:80;pointer-events:none}
+#oe-progress span{display:block;height:100%;width:0;background:var(--accent);transition:width .1s linear}
+#oe-content{width:min(820px,100% - 3rem);margin:0 auto;padding:52px 0 32px}
+.oe-chapter{margin:0 0 64px;scroll-margin-top:20px}
+.oe-chapter:last-of-type{margin-bottom:20px}
+.ch-head{display:flex;align-items:baseline;gap:14px;padding:0 0 12px;margin-bottom:28px;border-bottom:1px solid var(--line)}
+.ch-index{font-family:var(--font-title);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:.22em;white-space:nowrap}
+.ch-title{font-family:var(--font-title);font-size:26px;color:var(--ink);line-height:1.35}
+.oe-section{margin:0 0 52px}
+.oe-section h1{font-family:var(--font-title);font-size:var(--fs-title);color:var(--ink);line-height:1.35}
+.oe-section h2{font-family:var(--font-title);font-size:var(--fs-h2);color:var(--ink);line-height:1.35}
+.oe-section h3{font-size:22px;color:var(--ink);line-height:1.4}
+.page-focus{display:flex;flex-direction:column}
+.oe-section[data-kind="cover"]{min-height:calc(100vh - 150px);display:flex;flex-direction:column;justify-content:center}
+.oe-section[data-kind="summary"]{min-height:38vh;display:flex;flex-direction:column;justify-content:center}
+.kicker{font-size:var(--fs-caption);letter-spacing:.32em;color:var(--accent);font-weight:600;margin-bottom:12px}
+.accent-rule{width:64px;height:3px;background:var(--accent);margin:16px 0 24px}
+.caption{font-size:var(--fs-caption);color:var(--muted)}
+.quote-src{font-size:var(--fs-caption);color:var(--muted);margin-top:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 24px}
+.callout{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
+.hl{background:var(--accent-soft);padding:2px 6px;border-radius:4px}
+.cols{display:flex;gap:28px}
+.cols>.col{flex:1;min-width:0}
+ul.plain{list-style:none}
+ul.plain li{padding-left:22px;position:relative}
+ul.plain li::before{content:"";position:absolute;left:2px;top:.72em;width:8px;height:8px;background:var(--accent);border-radius:50%}
+
+#oe-toc{position:fixed;top:96px;right:calc(50% + 442px);width:180px;max-height:calc(100vh - 180px);overflow-y:auto;display:none;z-index:70}
+@media(min-width:1300px){#oe-toc{display:block}}
+.oe-toc-title{font-size:12px;color:var(--muted);padding:0 10px 10px;border-bottom:1px solid var(--line);margin-bottom:8px;letter-spacing:.06em}
+.oe-toc-item{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;background:none;border:0;border-left:2px solid transparent;padding:7px 10px;font:inherit;font-size:14px;color:var(--muted);cursor:pointer;transition:color .2s,border-color .2s}
+.oe-toc-item:hover{color:var(--ink)}
+.oe-toc-item.cur{color:var(--ink);font-weight:600;border-left-color:var(--accent)}
+.oe-toc-no{font-family:var(--font-title);font-size:12px;color:var(--accent);opacity:.65;min-width:14px}
+.oe-toc-item.cur .oe-toc-no{opacity:1}
+
+#oe-backtop{position:fixed;right:22px;bottom:26px;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:17px;cursor:pointer;z-index:70;opacity:0;pointer-events:none;transition:opacity .25s;box-shadow:0 4px 14px rgba(30,58,95,.12)}
+#oe-backtop.show{opacity:1;pointer-events:auto}
+#oe-backtop:hover{background:var(--accent);color:var(--paper);border-color:var(--accent)}
+#oe-aigc{text-align:center;font-size:12px;color:var(--muted);opacity:.78;padding:20px 0 8px;border-top:1px solid var(--line);margin-top:12px;letter-spacing:.05em}
+
+/* 节进入视口淡入上移（骨架层动效，内容层无感；≤0.6s，可全局关闭） */
+@media (prefers-reduced-motion: no-preference){
+  body:not(.oe-no-anim):not(.oe-edit-all) .oe-section{opacity:0;transform:translateY(18px)}
+  body:not(.oe-no-anim):not(.oe-edit-all) .oe-section.oe-lit{opacity:1;transform:none;transition:opacity .55s ease,transform .55s ease}
+}
+
+/* ============ 交互组件（类契约：内容层只写结构，行为全在骨架） ============ */
+details.reveal{border:1px solid var(--line);border-radius:10px;padding:16px 20px;background:var(--card)}
+details.reveal summary{cursor:pointer;font-weight:600;color:var(--ink);list-style:none;font-size:19px}
+details.reveal summary::-webkit-details-marker{display:none}
+details.reveal summary::before{content:"点击展开　";color:var(--accent);font-size:var(--fs-caption)}
+details.reveal[open] summary{margin-bottom:10px}
+details.reveal[open] summary::before{content:"点击收起　"}
+ol.timeline{list-style:none;display:flex;flex-direction:column;gap:14px}
+ol.timeline li{cursor:pointer;padding:12px 18px;border-left:3px solid var(--line);background:var(--card);opacity:.4;transition:opacity .25s,border-color .25s;font-size:19px}
+ol.timeline li.lit{opacity:1;border-left-color:var(--accent)}
+/* 词卡网格随版心自适应（继承任务D 流内撑高等高契约，废固定宽） */
+.vocab-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(128px,auto);gap:16px}
+@media(max-width:680px){.vocab-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vocab-card{min-height:128px;perspective:900px;cursor:default}
+.vocab-card .inner{position:relative;transform-style:preserve-3d;transition:transform .5s}
+.vocab-card:hover .inner,.vocab-card.flip .inner{transform:rotateY(180deg)}
+.vocab-card .front,.vocab-card .back{box-sizing:border-box;backface-visibility:hidden;border-radius:10px;padding:12px;border:1px solid var(--line);text-align:center}
+.vocab-card .front{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);font-family:var(--font-title);font-size:26px;font-weight:700;color:var(--ink)}
+.vocab-card .front .phonetic{font-family:var(--font-body);font-size:var(--fs-caption);font-weight:400;color:var(--muted);margin-top:6px}
+.vocab-card .back{min-height:128px;display:flex;flex-direction:column;justify-content:center;transform:rotateY(180deg);background:var(--ink);color:var(--paper);font-size:15px;line-height:1.6}
+.timer{display:inline-flex;align-items:center;gap:16px}
+.timer .timer-display{font-family:var(--font-title);font-size:48px;font-weight:700;color:var(--accent);min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
+.timer button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.timer button:hover{background:var(--accent);color:var(--paper)}
+
+/* ---- 练习型组件（对标 H5P：内容层只填数据，判定与反馈全在骨架） ---- */
+.ix-actions{margin-top:14px;display:flex;align-items:center;gap:12px}
+.ix-actions button{font:inherit;font-size:16px;padding:8px 24px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+.ix-actions button:hover{background:var(--accent);color:var(--paper)}
+.ix-feedback{margin-top:10px;font-size:17px;color:var(--muted)}
+@keyframes oe-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.mark-words .mw-text{font-size:20px;line-height:2.1;color:var(--ink)}
+.mark-words .mw-w{cursor:pointer;border-bottom:2px dotted var(--line);border-radius:3px;padding:1px 3px;transition:background .2s}
+.mark-words .mw-w.picked{background:var(--accent-soft)}
+.mark-words .mw-w.hit{background:var(--accent-soft);border-bottom-color:var(--accent);font-weight:700}
+.mark-words .mw-w.miss{border-bottom-style:solid;border-bottom-color:var(--ink)}
+.mark-words .mw-w.shake{animation:oe-shake .35s}
+.fill-blanks .fb-text{font-size:20px;line-height:2.2;color:var(--ink)}
+.fill-blanks .fb-blank{display:inline-block;min-width:104px;border:0;border-bottom:2px solid var(--accent);background:var(--accent-soft);border-radius:6px 6px 0 0;padding:2px 10px;font:inherit;font-size:18px;color:var(--ink);text-align:center;outline:none}
+.fill-blanks .fb-blank.hit{background:var(--accent);color:var(--paper);font-weight:600}
+.fill-blanks .fb-blank.miss{border-bottom-color:var(--ink)}
+.fill-blanks .fb-blank.shake{animation:oe-shake .35s}
+.sort-paragraphs .sp-list{list-style:none;display:flex;flex-direction:column;gap:12px}
+.sort-paragraphs .sp-item{cursor:grab;padding:12px 18px;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:10px;background:var(--card);font-size:18px;line-height:1.7;user-select:none;touch-action:none}
+.sort-paragraphs .sp-item.dragging{opacity:.45;pointer-events:none;cursor:grabbing}
+.sort-paragraphs .sp-item.hit{border-left-color:var(--accent)}
+.sort-paragraphs .sp-item.miss{border-left-color:var(--ink)}
+
+/* ============ 逐段精讲组件（拆页型契约，与分页骨架一致） ============ */
+.para-original{margin:0 0 18px;padding:16px 22px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 10px 10px 0}
+.para-original p{font-size:19px;line-height:1.9}
+.para-original footer{font-size:var(--fs-caption);color:var(--muted);margin-top:8px}
+mark.kw{background:var(--accent-soft);color:var(--ink);padding:1px 4px;border-radius:4px;font-weight:600}
+.para-gist{margin:0 0 16px;padding:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.para-gist h3{margin-bottom:6px}
+.sentence-anatomy{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.sentence-anatomy h3{margin-bottom:8px}
+.anatomy-sentence{font-size:20px;line-height:2;color:var(--ink);margin:6px 0 12px}
+.anatomy-sentence .cl{cursor:pointer;border-bottom:2px dotted var(--line);transition:background .2s,opacity .2s;border-radius:3px}
+.anatomy-sentence .cl.lit{background:var(--accent-soft);border-bottom-color:var(--accent)}
+.anatomy-sentence.x-ray .cl-core{background:var(--accent-soft);border-bottom-color:var(--accent);font-weight:700}
+.anatomy-sentence.x-ray .cl-mod{opacity:.4}
+.anatomy-legend{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:17px}
+.anatomy-legend li{padding-left:0;line-height:1.7}
+.anatomy-legend .cl{cursor:default;border-bottom:none;padding:0 2px}
+.anatomy-legend .cl-core{background:var(--accent-soft);border-radius:3px}
+.anatomy-legend .cl-mod{color:var(--muted)}
+.anatomy-tip{font-size:17px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.sent-walk details{border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:var(--card);margin-top:10px}
+.sent-walk summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.sent-walk details[open] summary{margin-bottom:8px}
+.lang-points{margin:0 0 16px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.lang-points ol{margin-left:24px;display:flex;flex-direction:column;gap:12px}
+.lang-points li{line-height:1.75}
+.cohesion-note{border-left:4px solid var(--accent);background:var(--card);padding:14px 18px;border-radius:0 10px 10px 0}
+.cohesion-note h3{margin-bottom:6px}
+.teaching-intent{display:none}
+body.oe-edit-all .teaching-intent{display:block;margin-top:16px;padding:10px 14px;border:1px dashed var(--line);border-radius:8px;font-size:15px;color:var(--muted)}
+
+/* 编辑器模式：V2 编辑器注入 body.oe-edit-all 时收起滚动导航外壳、显示教学意图、
+   节加浅分隔线便于定位（纯 CSS，零 JS 改动；动效已被上面规则一并关闭） */
+body.oe-edit-all #oe-toc,body.oe-edit-all #oe-progress,body.oe-edit-all #oe-backtop{display:none !important}
+body.oe-edit-all #oe-content{padding-top:28px}
+body.oe-edit-all .oe-chapter{margin-bottom:40px}
+body.oe-edit-all .oe-section{margin-bottom:36px;padding-bottom:26px;border-bottom:1px dashed var(--line)}
+
+/* 主题级组件微调（后端按所选主题注入，默认空） */
+__THEME_EXTRA__
+</style>
+</head>
+<body>
+<div id="oe-progress" aria-hidden="true"><span></span></div>
+<nav id="oe-toc" aria-label="章节目录"></nav>
+<main id="oe-content">
+<!--SECTIONS-->
+<footer id="oe-aigc">AI 生成内容 · 仅供教学参考</footer>
+</main>
+<button id="oe-backtop" aria-label="返回顶部" type="button" title="返回顶部">&#8593;</button>
+<script>
+(function () {
+  /* ---- 滚动导航：进度条 + 章节目录高亮 + 返回顶部 + ←/→ 切章 ---- */
+  var chapters = [].slice.call(document.querySelectorAll('.oe-chapter'));
+  var toc = document.getElementById('oe-toc');
+  var bar = document.querySelector('#oe-progress span');
+  var backtop = document.getElementById('oe-backtop');
+  var curCh = 0;
+
+  if (toc && chapters.length) {
+    var t = document.createElement('div');
+    t.className = 'oe-toc-title';
+    t.textContent = document.title || '';
+    toc.appendChild(t);
+    chapters.forEach(function (ch, i) {
+      var label = (ch.querySelector('.ch-title') || {}).textContent
+        || ch.getAttribute('data-section') || ('第 ' + (i + 1) + ' 章');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'oe-toc-item';
+      var no = document.createElement('span');
+      no.className = 'oe-toc-no';
+      no.textContent = String(i + 1);
+      b.appendChild(no);
+      b.appendChild(document.createTextNode(label));
+      b.addEventListener('click', function () { ch.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      toc.appendChild(b);
+    });
+  }
+  var tocItems = toc ? [].slice.call(toc.querySelectorAll('.oe-toc-item')) : [];
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      var doc = document.documentElement;
+      var max = doc.scrollHeight - window.innerHeight;
+      if (bar) bar.style.width = (max > 0 ? Math.min(100, window.scrollY / max * 100) : 0) + '%';
+      if (backtop) backtop.classList.toggle('show', window.scrollY > 640);
+      var probe = window.scrollY + window.innerHeight * 0.35;
+      var cur = 0;
+      for (var i = 0; i < chapters.length; i++) {
+        if (chapters[i].offsetTop <= probe) cur = i;
+      }
+      if (cur !== curCh) {
+        curCh = cur;
+        tocItems.forEach(function (b, j) { b.classList.toggle('cur', j === cur); });
+      }
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  if (backtop) backtop.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  function gotoChapter(i) {
+    var ch = chapters[Math.max(0, Math.min(chapters.length - 1, i))];
+    if (ch) ch.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  window.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (t && t.closest && t.closest('button,summary,input,textarea')) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); gotoChapter(curCh + 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); gotoChapter(curCh - 1); }
+    /* ↓/↑、Home/End、空格留给原生滚动，不拦截 */
+  });
+
+  /* ---- 节进入视口淡入（可全局关闭；编辑/静态模式直接呈现终态） ---- */
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var noAnim = document.body.classList.contains('oe-no-anim')
+    || document.body.classList.contains('oe-edit-all');
+  var sections = [].slice.call(document.querySelectorAll('.oe-section'));
+  if (!reduce && !noAnim && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('oe-lit'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+    sections.forEach(function (s) { io.observe(s); });
+  } else {
+    sections.forEach(function (s) { s.classList.add('oe-lit'); });
+  }
+
+  document.addEventListener('click', function (e) {
+    var mwW = e.target.closest ? e.target.closest('.mark-words .mw-w') : null;
+    if (mwW && !mwW.classList.contains('hit')) { mwW.classList.toggle('picked'); return; }
+    var exBtn = e.target.closest ? e.target.closest('.mw-check, .fb-check, .sp-check') : null;
+    if (exBtn) { runExercise(exBtn); return; }
+    var cl = e.target.closest ? e.target.closest('.anatomy-sentence .cl') : null;
+    if (cl) { cl.classList.toggle('lit'); return; }
+    var sent = e.target.closest ? e.target.closest('.anatomy-sentence') : null;
+    if (sent) { sent.classList.toggle('x-ray'); return; }
+    var li = e.target.closest ? e.target.closest('ol.timeline li') : null;
+    if (li) { li.classList.toggle('lit'); return; }
+    var btn = e.target.closest ? e.target.closest('.timer button') : null;
+    if (!btn) return;
+    var wrap = btn.closest('.timer');
+    var disp = wrap.querySelector('.timer-display');
+    function fmt(s) {
+      var m = Math.floor(s / 60), ss = s % 60;
+      return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss;
+    }
+    if (wrap._running) {
+      clearInterval(wrap._timer);
+      wrap._running = false;
+      btn.textContent = '继续计时';
+      return;
+    }
+    var total = parseInt(wrap.getAttribute('data-seconds') || '60', 10);
+    var left = total;
+    wrap._running = true;
+    disp.textContent = fmt(left);
+    btn.textContent = '暂停';
+    wrap._timer = setInterval(function () {
+      left--;
+      if (left <= 0) {
+        clearInterval(wrap._timer);
+        wrap._running = false;
+        disp.textContent = '00:00';
+        btn.textContent = '再计时一次';
+        return;
+      }
+      disp.textContent = fmt(left);
+    }, 1000);
+  });
+
+  /* ---- 练习型组件：判定逻辑 + 初始化（内容层只填数据） ---- */
+  function norm(s) { return (s || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+  function feedback(wrap, text) {
+    var fb = wrap.querySelector('.ix-feedback');
+    if (!fb) { fb = document.createElement('div'); fb.className = 'ix-feedback'; wrap.appendChild(fb); }
+    fb.textContent = text;
+  }
+  function shake(el) {
+    el.classList.add('shake');
+    setTimeout(function () { el.classList.remove('shake'); }, 400);
+  }
+  function runExercise(btn) {
+    var mw = btn.closest('.mark-words');
+    if (mw) {
+      var ans = (mw.getAttribute('data-answer') || '').split(',').map(function (s) { return parseInt(s, 10); })
+        .filter(function (v) { return v > 0; });
+      var words = [].slice.call(mw.querySelectorAll('.mw-w'));
+      words.forEach(function (w, i) {
+        var ok = ans.indexOf(i + 1) !== -1;
+        var pickedNow = w.classList.contains('picked');
+        w.classList.remove('shake');
+        if (pickedNow && ok) { w.classList.remove('picked', 'miss'); w.classList.add('hit'); }
+        else if (pickedNow && !ok) { w.classList.add('miss'); shake(w); }
+      });
+      var right = words.filter(function (w) { return w.classList.contains('hit'); }).length;
+      feedback(mw, right === ans.length
+        ? '全对！'
+        : '命中 ' + right + ' / ' + ans.length + '，点对的词已锁定，继续点');
+      return;
+    }
+    var fbc = btn.closest('.fill-blanks');
+    if (fbc) {
+      var inputs = [].slice.call(fbc.querySelectorAll('input.fb-blank'));
+      var fbRight = 0;
+      inputs.forEach(function (inp) {
+        var accept = (inp.getAttribute('data-answers') || '').split('|').map(norm);
+        if (accept.indexOf(norm(inp.value)) !== -1) {
+          inp.classList.remove('miss', 'shake');
+          inp.classList.add('hit');
+          inp.readOnly = true;
+          fbRight++;
+        } else {
+          inp.classList.remove('hit');
+          inp.classList.add('miss');
+          shake(inp);
+          inp.select();
+        }
+      });
+      feedback(fbc, fbRight === inputs.length
+        ? '全部正确！'
+        : '正确 ' + fbRight + ' / ' + inputs.length + '，答错处已标出，修改后可重查');
+      return;
+    }
+    var sp = btn.closest('.sort-paragraphs');
+    if (sp) {
+      var items = [].slice.call(sp.querySelectorAll('.sp-item'));
+      var spRight = 0;
+      items.forEach(function (it, i) {
+        it.classList.remove('hit', 'miss');
+        if (parseInt(it.getAttribute('data-order'), 10) === i + 1) { it.classList.add('hit'); spRight++; }
+        else { it.classList.add('miss'); }
+      });
+      feedback(sp, spRight === items.length
+        ? '顺序完全正确！'
+        : '位置正确 ' + spRight + ' / ' + items.length + '，可继续拖动调整');
+    }
+  }
+
+  /* 填空挖空水合为输入框（骨架持有行为，Enter 触发检查） */
+  [].slice.call(document.querySelectorAll('.fill-blanks .fb-blank')).forEach(function (span) {
+    var answers = span.getAttribute('data-answers') || '';
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'fb-blank';
+    inp.setAttribute('data-answers', answers);
+    inp.setAttribute('aria-label', '填空');
+    inp.size = Math.max(8, (answers.split('|')[0] || '').length + 2);
+    span.parentNode.replaceChild(inp, span);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var b = inp.closest('.fill-blanks').querySelector('.fb-check');
+      if (b) b.click();
+    });
+  });
+
+  /* 排序卡拖拽（指针事件，真实/合成输入都可靠；判定用 data-order） */
+  [].slice.call(document.querySelectorAll('.sort-paragraphs .sp-list')).forEach(function (list) {
+    var sp = null;
+    list.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var it = e.target && e.target.closest ? e.target.closest('.sp-item') : null;
+      if (!it || !list.contains(it)) return;
+      sp = { el: it };
+      it.classList.add('dragging');
+      e.preventDefault();
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (!sp) return;
+      var hitEl = document.elementFromPoint(e.clientX, e.clientY);
+      var over = hitEl && hitEl.closest ? hitEl.closest('.sp-item') : null;
+      if (!over || over === sp.el || !list.contains(over)) return;
+      var r = over.getBoundingClientRect();
+      var after = (e.clientY - r.top) / r.height > 0.5;
+      list.insertBefore(sp.el, after ? over.nextSibling : over);
+    });
+    function done() {
+      if (!sp) return;
+      sp.el.classList.remove('dragging');
+      sp = null;
+    }
+    document.addEventListener('pointerup', done);
+    document.addEventListener('pointercancel', done);
+  });
+})();
+</script>
+</body>
+</html>

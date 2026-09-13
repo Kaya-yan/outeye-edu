@@ -37,6 +37,8 @@ export interface VeTarget {
   cls: string;
   component: string;
   page: string;
+  sec?: string;
+  chapter?: string;
   pageTitle: string;
   selector: string;
   oeId: string;
@@ -54,6 +56,7 @@ export interface VePageInfo {
   n: string;
   title: string;
   component: string;
+  chapter?: string;
 }
 
 export interface VeMoveCommit {

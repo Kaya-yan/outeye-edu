@@ -1,11 +1,13 @@
-"""③ 两阶段 HTML 课件测试：段落切片 / 长难句加权 / 难词词干归属 / 蓝图校验与回退 / 逐页生成 / 进度文案"""
+"""③ 两阶段 HTML 课件测试（章节式滚动）：段落切片 / 长难句加权 / 难词词干归属 / 蓝图校验与回退 / 章节上限 / 逐节生成 / 进度文案"""
 
 import json
 
 import pytest
 
 from app.services.courseware_llm_generator import (
-    MAX_BLUEPRINT_PAGES,
+    MAX_CHAPTERS,
+    MAX_SECTIONS_PER_CHAPTER,
+    _derive_chapters,
     _fallback_blueprint,
     _generate_one_page,
     _long_sentence_score,
@@ -115,16 +117,36 @@ def test_normalize_blueprint_lang_points_alone_does_not_cover_paras():
     assert pages is None and "覆盖" in reason
 
 
-def test_normalize_blueprint_truncates_to_25_keeping_priority():
+def test_normalize_blueprint_enforces_section_cap_dropping_interactions():
+    # 24 个互动节 + 1 个锚定精讲节：章上限裁剪优先丢非锚定低优先级节，锚定节永不丢
     specs = [{"kind": "interaction", "title": f"x{i}", "intent": "i", "para": None} for i in range(24)]
     specs.append({"kind": "deep_reading", "title": "d", "intent": "i", "para": 1})
     pages, reason = _normalize_blueprint({"pages": specs}, 1)
-    assert reason == "" and len(pages) == MAX_BLUEPRINT_PAGES
+    assert reason == "" and pages is not None
+    chapters = _derive_chapters(pages)
+    assert len(chapters) <= MAX_CHAPTERS
+    assert all(len(c["idxs"]) <= MAX_SECTIONS_PER_CHAPTER for c in chapters)
     assert pages[0]["kind"] == "cover" and pages[-1]["kind"] == "summary"
     assert any(p["kind"] == "deep_reading" for p in pages)
 
 
-def test_fallback_blueprint_covers_all_paragraphs_within_cap():
+def test_normalize_blueprint_nested_chapters_form():
+    data = {"chapters": [
+        {"title": "导入", "sections": [{"kind": "cover"}, {"kind": "agenda"}]},
+        {"title": "课文精讲：第一部分", "sections": [
+            {"kind": "text_anatomy", "para": 1}, {"kind": "lang_points", "para": 1},
+        ]},
+        {"title": "总结作业", "sections": [{"kind": "summary"}]},
+    ]}
+    pages, reason = _normalize_blueprint(data, 1)
+    assert reason == "" and pages is not None
+    chapters = _derive_chapters(pages)
+    assert [(c["label"], len(c["idxs"])) for c in chapters] == [
+        ("导入", 2), ("课文精讲：第一部分", 2), ("总结作业", 1),
+    ]
+
+
+def test_fallback_blueprint_covers_all_paragraphs_within_caps():
     slices = [
         {"index": i, "preview": "p", "word_count": 10, "difficult_words": ["w"], "long_sentences": []}
         for i in range(1, 31)
@@ -132,7 +154,9 @@ def test_fallback_blueprint_covers_all_paragraphs_within_cap():
     pages = _fallback_blueprint(slices)
     covered = {x for p in pages if p["kind"] == "text_anatomy" for x in p["para"]}
     assert covered == set(range(1, 31))
-    assert len(pages) <= MAX_BLUEPRINT_PAGES
+    chapters = _derive_chapters(pages)
+    assert len(chapters) <= MAX_CHAPTERS
+    assert all(len(c["idxs"]) <= MAX_SECTIONS_PER_CHAPTER for c in chapters)
 
 
 def test_fallback_blueprint_pairs_anatomy_with_lang_points_on_same_para():
@@ -144,12 +168,12 @@ def test_fallback_blueprint_pairs_anatomy_with_lang_points_on_same_para():
     assert pages[3]["para"] == [1] and pages[4]["para"] == [1]
 
 
-def test_page_progress_label_carries_page_type():
-    assert _page_progress_label({"kind": "deep_reading", "para": [3]}) == "第3段精讲页"
-    assert _page_progress_label({"kind": "deep_reading", "para": [2, 3]}) == "第2-3段精讲页"
-    assert _page_progress_label({"kind": "text_anatomy", "para": [3]}) == "第3段原文解剖页"
-    assert _page_progress_label({"kind": "lang_points", "para": [2, 3]}) == "第2-3段语言点页"
-    assert _page_progress_label({"kind": "agenda", "para": None}) == "目标页"
+def test_page_progress_label_carries_section_type():
+    assert _page_progress_label({"kind": "deep_reading", "para": [3]}) == "第3段精讲节"
+    assert _page_progress_label({"kind": "deep_reading", "para": [2, 3]}) == "第2-3段精讲节"
+    assert _page_progress_label({"kind": "text_anatomy", "para": [3]}) == "第3段原文解剖节"
+    assert _page_progress_label({"kind": "lang_points", "para": [2, 3]}) == "第2-3段语言点节"
+    assert _page_progress_label({"kind": "agenda", "para": None}) == "目标节"
 
 
 # ---- 规划器 ----
@@ -264,7 +288,7 @@ def _page_reply(body=DEEP_BODY, page_no=1, title="第1段精讲"):
 
 def _run_one_page(*replies):
     gen = _MiniGen(*replies)
-    system_prompt, _ = render_prompt("courseware_html_page_v2")
+    system_prompt, _ = render_prompt("courseware_html_page_v3")
     page, info = _generate_one_page(gen, system_prompt, _SPEC, _page_kwargs(), 1, 6, "前一页「词汇预教」，后一页「第2段精讲」")
     return gen, page, info
 
@@ -368,7 +392,8 @@ def test_generate_two_stage_end_to_end(fake_llm):
     assert result.self_check["pages_count"] == 4
     assert result.self_check["blueprint"]["source"] == "llm"
     assert result.self_check["accent"] == "#35507a"
-    assert result.html.count('<section class="page"') == 4
+    assert result.html.count('<section class="oe-section"') == 4
+    assert result.html.count('<section class="oe-chapter"') == len(result.self_check["blueprint"]["chapters"])
     assert "anatomy-sentence" in result.html
     # 蓝图随产物落库，供 S4 编辑复用
     bp = result.editor_schema["meta"]["source_meta"]["page_blueprint"]
@@ -379,8 +404,8 @@ def test_generate_reports_typed_progress(fake_llm):
     messages: list = []
     fake_llm(*_two_stage_replies())
     result = _run_generate(progress=messages.append)
-    assert any("正在规划课件页面结构" in m for m in messages)
-    assert any(m == "正在生成：第1段精讲页（3/4）" for m in messages)
+    assert any("正在规划课件章节结构" in m for m in messages)
+    assert any(m == "正在生成：第1段精讲节（3/4）" for m in messages)
     assert any(m.endswith("（4/4）") for m in messages)
     assert result.fallback is False
 
@@ -437,18 +462,22 @@ def test_generate_interaction_check_error_degrades(fake_llm, monkeypatch):
 
 def test_generate_overflow_notices_delivered_to_source_meta(fake_llm, monkeypatch):
     def _fake_visual_qc(pages, **kwargs):
-        return list(pages), {"overflow": {"still_overflowing": {"2": 12}}}
+        return list(pages), {"overflow": {"still_element_issues": {"2": ["「词汇卡 第2张」内容超出容器约 12px 被裁剪"]}}}
 
     monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
     fake_llm(*_two_stage_replies())
     result = _run_generate()
     notices = result.editor_schema["meta"]["source_meta"]["overflow_notices"]
-    assert notices == [{"page": 2, "pct": 12, "note": "第 2 页内容较多（超页约 12%），建议在编辑器中精简"}]
+    assert notices == [{
+        "page": 2,
+        "pct": 0,
+        "note": "第 2 节仍有组件内容被裁剪或叠压：「词汇卡 第2张」内容超出容器约 12px 被裁剪。建议在编辑器中精简该组件",
+    }]
 
 
 def test_generate_no_overflow_notices_when_gate_clean(fake_llm, monkeypatch):
     def _fake_visual_qc(pages, **kwargs):
-        return list(pages), {"overflow": {"still_overflowing": {}, "still_element_issues": {}}}
+        return list(pages), {"overflow": {"still_element_issues": {}}}
 
     monkeypatch.setattr("app.services.courseware_visual_qc.run_visual_qc", _fake_visual_qc)
     fake_llm(*_two_stage_replies())
@@ -461,8 +490,7 @@ def test_generate_element_issues_in_overflow_notices(fake_llm, monkeypatch):
     def _fake_visual_qc(pages, **kwargs):
         return list(pages), {
             "overflow": {
-                "still_overflowing": {"2": 12},
-                "still_element_issues": {"3": ["「词汇卡 第2张/共4张」内容超出容器约 30px 被裁剪不可见，请精简该组件内容"]},
+                "still_element_issues": {"3": ["「词汇卡 第2张/共4张」内容超出容器约 30px 被裁剪不可见", "「例句卡」与下方讲解文字互相叠压"]},
             }
         }
 
@@ -470,6 +498,7 @@ def test_generate_element_issues_in_overflow_notices(fake_llm, monkeypatch):
     fake_llm(*_two_stage_replies())
     result = _run_generate()
     notices = result.editor_schema["meta"]["source_meta"]["overflow_notices"]
-    assert [n["page"] for n in notices] == [2, 3]
-    elem = notices[1]
-    assert elem["pct"] == 0 and "词汇卡 第2张" in elem["note"] and "建议在编辑器中精简该组件" in elem["note"]
+    assert [n["page"] for n in notices] == [3]
+    elem = notices[0]
+    assert elem["pct"] == 0 and "词汇卡 第2张" in elem["note"] and "例句卡" in elem["note"]
+    assert "建议在编辑器中精简该组件" in elem["note"]

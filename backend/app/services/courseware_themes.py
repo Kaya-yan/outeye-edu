@@ -1,7 +1,7 @@
 """
 课件主题库 v1（④b）：策展主题 = 完整 token 组 + 主题级组件微调。
 
-骨架 courseware_skeleton_v2.html 的 :root 整块与主题微调样式由后端按主题注入，
+骨架 courseware_skeleton_scroll.html 的 :root 整块与主题微调样式由后端按主题注入，
 内容层 HTML 只写 var(--token)，因此换主题对 LLM 透明（同一内容层契约）。
 
 对比度契约（WCAG AA）：每套主题的 ink/text/muted 及全局四色强调色对该主题

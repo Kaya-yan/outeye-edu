@@ -206,7 +206,7 @@ GOOD_BODY = (
 
 def test_skeleton_footer_carries_aigc_badge():
     html = _assemble_skeleton("测试", "#35507a", [_ContentPage(title="p", intent="i", html=GOOD_BODY)])
-    assert 'id="aigc-badge"' in html
+    assert 'id="oe-aigc"' in html
     assert "AI 生成内容" in html
 
 

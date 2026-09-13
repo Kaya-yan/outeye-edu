@@ -100,7 +100,7 @@ def test_generate_with_teacher_blueprint_skips_planner(fake_llm):
     assert sc["pages_count"] == 3
     assert sc["accent"] == "#b5493e"
     assert [p["kind"] for p in sc["blueprint"]["pages"]] == ["cover", "deep_reading", "summary"]
-    assert any("已采用教师确认蓝图（3 页）" in m for m in messages)
+    assert any("已采用教师确认蓝图（3 节）" in m for m in messages)
     # 教师编辑后的蓝图原样落库，供 S4 编辑/回溯复用
     stored = result.editor_schema["meta"]["source_meta"]["page_blueprint"]
     assert [p["kind"] for p in stored] == ["cover", "deep_reading", "summary"]
@@ -206,6 +206,9 @@ async def test_generate_with_blueprint_records_confirmed_event(fake_llm, test_en
 
     factory = sessionmaker(bind=test_engine, class_=AsyncSession, expire_on_commit=False)
     monkeypatch.setattr(cw_module, "AsyncSessionLocal", factory)
+    # 本测试校验事件记录，不走真 chromium 遮挡关卡（实测耗时会超过轮询窗口，造成 flaky）
+    monkeypatch.setattr("app.core.config.settings.VISUAL_QC_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.OVERFLOW_GATE_ENABLED", False)
     fake_llm(*[_page_reply() for _ in range(4)])
     monkeypatch.setattr(app.router, "lifespan_context", _noop_lifespan)
     _auth_as("user-1")

@@ -76,7 +76,15 @@ export default function Inspector({
   const selectedComp = components.find((c) => c.id === selectedCompId) || null;
   const [insertPos, setInsertPos] = useState<"after" | "before" | "append">("after");
   const [movePage, setMovePage] = useState<string>("");
-  const otherPages = pages.filter((pg) => pg.n !== target.page);
+  const curSec = target.sec || target.page;
+  const otherPages = pages.filter((pg) => pg.n !== curSec);
+  const moveGroups: { chapter: string; items: VePageInfo[] }[] = [];
+  otherPages.forEach((pg) => {
+    const label = pg.chapter || "其他";
+    const last = moveGroups[moveGroups.length - 1];
+    if (last && last.chapter === label) last.items.push(pg);
+    else moveGroups.push({ chapter: label, items: [pg] });
+  });
 
   const commitSize = () => {
     const n = parseFloat(sizeText);
@@ -89,9 +97,9 @@ export default function Inspector({
         <div className="flex items-center gap-2 min-w-0">
           <span className="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">{target.tag}</span>
           {target.component && <span className="truncate text-[11px] text-slate-500">{target.component}</span>}
-          {target.page && (
+          {curSec && (
             <span className="text-[11px] text-slate-400">
-              第 {target.page} 页{target.pageTitle ? ` · ${target.pageTitle}` : ""}
+              {target.chapter ? `${target.chapter} · ` : ""}第 {curSec} 节{target.pageTitle ? ` · ${target.pageTitle}` : ""}
             </span>
           )}
         </div>
@@ -151,14 +159,18 @@ export default function Inspector({
             <select
               value={movePage}
               onChange={(e) => setMovePage(e.target.value)}
-              aria-label="跨页移动目标页"
+              aria-label="跨节移动目标"
               className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-500"
             >
-              <option value="">移动到第 N 页…</option>
-              {otherPages.map((pg) => (
-                <option key={pg.n} value={pg.n}>
-                  第 {pg.n} 页{pg.title ? ` · ${pg.title}` : ""}
-                </option>
+              <option value="">移动到其他章 / 节…</option>
+              {moveGroups.map((g) => (
+                <optgroup key={g.chapter} label={g.chapter}>
+                  {g.items.map((pg) => (
+                    <option key={pg.n} value={pg.n}>
+                      第 {pg.n} 节{pg.title ? ` · ${pg.title}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <button

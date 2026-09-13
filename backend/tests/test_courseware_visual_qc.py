@@ -1,5 +1,5 @@
-"""S6 视觉质检测试（两相）：溢出硬关卡（几何检测/两轮重生成/仍超保留）+ VL 问题页重生成 / 未配 key、
-超时、chromium 缺失降级 / 双开关独立门控 / 骨架 CSS 韧性契约 / 端到端接入"""
+"""S6 视觉质检测试（两相）：遮挡硬关卡（geo-v3 元素级几何检测/两轮重生成/仍违规保留）+ VL 问题节
+重生成 / 未配 key、超时、chromium 缺失降级 / 双开关独立门控 / 滚动骨架 CSS 契约 / 端到端接入"""
 
 import json
 
@@ -24,15 +24,22 @@ def _with_key(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "sk-test")
 
 
-# ---- 相 A：溢出硬关卡 ----
+_CLEAN_M = {"clips": [], "overlaps": []}
+
+
+def _clip(desc="词汇卡 第2张/共4张（spread…）", px=30):
+    return {"clips": [{"desc": desc, "px": px}], "overlaps": []}
+
+
+# ---- 相 A：遮挡硬关卡（geo-v3 元素级）----
 
 
 def test_gate_two_rounds_then_keeps_and_records(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
     seq = [
-        ([b"a", b"b", b"c"], [200, 0, 0], None),
-        ([b"a1"], [80], None),
-        ([b"a2"], [40], None),
+        ([b"a", b"b", b"c"], [_clip(px=30), _CLEAN_M, _CLEAN_M], None),
+        ([b"a1"], [_clip(px=20)], None),
+        ([b"a2"], [_clip(px=15)], None),
     ]
     calls: list = []
 
@@ -52,42 +59,44 @@ def test_gate_two_rounds_then_keeps_and_records(monkeypatch):
         _pages(), blueprint=_blueprint(), make_doc=lambda pg: pg.html, regen_page=regen, progress_cb=messages.append
     )
     of = summary["overflow"]
-    assert calls == [3, 1, 1]  # 全量测一次 + 单页复测两次
-    assert of["overflow_pages"] == {"1": 28}  # 200/720 ≈ 28%
-    assert of["regenerated"] == {"1": 2} and of["still_overflowing"] == {"1": 6}  # 40/720 ≈ 6%
-    assert "内容超页约 28%" in regen_calls[0][1][0] and "200px" in regen_calls[0][1][0]
+    assert calls == [3, 1, 1]  # 全量测一次 + 单节复测两次
+    assert of["gate_version"] == "geo-v3"
+    assert of["regenerated"] == {"1": 2}
+    assert "15px" in of["still_element_issues"]["1"][0]  # 两轮后仍违规：记录最后一轮复测出的问题
+    assert "词汇卡" in regen_calls[0][1][0] and "30px" in regen_calls[0][1][0]
+    assert "精简该组件" in regen_calls[0][1][0]
     assert "slim" in out[0].html and "page 2" in out[1].html  # 两轮精简稿被保留
-    assert any("超页约" in m for m in messages)
+    assert any("遮挡检测" in m and "第 1 节" in m for m in messages)
     assert "未配置 VISION_API_KEY" in summary["skipped"]  # 无 key 不影响硬关卡执行
 
 
 def test_gate_fixed_in_one_round(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    seq = [([b"a", b"b"], [150, 0], None), ([b"a1"], [5], None)]
+    seq = [([b"a", b"b"], [_clip(px=25), _CLEAN_M], None), ([b"a1"], [_CLEAN_M], None)]
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
     out, summary = vqc.run_visual_qc(
         _pages(2), blueprint=_blueprint(2), make_doc=lambda pg: pg.html,
         regen_page=lambda i, pg, pr: _ContentPage(title=pg.title, intent="i", html='<div class="page-focus"><p>ok</p></div>'),
     )
     of = summary["overflow"]
-    assert of["overflow_pages"] == {"1": 21} and of["regenerated"] == {"1": 1}
-    assert of["still_overflowing"] == {} and "ok" in out[0].html
+    assert of["regenerated"] == {"1": 1}
+    assert of["still_element_issues"] == {} and "ok" in out[0].html
 
 
 def test_gate_regen_none_keeps_original_and_records(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"a"], [300], None))
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"a"], [_clip(px=40)], None))
     pages = _pages(1)
     out, summary = vqc.run_visual_qc(
         pages, blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=lambda i, p, pr: None
     )
     of = summary["overflow"]
-    assert out == pages and of["still_overflowing"] == {"1": 42} and of["regenerated"] == {"1": 1}
+    assert out == pages and of["still_element_issues"]["1"] and of["regenerated"] == {"1": 1}
 
 
 def test_gate_respects_deadline_no_regen(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"a"], [300], None))
+    monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: ([b"a"], [_clip(px=40)], None))
     pages = _pages(1)
     out, summary = vqc.run_visual_qc(
         pages, blueprint=_blueprint(1), make_doc=lambda pg: pg.html,
@@ -95,8 +104,8 @@ def test_gate_respects_deadline_no_regen(monkeypatch):
         budget_seconds=0.0,
     )
     assert out == pages
-    assert summary["overflow"]["overflow_pages"] == {"1": 42}
-    assert summary["overflow"]["regenerated"] == {} and summary["overflow"]["still_overflowing"] == {"1": 42}
+    assert summary["overflow"]["checked_pages"] == [1]
+    assert summary["overflow"]["regenerated"] == {} and summary["overflow"]["still_element_issues"]["1"]
 
 
 def test_gate_chromium_missing_recorded_not_silent(monkeypatch):
@@ -127,16 +136,12 @@ def test_gate_disabled_by_switch_skips_geometry(monkeypatch):
     assert summary["checked_pages"] == [1, 2] and summary["issue_pages"] == []  # VL 只补拍一次
 
 
-# ---- 任务D：元素级检测（组件内裁剪 + 兄弟重叠）----
-
-
-def _clip(desc="词汇卡 第2张/共4张（spread…）", px=30):
-    return {"over": 0, "clips": [{"desc": desc, "px": px}], "overlaps": []}
+# ---- 任务D：元素级检测（组件内裁剪 + 全树兄弟重叠）----
 
 
 def test_element_clip_triggers_regen_with_component_feedback(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    seq = [([b"a"], [_clip()], None), ([b"a1"], [{"over": 0, "clips": [], "overlaps": []}], None)]
+    seq = [([b"a"], [_clip()], None), ([b"a1"], [_CLEAN_M], None)]
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
     regen_calls: list = []
 
@@ -150,14 +155,14 @@ def test_element_clip_triggers_regen_with_component_feedback(monkeypatch):
     of = summary["overflow"]
     assert len(regen_calls) == 1 and "词汇卡 第2张/共4张" in regen_calls[0][0] and "30px" in regen_calls[0][0]
     assert "精简该组件" in regen_calls[0][0]
-    assert of["overflow_pages"] == {} and of["regenerated"] == {"1": 1}  # 页级无溢出，元素级单独触发
-    assert of["still_element_issues"] == {} and of["still_overflowing"] == {}  # 修好即清零
+    assert of["regenerated"] == {"1": 1}
+    assert of["still_element_issues"] == {}  # 修好即清零
 
 
 def test_element_overlap_triggers_regen_with_pair_feedback(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    bad = {"over": 0, "clips": [], "overlaps": [{"a": "时间线", "b": "计时器", "pct": 12}]}
-    seq = [([b"a"], [bad], None), ([b"a1"], [{"over": 0, "clips": [], "overlaps": []}], None)]
+    bad = {"clips": [], "overlaps": [{"a": "时间线", "b": "计时器", "pct": 12}]}
+    seq = [([b"a"], [bad], None), ([b"a1"], [_CLEAN_M], None)]
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
     regen_calls: list = []
 
@@ -185,14 +190,13 @@ def test_element_issue_persists_caps_at_two_rounds_and_records(monkeypatch):
     of = summary["overflow"]
     assert len(regen_calls) == 2 and of["regenerated"] == {"1": 2}
     assert of["still_element_issues"] == {"1": [regen_calls[1][0]]}  # 仍违规保留并记录
-    assert of["still_overflowing"] == {}  # 页级没超，不重复提示
     assert "still bad" in out[0].html
 
 
-def test_element_issue_and_page_overflow_feed_regen_together(monkeypatch):
+def test_element_clip_and_overlap_feed_regen_together(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    both = {"over": 200, "clips": [{"desc": "原文段落卡（Para.2…）", "px": 45}], "overlaps": []}
-    seq = [([b"a"], [both], None), ([b"a1"], [{"over": 5, "clips": [], "overlaps": []}], None)]
+    both = {"clips": [{"desc": "原文段落卡（Para.2…）", "px": 45}], "overlaps": [{"a": "时间线", "b": "计时器", "pct": 30}]}
+    seq = [([b"a"], [both], None), ([b"a1"], [_CLEAN_M], None)]
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
     regen_calls: list = []
 
@@ -201,23 +205,23 @@ def test_element_issue_and_page_overflow_feed_regen_together(monkeypatch):
         return _ContentPage(title=pg.title, intent="i", html="<p>ok</p>")
 
     vqc.run_visual_qc(_pages(1), blueprint=_blueprint(1), make_doc=lambda pg: pg.html, regen_page=regen)
-    assert len(regen_calls[0]) == 2  # 页级问题 + 元素级问题一起带给重生成
-    assert "内容超页约" in regen_calls[0][0] and "原文段落卡" in regen_calls[0][1]
+    assert len(regen_calls[0]) == 2  # 裁剪 + 叠压一起带给重生成
+    assert "原文段落卡" in regen_calls[0][0] and "时间线" in regen_calls[0][1]
 
 
-def test_real_chromium_measures_clip_and_overlap_in_page():
-    """真实 chromium 三级测量：line-clamp 裁剪与兄弟负 margin 叠压都能量出；干净页零违规"""
+def test_real_chromium_measures_clip_and_overlap_in_section():
+    """真实 chromium geo-v3 测量：overflow:hidden 裁剪与兄弟负 margin 叠压都能量出；干净节零违规"""
     pytest.importorskip("playwright")
     skeleton = _load_skeleton()
     clipped = (
-        '<section class="page active"><div class="page-focus">'
+        '<section class="oe-section"><div class="page-focus">'
         '<p style="height:40px;overflow:hidden">' + "line<br>" * 20 + "</p></div></section>"
     )
     overlapped = (
-        '<section class="page active"><div class="page-focus">'
+        '<section class="oe-section"><div class="page-focus">'
         '<p style="height:60px">aaa</p><p style="height:60px;margin-top:-40px">bbb</p></div></section>'
     )
-    clean = '<section class="page active"><div class="page-focus"><p>ok</p></div></section>'
+    clean = '<section class="oe-section"><div class="page-focus"><p>ok</p></div></section>'
     docs = [
         skeleton.replace("</body>", clipped + "</body>"),
         skeleton.replace("</body>", overlapped + "</body>"),
@@ -229,7 +233,7 @@ def test_real_chromium_measures_clip_and_overlap_in_page():
     assert err is None
     assert overflows[0]["clips"] and overflows[0]["clips"][0]["px"] > vqc.ELEMENT_CLIP_PX_THRESHOLD
     assert overflows[1]["overlaps"] and overflows[1]["overlaps"][0]["pct"] > 5
-    assert overflows[2] == {"over": 0, "clips": [], "overlaps": []}
+    assert overflows[2] == {"clips": [], "overlaps": []}
 
 
 # ---- 相 B：VL 视觉检查 ----
@@ -347,20 +351,23 @@ def test_regen_exception_keeps_original(monkeypatch):
     assert out == pages and summary["issue_pages"] == [1] and summary["regenerated_pages"] == []
 
 
-# ---- 骨架 CSS 溢出韧性契约 ----
+# ---- 滚动骨架 CSS 契约 ----
 
 
-def test_skeleton_overflow_resilience_contracts():
+def test_skeleton_scroll_contracts():
     css = _load_skeleton()
-    assert "justify-content:safe center" in css  # 超页时顶端对齐，不上下双向裁剪
-    assert "grid-template-columns:repeat(4,196px)" in css  # vocab 网格固定行列防叠压
-    # 任务D 废固定高：卡片随内容等高伸展（minmax 行高 + min-height 卡 + 背面流内撑高），
-    # 不再用固定 128px / line-clamp 截断（那是「叠压变裁剪」的总根源）
-    assert "grid-auto-rows:minmax(128px,auto)" in css
-    assert ".vocab-card{width:196px;min-height:128px;" in css
-    assert "grid-auto-rows:128px" not in css and ";height:128px" not in css
-    assert "-webkit-line-clamp" not in css
-    assert ".vocab-card .back{min-height:128px;display:flex" in css  # 背面流内撑高，正面 absolute 跟随
+    # 版心：居中 min(820px, 100% - 3rem)，无固定高度、无 overflow:hidden 裁内容
+    assert "#oe-content{width:min(820px,100% - 3rem);margin:0 auto;padding:52px 0 32px}" in css
+    assert ".oe-section{margin:0 0 52px}" in css
+    assert ".oe-chapter{margin:0 0 64px;scroll-margin-top:20px}" in css
+    # 导航三件套：顶部进度条 / 固定章目录 / 返回顶部
+    assert "#oe-progress" in css and "#oe-toc" in css and "#oe-backtop" in css
+    assert "scrollIntoView({ behavior: 'smooth'" in css  # 目录平滑滚动
+    assert "ArrowRight" in css and "ArrowLeft" in css  # ←/→ 切章键盘导航
+    # 节淡入动效可全局关闭（reduced-motion / oe-no-anim 截图态 / oe-edit-all 编辑态）
+    assert "body:not(.oe-no-anim):not(.oe-edit-all) .oe-section{opacity:0" in css
+    assert "prefers-reduced-motion" in css and "IntersectionObserver" in css
+    assert "-webkit-line-clamp" not in css  # 滚动版无固定高，无需截断（截断即裁内容违规源）
 
 
 # ---- 端到端（fake LLM + 假截图/VL） ----
@@ -439,13 +446,13 @@ def test_generate_visual_qc_disabled(fake_llm, monkeypatch):
     assert result.self_check["visual_qc"] == {"enabled": False}
 
 
-def test_generate_gate_only_overflow_regenerated(fake_llm, monkeypatch):
-    """VL 开关关闭 + 无 Key：溢出硬关卡照常执行并精简重生成超页页"""
-    # 相位隔离：本测试校验溢出硬关卡，关闭交互自检避免其补强重生成错位消耗预排回复
+def test_generate_gate_only_element_issue_regenerated(fake_llm, monkeypatch):
+    """VL 开关关闭 + 无 Key：遮挡硬关卡照常执行并精简重生成违规节"""
+    # 相位隔离：本测试校验遮挡硬关卡，关闭交互自检避免其补强重生成错位消耗预排回复
     monkeypatch.setattr("app.core.config.settings.INTERACTION_CHECK_ENABLED", False)
     monkeypatch.setattr("app.core.config.settings.VISUAL_QC_ENABLED", False)
     monkeypatch.setattr("app.core.config.settings.VISION_API_KEY", "")
-    seq = [([b"s"] * 4, [0, 300, 0, 0], None), ([b"s2new"], [0], None)]
+    seq = [([b"s"] * 4, [_CLEAN_M, _clip(px=30), _CLEAN_M, _CLEAN_M], None), ([b"s2new"], [_CLEAN_M], None)]
     monkeypatch.setattr(vqc, "_screenshot_pages", lambda docs, deadline: seq.pop(0))
     fixed = _page_reply("REWRITTEN")
     fake_llm(_planner_json(), *[_page_reply() for _ in range(4)], *[_review_reply() for _ in range(4)], fixed)
@@ -454,8 +461,8 @@ def test_generate_gate_only_overflow_regenerated(fake_llm, monkeypatch):
     qc = result.self_check["visual_qc"]
     of = qc["overflow"]
     assert "VISUAL_QC_ENABLED=false" in qc["skipped"]
-    assert of["overflow_pages"] == {"2": 42} and of["regenerated"] == {"2": 1}
-    assert of["still_overflowing"] == {} and "REWRITTEN" in result.html
+    assert of["regenerated"] == {"2": 1} and of["still_element_issues"] == {}
+    assert "REWRITTEN" in result.html
 
 
 def test_generate_visual_qc_issue_page_regenerated(fake_llm, monkeypatch):

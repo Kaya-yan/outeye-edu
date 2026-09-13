@@ -460,7 +460,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     [target, patches, mutatePatches]
   );
 
-  // 跨页移动：走菜单而非视觉拖拽，重放时 appendChild 到目标页 .page-focus 末尾
+  // 跨节移动：走菜单而非视觉拖拽，重放时 appendChild 到目标节 .page-focus 末尾
   const onMoveToPage = useCallback(
     (pageNo: number) => {
       if (!target) return;
@@ -477,7 +477,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
         id: exists ? exists.id : patchId(target.selector, "move"),
         kind: "move",
         selector: exists ? exists.selector : target.selector,
-        label: `${targetLabel(target)} · 移至第 ${pageNo} 页`,
+        label: `${targetLabel(target)} · 移至第 ${pageNo} 节`,
         toPage: pageNo,
         moveId,
         fingerprint: exists ? exists.fingerprint : makeFingerprint(target),
@@ -679,10 +679,10 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           <span className="hidden sm:inline text-xs text-slate-400">
             v{currentVersion?.version_number || 1} ·{" "}
             {pages.length > 0
-              ? `${pages.length} 页`
+              ? `${pages.length} 节`
               : project.mode === "slides"
                 ? "幻灯片式"
-                : "长页面式"}
+                : "章节滚动式"}
           </span>
           <span className="hidden lg:inline rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500">
             AI 生成内容 · 请核对
@@ -784,9 +784,9 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       {overflowNotices.length > 0 && !overflowDismissed && (
         <div className="flex-shrink-0 flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           <span className="leading-5">
-            <span className="font-medium">部分页面内容较满：</span>
+            <span className="font-medium">部分组件存在遮挡风险：</span>
             {overflowNotices.map((n) => n.note).join("；")}
-            ，超出 16:9 版心的内容放映时会被裁剪，建议在编辑器中精简。
+            ，被裁剪或叠压的内容放映时可能看不全，建议在编辑器中精简。
           </span>
           <button
             onClick={() => setOverflowDismissed(true)}
@@ -889,7 +889,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                       <span className="ml-1.5 text-[11px] text-slate-400">图片已替换</span>
                     ) : p.kind === "move" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">
-                        {p.toPage ? `移至第 ${p.toPage} 页` : `移至同级第 ${(p.targetIndex ?? 0) + 1} 位`}
+                        {p.toPage ? `移至第 ${p.toPage} 节` : `移至同级第 ${(p.targetIndex ?? 0) + 1} 位`}
                       </span>
                     ) : p.kind === "insert" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">

@@ -97,7 +97,7 @@ def test_assemble_default_theme_keeps_baseline_look():
     pages = [_ContentPage(title="封面", intent="i", html=GOOD_BODY)]
     html = _assemble_skeleton("测试", "#35507a", pages)
     assert "--paper:#faf9f5" in html and "--fs-body:21px" in html
-    assert 'class="page"' in html
+    assert 'class="oe-section"' in html
 
 
 class _FakeRAG:
