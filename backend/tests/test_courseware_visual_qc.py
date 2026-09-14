@@ -233,7 +233,41 @@ def test_real_chromium_measures_clip_and_overlap_in_section():
     assert err is None
     assert overflows[0]["clips"] and overflows[0]["clips"][0]["px"] > vqc.ELEMENT_CLIP_PX_THRESHOLD
     assert overflows[1]["overlaps"] and overflows[1]["overlaps"][0]["pct"] > 5
-    assert overflows[2] == {"clips": [], "overlaps": []}
+    assert overflows[2] == {"clips": [], "overlaps": [], "floats": []}
+
+
+def test_real_chromium_measures_float_bounds_and_overlap_exemption():
+    """任务G4：浮动层只查越界；浮 vs 浮 / 浮 vs 正文叠压豁免（不进兄弟重叠）"""
+    pytest.importorskip("playwright")
+    skeleton = _load_skeleton()
+    in_bounds = (
+        '<section class="oe-section" style="position:relative;height:400px">'
+        '<div class="page-focus"><p>ok</p></div>'
+        '<div data-float="1" data-float-kind="textbox" style="position:absolute;left:10%;top:20%;width:30%;padding:8px">t</div>'
+        '<div data-float="1" data-float-kind="note" style="position:absolute;left:15%;top:25%;width:20%;padding:8px">n</div>'
+        "</section>"
+    )
+    out_of_bounds = (
+        '<section class="oe-section" style="position:relative;height:400px">'
+        '<div class="page-focus"><p>ok</p></div>'
+        '<div data-float="1" data-float-kind="image" style="position:absolute;left:85%;top:5%;width:30%;height:50px">i</div>'
+        "</section>"
+    )
+    docs = [
+        skeleton.replace("</body>", in_bounds + "</body>"),
+        skeleton.replace("</body>", out_of_bounds + "</body>"),
+    ]
+    import time as _t
+
+    shots, overflows, err = vqc._screenshot_pages_real(docs, _t.time() + 60)
+    assert err is None
+    # 两个界内浮层互相叠压（10-40% 与 15-35% 横向重叠）且压在节内 → 全豁免
+    assert overflows[0]["floats"] == []
+    assert overflows[0]["overlaps"] == []
+    # left 85% + width 30% → 右侧越界约 15% 宽度
+    assert overflows[1]["floats"] and "越界" in overflows[1]["floats"][0]["issue"]
+    assert "右" in overflows[1]["floats"][0]["issue"]
+    assert vqc._element_problems(overflows[1]) and "浮动元素" in vqc._element_problems(overflows[1])[0]
 
 
 # ---- 相 B：VL 视觉检查 ----

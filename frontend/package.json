@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:floats": "node scripts/test-v2-floats.mts"
   },
   "dependencies": {
     "@tiptap/extension-highlight": "^3.26.1",

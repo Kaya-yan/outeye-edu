@@ -40,9 +40,11 @@ OVERLAP_AREA_RATIO = 0.05
 MAX_PROBLEMS_PER_PAGE = 6
 SHOT_MAX_HEIGHT = 2000
 
-# 元素级测量的浏览器端脚本（geo-v3：组件内裁剪 + 全树兄弟重叠；无页高概念）
+# 元素级测量的浏览器端脚本（geo-v3：组件内裁剪 + 全树兄弟重叠 + 浮动层越界；无页高概念）
+# 浮动层（[data-float]，编辑器浮动补丁产物）：absolute 定位已不参与兄弟重叠检测
+# （浮 vs 浮 / 浮 vs 正文叠压属有意设计，豁免），仅检查是否超出所属节边界。
 _MEASURE_JS = """e => {
-  const out = { clips: [], overlaps: [] };
+  const out = { clips: [], overlaps: [], floats: [] };
   const CN = {
     'vocab-card': '词汇卡', 'front': '卡正面', 'back': '卡背面', 'timeline': '时间线',
     'timer': '计时器', 'reveal': '折叠问答', 'mark-words': '点击标词', 'fill-blanks': '语境填空',
@@ -116,8 +118,22 @@ _MEASURE_JS = """e => {
     for (const k of kids) walk(k);
   }
   walk(e);
+  // c) 浮动层越界：只查不越界（允许压住正文），须完整落在所属节内
+  for (const f of e.querySelectorAll('[data-float]')) {
+    const sec = f.closest ? f.closest('.oe-section, section.page') : null;
+    if (!sec) { out.floats.push({ desc: desc(f), issue: '未锚定到任何节' }); continue; }
+    const fr = f.getBoundingClientRect(), sr = sec.getBoundingClientRect();
+    const TOL = 2;
+    const over = [];
+    if (fr.left < sr.left - TOL) over.push('左' + Math.round(sr.left - fr.left) + 'px');
+    if (fr.right > sr.right + TOL) over.push('右' + Math.round(fr.right - sr.right) + 'px');
+    if (fr.top < sr.top - TOL) over.push('上' + Math.round(sr.top - fr.top) + 'px');
+    if (fr.bottom > sr.bottom + TOL) over.push('下' + Math.round(fr.bottom - sr.bottom) + 'px');
+    if (over.length) out.floats.push({ desc: desc(f), issue: '越界：' + over.join('、') });
+  }
   if (out.clips.length > %MAX_PROBS%) out.clips.length = %MAX_PROBS%;
   if (out.overlaps.length > %MAX_PROBS%) out.overlaps.length = %MAX_PROBS%;
+  if (out.floats.length > %MAX_PROBS%) out.floats.length = %MAX_PROBS%;
   return out;
 }"""
 
@@ -228,6 +244,11 @@ def _element_problems(v: Optional[Any]) -> List[str]:
         problems.append(
             f"「{o.get('a') or '元素'}」与「{o.get('b') or '元素'}」位置交叠约 {o.get('pct', 0)}%，内容互相遮挡，"
             "请精简上方内容、减少条目或缩短文本，消除叠压"
+        )
+    for fl in v.get("floats") or []:
+        problems.append(
+            f"「{fl.get('desc') or '浮动元素'}」{fl.get('issue') or '超出所属节'}，"
+            "请在编辑器中拖回节内（浮动元素允许压住正文，但不可超出所属节边界）"
         )
     return problems
 

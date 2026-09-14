@@ -1,8 +1,9 @@
 import type { VeTarget } from "./rpc";
+import type { VeFloatItem } from "./floats";
 
 export const EXPORT_STYLE_ID = "ve-export-patches";
 
-export type VePatchKind = "css" | "text" | "image" | "insert" | "move";
+export type VePatchKind = "css" | "text" | "image" | "insert" | "move" | "float";
 
 export type VeInsertPosition = "after" | "before" | "append";
 
@@ -29,6 +30,8 @@ export interface VePatch {
   moveId?: string;
   targetIndex?: number;
   toPage?: number;
+  /** kind=float 时的浮层数据与物化 HTML */
+  float?: VeFloatItem;
   fingerprint: VePatchFingerprint;
 }
 
@@ -92,8 +95,14 @@ export function cssPatches(patches: VePatch[]): VePatch[] {
   return patches.filter((p) => (p.kind || "css") === "css" && p.prop);
 }
 
+export function floatPatchId(floatId: string): string {
+  return `float||${floatId}`;
+}
+
 export function hasDomPatches(patches: VePatch[]): boolean {
-  return patches.some((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move");
+  return patches.some(
+    (p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move" || p.kind === "float"
+  );
 }
 
 export function buildPatchCss(patches: VePatch[]): string {

@@ -16,6 +16,7 @@ import Inspector from "./Inspector";
 import {
   buildPatchCss,
   exportFileName,
+  floatPatchId,
   hasDomPatches,
   injectExportStyle,
   insertPatchId,
@@ -31,6 +32,17 @@ import {
   type VeInsertPosition,
   type VePatch,
 } from "./patches";
+import {
+  buildFloatHtml,
+  clampX,
+  clampY,
+  FLOAT_DEFAULT_CONTENT,
+  FLOAT_DEFAULT_W_PCT,
+  FLOAT_KIND_NAME,
+  nextFloatId,
+  type VeFloatItem,
+  type VeFloatKind,
+} from "./floats";
 
 interface ConsistencyReview {
   structure_notes?: string[];
@@ -103,6 +115,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
   const [components, setComponents] = useState<OfficialComponent[]>([]);
   const [reviewOn, setReviewOn] = useState(false);
   const [overflowDismissed, setOverflowDismissed] = useState(false);
+  const [floatImagePending, setFloatImagePending] = useState<{ section: number; xPct: number; yPct: number } | null>(null);
 
   const [history, setHistory] = useState<VePatch[][]>([[]]);
   const [hIndex, setHIndex] = useState(0);
@@ -112,7 +125,7 @@ export default function V2Editor({ projectId }: { projectId: string }) {
 
   const css = useMemo(() => buildPatchCss(patches), [patches]);
   const domPatches = useMemo(
-    () => patches.filter((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move"),
+    () => patches.filter((p) => p.kind === "text" || p.kind === "image" || p.kind === "insert" || p.kind === "move" || p.kind === "float"),
     [patches]
   );
   const patchesRef = useRef<VePatch[]>([]);
@@ -206,6 +219,13 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                     tag: "div",
                     skipDetail: true,
                   }
+                : p.kind === "float"
+                ? {
+                    id: p.id,
+                    selector: `[data-oe-float="${p.float?.id || ""}"]`,
+                    tag: "div",
+                    skipDetail: true,
+                  }
                 : p.kind === "move"
                 ? {
                     id: p.id,
@@ -242,6 +262,39 @@ export default function V2Editor({ projectId }: { projectId: string }) {
       }
       if (type === "ve:move:commit") {
         moveCommitRef.current(payload as unknown as VeMoveCommit);
+      }
+      if (type === "ve:float:create") {
+        const kind = String(payload.kind || "textbox") as VeFloatKind;
+        const section = Math.max(1, Number(payload.section) || 1);
+        const xPct = Number(payload.xPct) || 0;
+        const yPct = Number(payload.yPct) || 0;
+        if (kind === "image") {
+          setFloatImagePending({ section, xPct, yPct });
+        } else {
+          createFloatRef.current(kind, section, xPct, yPct);
+        }
+      }
+      if (type === "ve:float:commit") {
+        const cur = patchesRef.current.find((p) => p.id === floatPatchId(String(payload.id || "")));
+        if (cur?.float) {
+          upsertFloatRef.current({
+            ...cur.float,
+            xPct: clampX(Number(payload.xPct) || 0, cur.float.wPct),
+            yPct: clampY(Number(payload.yPct) || 0),
+          });
+        }
+      }
+      if (type === "ve:float:content") {
+        const cur = patchesRef.current.find((p) => p.id === floatPatchId(String(payload.id || "")));
+        if (cur?.float && typeof payload.text === "string" && cur.float.content !== payload.text) {
+          upsertFloatRef.current({ ...cur.float, content: payload.text });
+        }
+      }
+      if (type === "ve:float:remove") {
+        const pid = floatPatchId(String(payload.id || ""));
+        if (patchesRef.current.some((p) => p.id === pid)) {
+          mutatePatchesRef.current(patchesRef.current.filter((p) => p.id !== pid));
+        }
       }
       if (type === "ve:export:result" && exportResolveRef.current) {
         exportResolveRef.current(String(payload.html || ""));
@@ -547,6 +600,59 @@ export default function V2Editor({ projectId }: { projectId: string }) {
     },
     [target, patches, mutatePatches]
   );
+
+  const mutatePatchesRef = useRef(mutatePatches);
+  useEffect(() => {
+    mutatePatchesRef.current = mutatePatches;
+  }, [mutatePatches]);
+
+  // 浮动层（G4）：坐标/内容更新走同 id 原位替换（与 move 补丁一致，不新增历史步）；
+  // 创建/删除产生新历史步。经 refs 供 bridge 回调使用，避开闭包过期
+  const upsertFloat = useCallback((f: VeFloatItem) => {
+    const cur = patchesRef.current;
+    const pid = floatPatchId(f.id);
+    const exists = cur.find((p) => p.id === pid);
+    const next: VePatch = exists
+      ? { ...exists, float: f, html: buildFloatHtml(f) }
+      : {
+          id: pid,
+          kind: "float",
+          selector: `[data-oe-float="${f.id}"]`,
+          label: `浮动${FLOAT_KIND_NAME[f.kind]} · 第 ${f.section} 节`,
+          float: f,
+          html: buildFloatHtml(f),
+          fingerprint: { tag: "div", childCount: 0, text: "", w: 0, h: 0 },
+        };
+    mutatePatchesRef.current(
+      exists ? cur.map((p) => (p.id === pid ? next : p)) : cur.concat([next])
+    );
+  }, []);
+  const upsertFloatRef = useRef(upsertFloat);
+  useEffect(() => {
+    upsertFloatRef.current = upsertFloat;
+  }, [upsertFloat]);
+
+  const createFloat = useCallback(
+    (kind: VeFloatKind, section: number, xPct: number, yPct: number, src = "") => {
+      const used = patchesRef.current
+        .filter((p) => p.kind === "float" && p.float)
+        .map((p) => (p.float as VeFloatItem).id);
+      upsertFloatRef.current({
+        id: nextFloatId(used),
+        kind,
+        section,
+        xPct: clampX(xPct, FLOAT_DEFAULT_W_PCT[kind]),
+        yPct: clampY(yPct),
+        wPct: FLOAT_DEFAULT_W_PCT[kind],
+        content: kind === "image" ? src : FLOAT_DEFAULT_CONTENT[kind],
+      });
+    },
+    []
+  );
+  const createFloatRef = useRef(createFloat);
+  useEffect(() => {
+    createFloatRef.current = createFloat;
+  }, [createFloat]);
 
   const getExportHtml = useCallback((): Promise<string> => {
     if (!hasDomPatches(patches)) {
@@ -867,6 +973,64 @@ export default function V2Editor({ projectId }: { projectId: string }) {
           />
         )}
 
+        {floatImagePending && (
+          <div className="absolute left-4 bottom-4 z-40 w-72 rounded-xl border border-blue-200 bg-white p-4 shadow-xl">
+            <div className="text-[10px] uppercase tracking-widest text-slate-400">
+              浮动图片 · 第 {floatImagePending.section} 节
+            </div>
+            <p className="mt-1 text-xs text-slate-500 leading-5">
+              图片将以点击位置为左上角浮在节内，创建后可拖拽调整。
+            </p>
+            <label className="mt-2.5 block w-full cursor-pointer rounded-lg bg-blue-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-blue-700">
+              上传图片（≤2MB）
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  if (f.size > 2 * 1024 * 1024) {
+                    alert("图片过大（上限 2MB），请压缩后再上传");
+                    e.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    createFloat("image", floatImagePending.section, floatImagePending.xPct, floatImagePending.yPct, String(reader.result));
+                    setFloatImagePending(null);
+                  };
+                  reader.readAsDataURL(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <div className="mt-2 flex gap-1.5">
+              <input
+                type="text"
+                placeholder="或输入图片 URL，回车确认"
+                aria-label="图片 URL"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const v = (e.target as HTMLInputElement).value.trim();
+                    if (v) {
+                      createFloat("image", floatImagePending.section, floatImagePending.xPct, floatImagePending.yPct, v);
+                      setFloatImagePending(null);
+                    }
+                  }
+                }}
+                className="flex-1 min-w-0 rounded border border-slate-200 px-2 py-1 text-xs focus:border-blue-500"
+              />
+              <button
+                onClick={() => setFloatImagePending(null)}
+                className="flex-shrink-0 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
         {pickOn && patches.length > 0 && (
           <div className="absolute right-4 bottom-4 z-30 w-[calc(100%-2rem)] sm:w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
             <div className="border-b border-slate-100 px-4 py-2.5 text-[10px] uppercase tracking-widest text-slate-400">
@@ -894,6 +1058,11 @@ export default function V2Editor({ projectId }: { projectId: string }) {
                     ) : p.kind === "insert" ? (
                       <span className="ml-1.5 text-[11px] text-slate-400">
                         {p.position === "append" ? "插入内部末尾" : p.position === "before" ? "插入之前" : "插入之后"}
+                      </span>
+                    ) : p.kind === "float" && p.float ? (
+                      <span className="ml-1.5 text-[11px] text-slate-400">
+                        {`第 ${p.float.section} 节 · ${Math.round(p.float.xPct)}%,${Math.round(p.float.yPct)}%`}
+                        {p.float.kind === "note" ? " · 便签不导出" : ""}
                       </span>
                     ) : (
                       <span className="ml-1.5 text-[11px] text-slate-400 font-mono">
