@@ -14,6 +14,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal, get_async_db
 from app.core.security import get_current_user
@@ -912,6 +913,7 @@ async def download_courseware_artifact(
 
     result = await db.execute(
         select(ExportArtifact)
+        .options(selectinload(ExportArtifact.project))
         .join(CoursewareProject, CoursewareProject.id == ExportArtifact.project_id)
         .where(ExportArtifact.id == artifact_id, CoursewareProject.owner_user_id == current_user["user_id"])
     )
