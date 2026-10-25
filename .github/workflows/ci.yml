@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+      - name: Install minimal test deps
+        run: pip install -r requirements-ci.txt
+      - name: Pytest（3 个需真实 bge 模型的 EmbeddingService 测试显式跳过）
+        run: |
+          pytest tests -q \
+            --deselect tests/test_rag.py::TestEmbeddingService::test_embed_text \
+            --deselect tests/test_rag.py::TestEmbeddingService::test_embedding_dimension \
+            --deselect tests/test_rag.py::TestEmbeddingService::test_similarity
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - run: npm test

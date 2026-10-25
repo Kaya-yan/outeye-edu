@@ -1354,8 +1354,13 @@ async def submit_ab_evaluation(
 # ============ 导出端点 ============
 
 class ExportRequest(BaseModel):
-    """导出请求"""
-    format: str = Field("pptx", description="导出格式: pptx, docx, html 或 vocab（词汇讲义 Word）")
+    """导出请求（2026-10-25 收口：本端点仅承载教案文档导出）
+
+    活跃格式：docx（完整版 Word 教案）、vocab（词汇讲义 Word）。
+    已废弃格式：pptx / html 教案导出——课件生成已收敛至 POST /courseware/generate
+    （LLM 管线，202+轮询），前端三课件按钮均已走新链路。废弃格式保留一个版本周期作降级。
+    """
+    format: str = Field("docx", description="导出格式: docx（教案）或 vocab（词汇讲义）；pptx/html 已废弃")
     title: str = Field("教学方案", description="文档标题")
     plan: Dict[str, Any] = Field(..., description="教学方案数据")
 
