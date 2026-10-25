@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "vitest.config.ts"]  // vite 类型与 vitest 嵌套 vite 冲突（TS2769），vitest 自身运行不受影响
 }
