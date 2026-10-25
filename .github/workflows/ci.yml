@@ -16,6 +16,14 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      # CI 无 backend/.env（被 gitignore），Settings() 导入期要求下列必填项存在。
+      # 值为哑配置：测试全部走 sqlite fixture / mock / 确定性 fallback，不连真实服务。
+      SECRET_KEY: ci-dummy-secret-not-production
+      JWT_SECRET_KEY: ci-dummy-jwt-not-production
+      DATABASE_URL: "postgresql+asyncpg://ci:ci@localhost:5432/ci_dummy"
+      REDIS_URL: "redis://localhost:6379/0"
+      LLM_API_KEY: ci-dummy-llm-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
